@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: asincly-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: asincly
+      POSTGRES_PASSWORD: asincly
+      POSTGRES_DB: asincly
+    ports:
+      - "5432:5432"
+    volumes:
+      - asincly_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asincly"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: asincly-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: asincly
+      MINIO_ROOT_PASSWORD: asincly-dev-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - asincly_miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  asincly_pgdata:
+  asincly_miniodata:
