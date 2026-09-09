@@ -25,7 +25,10 @@ const CompleteSchema = z.object({
 async function uniqueOrgSlug(base: string): Promise<string> {
   let slug = base;
   for (let i = 0; i < 10; i++) {
-    const existing = await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.slug, slug));
+    const existing = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.slug, slug));
     if (existing.length === 0) return slug;
     slug = `${base}-${Math.random().toString(36).slice(2, 5)}`;
   }
@@ -53,11 +56,6 @@ export async function completeOnboarding(formData: FormData) {
   const orgSlug = await uniqueOrgSlug(slugify(parsed.orgName));
   const teamSlug = slugify(parsed.teamName);
 
-  // Bootstrap runs on the admin client. RLS's RETURNING clause is checked
-  // against the SELECT policy — the user isn't yet an org member, so the
-  // returning row would be filtered out and the whole insert cascade fails.
-  // The caller is already authenticated (requireUser) and every field is
-  // Zod-validated, so this is the legitimate bootstrap path.
   const created = await db.transaction(async (tx) => {
     const [org] = await tx
       .insert(organizations)
@@ -81,61 +79,84 @@ export async function completeOnboarding(formData: FormData) {
   redirect(`/${created.orgSlug}/${created.teamSlug}`);
 }
 
+// ────────── Invite ──────────
+
+export type InviteResult =
+  | { ok: true; added: string[]; alreadyIn: string[]; invalid: string[] }
+  | { ok: false; error: string };
+
 const InviteSchema = z.object({
   teamId: z.string().uuid(),
   raw: z.string().min(1).max(2000),
 });
 
-export async function inviteMembers(formData: FormData) {
-  const user = await requireUser();
-  const parsed = InviteSchema.parse({
-    teamId: formData.get("teamId"),
-    raw: formData.get("emails"),
-  });
+export async function inviteMembers(
+  _prev: InviteResult | null,
+  formData: FormData,
+): Promise<InviteResult> {
+  try {
+    const user = await requireUser();
+    const parsed = InviteSchema.parse({
+      teamId: formData.get("teamId"),
+      raw: formData.get("emails"),
+    });
 
-  const emails = Array.from(
-    new Set(
-      parsed.raw
-        .split(/[\s,;]+/)
-        .map((e) => e.trim().toLowerCase())
-        .filter((e) => z.string().email().safeParse(e).success),
-    ),
-  ).slice(0, 50);
+    const tokens = parsed.raw
+      .split(/[\s,;]+/)
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    const invalid = tokens.filter((e) => !z.string().email().safeParse(e).success);
+    const emails = Array.from(
+      new Set(tokens.filter((e) => z.string().email().safeParse(e).success)),
+    ).slice(0, 50);
 
-  if (emails.length === 0) throw new Error("No valid email addresses found");
-
-  // Verify the caller is an admin+ on this team before touching anything.
-  const [callerMember] = await db
-    .select({ role: members.role, orgSlug: organizations.slug, teamSlug: teams.slug })
-    .from(members)
-    .innerJoin(teams, eq(teams.id, members.teamId))
-    .innerJoin(organizations, eq(organizations.id, teams.orgId))
-    .where(and(eq(members.teamId, parsed.teamId), eq(members.userId, user.id)));
-  if (!callerMember || (callerMember.role !== "owner" && callerMember.role !== "admin")) {
-    throw new Error("Not permitted");
-  }
-
-  for (const email of emails) {
-    const existing = await db.select().from(users).where(eq(users.email, email));
-    const invitee = existing[0] ?? (await db.insert(users).values({ email }).returning())[0];
-
-    const already = await db
-      .select({ id: members.id })
-      .from(members)
-      .where(and(eq(members.teamId, parsed.teamId), eq(members.userId, invitee.id)));
-    if (already.length > 0) continue;
-
-    await db
-      .insert(members)
-      .values({ teamId: parsed.teamId, userId: invitee.id, role: "member" });
-    // ponytail: no invite email yet. In dev they can /sign-in with the same
-    // email and land in the team. Wire Resend invite template in Phase 4.
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[invite] added ${email} to team ${parsed.teamId}`);
+    if (emails.length === 0) {
+      return { ok: false, error: "No valid email addresses found." };
     }
-  }
 
-  revalidatePath(`/${callerMember.orgSlug}/${callerMember.teamSlug}`);
+    const [caller] = await db
+      .select({ role: members.role, orgSlug: organizations.slug, teamSlug: teams.slug })
+      .from(members)
+      .innerJoin(teams, eq(teams.id, members.teamId))
+      .innerJoin(organizations, eq(organizations.id, teams.orgId))
+      .where(and(eq(members.teamId, parsed.teamId), eq(members.userId, user.id)));
+    if (!caller || (caller.role !== "owner" && caller.role !== "admin")) {
+      return { ok: false, error: "You don't have permission to invite here." };
+    }
+
+    const added: string[] = [];
+    const alreadyIn: string[] = [];
+
+    for (const email of emails) {
+      const existing = await db.select().from(users).where(eq(users.email, email));
+      const invitee =
+        existing[0] ?? (await db.insert(users).values({ email }).returning())[0];
+
+      const already = await db
+        .select({ id: members.id })
+        .from(members)
+        .where(and(eq(members.teamId, parsed.teamId), eq(members.userId, invitee.id)));
+      if (already.length > 0) {
+        alreadyIn.push(email);
+        continue;
+      }
+
+      await db
+        .insert(members)
+        .values({ teamId: parsed.teamId, userId: invitee.id, role: "member" });
+      added.push(email);
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[invite] added ${email} to team ${parsed.teamId}`);
+      }
+    }
+
+    revalidatePath(`/${caller.orgSlug}/${caller.teamSlug}`);
+    return { ok: true, added, alreadyIn, invalid };
+  } catch (e) {
+    console.error("[invite] failed", e);
+    const msg = e instanceof Error ? e.message : "Something went wrong.";
+    return { ok: false, error: msg };
+  }
 }
 
 const UpdateTzSchema = z.object({ tz: z.string().min(1).max(64) });

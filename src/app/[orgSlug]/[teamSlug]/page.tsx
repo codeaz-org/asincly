@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { members, schedules, users } from "@/db/schema";
+import { InviteForm } from "@/components/invite-form";
 import { TzDetector } from "@/components/tz-detector";
-import { inviteMembers } from "@/lib/actions/onboarding";
 import { getTeamBySlug, requireUser } from "@/lib/session";
 import { localDate, windowFor, windowStatus } from "@/lib/time";
 
@@ -199,28 +199,8 @@ export default async function TeamPage({
         {/* invite */}
         {isAdmin && (
           <section className="space-y-4">
-            <SectionHeader index="03" title="Invite teammates" />
-            <form action={inviteMembers} className="space-y-2">
-              <input type="hidden" name="teamId" value={team.teamId} />
-              <div className="flex gap-2">
-                <input
-                  name="emails"
-                  placeholder="alice@company.com, bob@company.com"
-                  required
-                  className="flex-1 h-11 rounded-md bg-white/[0.02] border border-white/10 px-4 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-white/30 focus:bg-white/[0.04] transition"
-                />
-                <button
-                  type="submit"
-                  className="h-11 px-5 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 active:scale-[0.99] transition"
-                >
-                  Invite
-                </button>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Comma, semicolon, or whitespace separated. Invitees sign in at
-                <code className="mx-1 font-mono">/sign-in</code> with the same email.
-              </p>
-            </form>
+            <SectionHeader index="03" title="Invite teammates" hint="Optional." />
+            <InviteForm teamId={team.teamId} />
           </section>
         )}
       </div>
