@@ -86,6 +86,8 @@ export const teams = pgTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    // Recording auto-purge horizon (days). 0 = never purge.
+    recordingRetentionDays: integer("recording_retention_days").notNull().default(90),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("team_org_slug_uq").on(t.orgId, t.slug)],

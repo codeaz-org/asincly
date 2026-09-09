@@ -1,4 +1,4 @@
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, inArray, lt } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import {
@@ -7,6 +7,7 @@ import {
   notifications,
   occurrences,
   organizations,
+  recordings,
   schedules,
   teams,
   users,
@@ -35,7 +36,38 @@ export async function GET(req: Request) {
   }
 
   const now = new Date();
-  const stats = { windowOpens: 0, digests: 0 };
+  const stats = { windowOpens: 0, digests: 0, purgedRecordings: 0 };
+
+  // ── recording retention purge ──
+  // For each team with a non-zero retention, delete recording rows older
+  // than the horizon. Bucket objects orphan on purpose (fast row delete);
+  // an S3 lifecycle rule on the bucket cleans them, or a separate sweeper.
+  const teamsWithRetention = await db
+    .select({ id: teams.id, days: teams.recordingRetentionDays })
+    .from(teams);
+  for (const t of teamsWithRetention) {
+    if (t.days <= 0) continue;
+    const cutoff = new Date(now.getTime() - t.days * 24 * 3600 * 1000);
+    // Two-step: find recording IDs belonging to this team older than cutoff.
+    const candidates = await db
+      .select({ id: recordings.id })
+      .from(recordings)
+      .innerJoin(checkIns, eq(checkIns.id, recordings.checkInId))
+      .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
+      .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
+      .where(and(eq(schedules.teamId, t.id), lt(recordings.createdAt, cutoff)));
+    if (candidates.length > 0) {
+      await db
+        .delete(recordings)
+        .where(
+          inArray(
+            recordings.id,
+            candidates.map((c) => c.id),
+          ),
+        );
+      stats.purgedRecordings += candidates.length;
+    }
+  }
 
   // Every active schedule for every team.
   const scheds = await db

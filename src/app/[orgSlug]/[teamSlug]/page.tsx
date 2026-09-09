@@ -51,6 +51,7 @@ export default async function TeamPage({
 
   const primary: Sched | undefined = activeSchedules[0];
   const isAdmin = team.role === "owner" || team.role === "admin";
+  const isOwner = team.role === "owner";
 
   const now = new Date();
   const todayISO = localDate(now, user.tz);
@@ -296,6 +297,17 @@ export default async function TeamPage({
             <SectionHeader index="05" title="Invite teammates" hint="Optional." />
             <InviteForm teamId={team.teamId} />
           </section>
+        )}
+
+        {isOwner && (
+          <div className="pt-2">
+            <Link
+              href={`/${orgSlug}/${teamSlug}/settings`}
+              className="text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground transition"
+            >
+              Team settings · retention · export · danger zone →
+            </Link>
+          </div>
         )}
       </div>
     </main>

@@ -1,0 +1,1 @@
+ALTER TABLE "team" ADD COLUMN "recording_retention_days" integer DEFAULT 90 NOT NULL;

@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
 import { members, organizations, schedules, teams, users } from "@/db/schema";
+import { audit } from "@/lib/audit";
+import { rateLimit } from "@/lib/rate-limit";
 import { PRESET_RRULES, type PresetKey } from "@/lib/time";
 import { requireUser } from "@/lib/session";
 import { slugify } from "@/lib/slug";
@@ -37,6 +39,8 @@ async function uniqueOrgSlug(base: string): Promise<string> {
 
 export async function completeOnboarding(formData: FormData) {
   const user = await requireUser();
+  const rl = rateLimit(`onboarding:${user.id}`, 5, 60 * 60 * 1000);
+  if (!rl.allowed) throw new Error("Too many onboarding attempts — try again later.");
   const parsed = CompleteSchema.parse({
     orgName: formData.get("orgName"),
     teamName: formData.get("teamName"),
@@ -73,7 +77,16 @@ export async function completeOnboarding(formData: FormData) {
       windowOpenLocal: parsed.windowOpen,
       windowCloseLocal: parsed.windowClose,
     });
-    return { orgSlug: org.slug, teamSlug: team.slug };
+    return { orgSlug: org.slug, teamSlug: team.slug, orgId: org.id, teamId: team.id };
+  });
+
+  await audit({
+    orgId: created.orgId,
+    actorUserId: user.id,
+    action: "org.create",
+    resourceType: "organization",
+    resourceId: created.orgId,
+    meta: { name: parsed.orgName, teamName: parsed.teamName },
   });
 
   redirect(`/${created.orgSlug}/${created.teamSlug}`);
@@ -96,6 +109,8 @@ export async function inviteMembers(
 ): Promise<InviteResult> {
   try {
     const user = await requireUser();
+    const rl = rateLimit(`invite:${user.id}`, 20, 60 * 60 * 1000);
+    if (!rl.allowed) return { ok: false, error: "Slow down — too many invite bursts." };
     const parsed = InviteSchema.parse({
       teamId: formData.get("teamId"),
       raw: formData.get("emails"),
@@ -147,6 +162,24 @@ export async function inviteMembers(
       added.push(email);
       if (process.env.NODE_ENV !== "production") {
         console.log(`[invite] added ${email} to team ${parsed.teamId}`);
+      }
+    }
+
+    if (added.length > 0) {
+      // Look up orgId from the caller side (single row already fetched).
+      const [orgRow] = await db
+        .select({ orgId: teams.orgId })
+        .from(teams)
+        .where(eq(teams.id, parsed.teamId));
+      if (orgRow) {
+        await audit({
+          orgId: orgRow.orgId,
+          actorUserId: user.id,
+          action: "member.invite",
+          resourceType: "team",
+          resourceId: parsed.teamId,
+          meta: { added, alreadyIn, invalid },
+        });
       }
     }
 

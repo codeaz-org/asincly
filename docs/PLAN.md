@@ -41,22 +41,35 @@ is green. Tick boxes as work lands.
 - [ ] Per-occurrence team digest generated when window closes or all members submit (Phase 4 with the scheduler)
 
 ## Phase 4 — Notifications and integrations
-- [ ] `notification` table + preferences (in-app / email / Slack / push) per type
-- [ ] Inngest scheduled: window_open reminders per member local time; digest_ready
-- [ ] Event-driven: mentioned, blocker_on_your_item
-- [ ] Email via Resend (branded templates)
+- [x] `notification` table (in-app + email). Per-channel preferences UI deferred.
+- [x] Cron-triggered: window_open reminders per member local time; digest_ready.
+      (Uses `/api/cron/tick` guarded by CRON_SECRET; same handlers move to Inngest steps unchanged.)
+- [x] Event-driven: mentioned, blocker_on_your_item
+- [x] Email via Resend (plain-text; branded HTML templates deferred)
 - [ ] Slack app: OAuth install per team, channel digest, DM reminders, `/standup` text check-in
 - [ ] Google Calendar: add standup window to member's calendar (optional)
 - [ ] Web push (PWA) for mobile
 
 ## Phase 5 — Production hardening and open-source release
-- [ ] Rate limiting, audit log coverage review, dependency scanning, Dependabot
-- [ ] Team data export (JSON + media) and hard delete; recording retention setting
+- [x] Rate limiting (in-memory per-user on hot mutations), audit log helper wired into org.create /
+      member.invite / team.set_retention / team.export / org.delete. Dependabot config for npm +
+      Actions + Docker.
+- [x] Team data export (JSON, decrypted transcripts + summaries) and hard delete;
+      recording retention setting (per-team, purged nightly by cron).
 - [ ] Admin TOTP 2FA; session management; org-level SSO enforcement
-- [ ] Self-host guide: single `docker compose up` with app + Postgres + MinIO + Inngest
+- [x] Self-host guide: docker compose (Postgres + MinIO) + `pnpm build && pnpm start` +
+      cron hitting `/api/cron/tick`. Full app-in-container Dockerfile deferred.
 - [ ] Branding settings (logo, accent colour) per org
-- [ ] Threat-model doc, pen-test checklist, `SECURITY.md` disclosure process
+- [ ] Threat-model doc, pen-test checklist. `SECURITY.md` disclosure process is in place.
 - [ ] Public repo, landing page → real sign-up
+
+### Explicitly deferred, needs its own sprint
+- Slack app, Google Calendar, Web push — each is a proper integration with OAuth setup,
+  template design, and a separate settings surface.
+- TOTP 2FA and org-level SSO enforcement — needs a security-focused pass with recovery flows.
+- Per-org branding — theme tokens + upload flow + preview per org.
+- Threat-model doc and pen-test — real security work, not code.
+- Real cloud landing-page + sign-up funnel — product decision + marketing site.
 
 ## Deliberately out of scope for v1
 Live/synchronous video, chat/threads beyond comments on a check-in, Gmail API integration,

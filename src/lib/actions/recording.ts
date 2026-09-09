@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { checkIns, occurrences, organizations, recordings, schedules, teams } from "@/db/schema";
 import { processRecording } from "@/lib/process-recording";
+import { rateLimit } from "@/lib/rate-limit";
 import { requireUser } from "@/lib/session";
 import { presignedPutUrl } from "@/lib/s3";
 
@@ -26,6 +27,8 @@ export async function getUploadUrl(input: {
 }): Promise<PresignResult> {
   try {
     const user = await requireUser();
+    const rl = rateLimit(`upload-url:${user.id}`, 10, 5 * 60 * 1000);
+    if (!rl.allowed) return { ok: false, error: "Too many upload attempts — slow down." };
     const parsed = PresignSchema.parse(input);
 
     // The caller must own the check-in.
