@@ -1,28 +1,36 @@
+import { groqSummarizer, groqTranscriber } from "./groq";
 import { noopAI, noopSummarizer, noopTranscriber } from "./noop";
 import type { AI, Summarizer, Transcriber } from "./types";
 
-// Resolve providers at call time (env vars only guaranteed available at
-// runtime). Order: env-configured adapter → noop fallback. Adapters for
-// Deepgram / Anthropic are added lazily inside pickTranscriber /
-// pickSummarizer to avoid pulling their SDKs into the client bundle.
+// Resolve providers at call time (env only guaranteed at runtime).
+// Order per-capability:
+//   Groq (free, single key covers both)  →  noop fallback
+// Deepgram / Anthropic / OpenAI / Whisper adapters slot in here when a
+// team wants a paid or self-hosted stack.
 
-async function pickTranscriber(): Promise<Transcriber> {
-  // ponytail: Deepgram/OpenAI/Whisper adapters live behind these keys and
-  // are added in the AI processing route where they're actually needed.
+function pickTranscriber(): Transcriber {
+  if (process.env.GROQ_API_KEY) return groqTranscriber;
   return noopTranscriber;
 }
 
-async function pickSummarizer(): Promise<Summarizer> {
+function pickSummarizer(): Summarizer {
+  if (process.env.GROQ_API_KEY) return groqSummarizer;
   return noopSummarizer;
 }
 
 export async function getAI(): Promise<AI> {
-  const [transcriber, summarizer] = await Promise.all([
-    pickTranscriber(),
-    pickSummarizer(),
-  ]);
+  const transcriber = pickTranscriber();
+  const summarizer = pickSummarizer();
   if (transcriber === noopTranscriber && summarizer === noopSummarizer) return noopAI;
   return { transcriber, summarizer };
 }
 
-export type { AI, Summarizer, Transcriber, TranscribeInput, TranscribeResult, SummarizeInput, Summary } from "./types";
+export type {
+  AI,
+  Summarizer,
+  Transcriber,
+  TranscribeInput,
+  TranscribeResult,
+  SummarizeInput,
+  Summary,
+} from "./types";
