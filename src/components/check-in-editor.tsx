@@ -271,7 +271,7 @@ function Field({
         </div>
       </div>
       {preview ? (
-        <div className="w-full min-h-[120px] rounded-md bg-white/[0.01] border border-white/[0.06] px-4 py-3">
+        <div className="w-full min-h-[120px] rounded-md bg-white/[0.015] border border-white/[0.06] px-5 py-4 [&>div>*+*]:mt-2.5">
           <Markdown>{value}</Markdown>
         </div>
       ) : (
@@ -283,7 +283,7 @@ function Field({
           placeholder={placeholder}
           autoFocus={autoFocus}
           rows={4}
-          className="w-full min-h-[120px] rounded-md bg-white/[0.02] border border-white/10 px-4 py-3 text-base leading-relaxed placeholder:text-muted-foreground/40 focus:outline-none focus:border-white/30 focus:bg-white/[0.04] transition resize-y font-mono"
+          className="w-full min-h-[120px] rounded-md bg-white/[0.02] border border-white/10 px-4 py-3 text-sm leading-relaxed placeholder:text-muted-foreground/40 focus:outline-none focus:border-white/30 focus:bg-white/[0.04] transition resize-y font-mono"
         />
       )}
       {hint && !preview && (
