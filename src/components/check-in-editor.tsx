@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState, useTransition } from "reac
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { MentionTextarea, type MentionCandidate } from "@/components/mention-textarea";
+import { Recorder } from "@/components/recorder";
 import { saveCheckInDraft, submitCheckIn, type SubmitResult } from "@/lib/actions/check-in";
 
 type Props = {
@@ -110,6 +111,8 @@ export function CheckInEditor(props: Props) {
           placeholder="Waiting on staging env from ops"
           mentionCandidates={props.mentionCandidates}
         />
+
+        <Recorder checkInId={props.checkInId} />
 
         <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-border">
           <Submit />
