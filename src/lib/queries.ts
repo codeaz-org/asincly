@@ -1,6 +1,18 @@
 import { and, desc, eq, gte, inArray, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
-import { checkIns, members, occurrences, schedules, users } from "@/db/schema";
+import { checkIns, members, occurrences, recordings, schedules, users } from "@/db/schema";
+import { decrypt } from "@/lib/crypto";
+import { presignedGetUrl } from "@/lib/s3";
+import type { Summary } from "@/lib/ai";
+
+export type FeedRecording = {
+  id: string;
+  mimeType: string;
+  durationMs: number | null;
+  status: "uploaded" | "processing" | "ready" | "failed";
+  playbackUrl: string;
+  summary: Summary | null;
+};
 
 export type FeedEntry = {
   checkInId: string;
@@ -12,6 +24,7 @@ export type FeedEntry = {
   blockers: string;
   submittedAt: Date;
   status: "draft" | "submitted";
+  recordings: FeedRecording[];
 };
 
 export type OccurrenceSummary = {
@@ -85,6 +98,51 @@ export async function getTeamFeed(teamId: string, todayISO: string) {
     )
     .orderBy(desc(checkIns.submittedAt));
 
+  // Load recordings for these check-ins in one round-trip.
+  const recRows =
+    rows.length === 0
+      ? []
+      : await db
+          .select({
+            id: recordings.id,
+            checkInId: recordings.checkInId,
+            objectKey: recordings.objectKey,
+            mimeType: recordings.mimeType,
+            durationMs: recordings.durationMs,
+            status: recordings.status,
+            summaryCipher: recordings.summaryCipher,
+          })
+          .from(recordings)
+          .where(
+            inArray(
+              recordings.checkInId,
+              rows.map((r) => r.checkInId),
+            ),
+          );
+
+  const recsByCheckIn = new Map<string, FeedRecording[]>();
+  for (const r of recRows) {
+    const playbackUrl = await presignedGetUrl(r.objectKey);
+    let summary: Summary | null = null;
+    if (r.summaryCipher) {
+      try {
+        summary = JSON.parse(decrypt(r.summaryCipher));
+      } catch {
+        summary = null;
+      }
+    }
+    const arr = recsByCheckIn.get(r.checkInId) ?? [];
+    arr.push({
+      id: r.id,
+      mimeType: r.mimeType,
+      durationMs: r.durationMs,
+      status: r.status,
+      playbackUrl,
+      summary,
+    });
+    recsByCheckIn.set(r.checkInId, arr);
+  }
+
   const grouped = new Map<string, FeedEntry[]>();
   for (const r of rows) {
     const arr = grouped.get(r.occurrenceId) ?? [];
@@ -98,6 +156,7 @@ export async function getTeamFeed(teamId: string, todayISO: string) {
       blockers: r.blockers,
       submittedAt: r.submittedAt!,
       status: r.status,
+      recordings: recsByCheckIn.get(r.checkInId) ?? [],
     });
     grouped.set(r.occurrenceId, arr);
   }

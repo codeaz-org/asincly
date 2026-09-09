@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
 import { checkIns, occurrences, organizations, recordings, schedules, teams } from "@/db/schema";
+import { processRecording } from "@/lib/process-recording";
 import { requireUser } from "@/lib/session";
 import { presignedPutUrl } from "@/lib/s3";
 
@@ -83,6 +84,11 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
       .innerJoin(teams, eq(teams.id, schedules.teamId))
       .innerJoin(organizations, eq(organizations.id, teams.orgId))
       .where(eq(checkIns.id, parsed.checkInId));
+    if (ctx) revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}`);
+
+    // Fire the AI pipeline. With noop providers this is instant; when
+    // Deepgram/Anthropic are wired we'll move this to Inngest.
+    await processRecording(rec.id);
     if (ctx) revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}`);
 
     return { ok: true, recordingId: rec.id };

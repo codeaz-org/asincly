@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { schedules } from "@/db/schema";
 import { InviteForm } from "@/components/invite-form";
 import { Markdown } from "@/components/markdown";
+import { RecordingPlayer } from "@/components/recording-player";
 import { TzDetector } from "@/components/tz-detector";
 import { getMyCheckInForOccurrence, getTeamFeed, getTeamRoster } from "@/lib/queries";
 import { getTeamBySlug, requireUser } from "@/lib/session";
@@ -321,6 +322,26 @@ function CheckInCard({
           })}
         </time>
       </header>
+
+      {entry.recordings.length > 0 && (
+        <div className="pl-3.5 space-y-2">
+          {entry.recordings.map((r) => (
+            <div key={r.id} className="space-y-2">
+              {r.summary && r.summary.bullets.length > 0 && (
+                <ul className="text-sm space-y-1">
+                  {r.summary.bullets.map((b, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="text-accent shrink-0">→</span>
+                      <span>{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <RecordingPlayer rec={r} />
+            </div>
+          ))}
+        </div>
+      )}
 
       {compact ? (
         <div className="pl-3.5 space-y-2">

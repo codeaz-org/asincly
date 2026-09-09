@@ -30,13 +30,15 @@ is green. Tick boxes as work lands.
 - [x] Playwright: invite → check in → appears in teammate's feed
 
 ## Phase 3 — Recording, transcription, AI summaries
-- [ ] Browser recorder: camera + screen (getDisplayMedia + MediaRecorder), preview, retake, max length
-- [ ] Pre-signed upload to bucket; `recording` table; signed playback URLs
-- [ ] Inngest jobs: transcribe → summarize → extract action items / blockers / mentions → save
-- [ ] `lib/ai/` provider interface with Anthropic + Deepgram default, OpenAI + local-Whisper adapters
-- [ ] Column-level encryption for transcript + summary
-- [ ] Feed shows summary above collapsed video; "watch" expands player
-- [ ] Per-occurrence team digest generated when window closes or all members submit
+- [x] Browser recorder: camera + screen (getDisplayMedia + MediaRecorder), preview, retake, max length
+- [x] Pre-signed upload to bucket; `recording` table; signed playback URLs
+- [~] Inngest jobs: transcribe → summarize → extract action items / blockers / mentions → save
+      (pipeline runs synchronously today; moves to Inngest steps in Phase 4)
+- [x] `lib/ai/` provider interface with Anthropic + Deepgram default, OpenAI + local-Whisper adapters
+      (interface + noop fallback; Deepgram/Anthropic/Whisper adapters slot in when their env keys land)
+- [x] Column-level encryption for transcript + summary
+- [x] Feed shows summary above collapsed video; "watch" expands player
+- [ ] Per-occurrence team digest generated when window closes or all members submit (Phase 4 with the scheduler)
 
 ## Phase 4 — Notifications and integrations
 - [ ] `notification` table + preferences (in-app / email / Slack / push) per type
