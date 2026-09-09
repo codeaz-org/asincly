@@ -135,6 +135,31 @@ export const occurrences = pgTable(
 );
 
 export const checkInStatus = pgEnum("check_in_status", ["draft", "submitted"]);
+export const notificationType = pgEnum("notification_type", [
+  "mentioned",
+  "blocker_on_your_item",
+  "window_open",
+  "digest_ready",
+]);
+
+export const notifications = pgTable("notification", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  teamId: uuid("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  type: notificationType("type").notNull(),
+  title: text("title").notNull(),
+  body: text("body"),
+  linkPath: text("link_path"),
+  data: jsonb("data").$type<Record<string, unknown>>(),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const recordingStatus = pgEnum("recording_status", [
   "uploaded",
   "processing",

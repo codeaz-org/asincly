@@ -7,6 +7,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { checkIns, members, occurrences, organizations, schedules, teams } from "@/db/schema";
 import { carryOver } from "@/lib/carry-over";
+import { fireMentionEvents } from "@/lib/notifications";
 import { requireUser } from "@/lib/session";
 import { localDate } from "@/lib/time";
 
@@ -164,6 +165,11 @@ export async function submitCheckIn(
 
     revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}`);
     landing = { orgSlug: ctx.orgSlug, teamSlug: ctx.teamSlug };
+
+    // Fire mention + blocker events for teammates named in the check-in.
+    void fireMentionEvents(checkInId).catch((e) =>
+      console.error("[fireMentionEvents]", e),
+    );
   } catch (e) {
     console.error("[submitCheckIn]", e);
     const msg = e instanceof Error ? e.message : "Submit failed";

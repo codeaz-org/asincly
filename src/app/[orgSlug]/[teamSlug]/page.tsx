@@ -3,10 +3,12 @@ import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { schedules } from "@/db/schema";
+import { Inbox } from "@/components/inbox";
 import { InviteForm } from "@/components/invite-form";
 import { Markdown } from "@/components/markdown";
 import { RecordingPlayer } from "@/components/recording-player";
 import { TzDetector } from "@/components/tz-detector";
+import { listRecentForUser, unreadCount } from "@/lib/notifications";
 import { getMyCheckInForOccurrence, getTeamFeed, getTeamRoster } from "@/lib/queries";
 import { getTeamBySlug, requireUser } from "@/lib/session";
 import { localDate, windowFor, windowStatus } from "@/lib/time";
@@ -31,7 +33,7 @@ export default async function TeamPage({
   const team = await getTeamBySlug(user.id, teamSlug);
   if (!team) notFound();
 
-  const [activeSchedules, roster] = await Promise.all([
+  const [activeSchedules, roster, inboxItems, unread] = await Promise.all([
     db
       .select({
         id: schedules.id,
@@ -43,6 +45,8 @@ export default async function TeamPage({
       .from(schedules)
       .where(and(eq(schedules.teamId, team.teamId), eq(schedules.active, true))),
     getTeamRoster(team.teamId),
+    listRecentForUser(user.id),
+    unreadCount(user.id),
   ]);
 
   const primary: Sched | undefined = activeSchedules[0];
@@ -87,9 +91,23 @@ export default async function TeamPage({
               {team.teamName}
             </h1>
           </div>
-          <div className="text-right text-xs text-muted-foreground font-mono">
-            <div>{user.email}</div>
-            <div className="text-muted-foreground/70">{user.tz}</div>
+          <div className="flex items-center gap-3">
+            <div className="text-right text-xs text-muted-foreground font-mono">
+              <div>{user.email}</div>
+              <div className="text-muted-foreground/70">{user.tz}</div>
+            </div>
+            <Inbox
+              items={inboxItems.map((n) => ({
+                id: n.id,
+                type: n.type,
+                title: n.title,
+                body: n.body,
+                linkPath: n.linkPath,
+                createdAt: n.createdAt,
+                readAt: n.readAt,
+              }))}
+              unread={unread}
+            />
           </div>
         </header>
 
