@@ -1,32 +1,22 @@
 import type { AI, Summarizer, Transcriber } from "./types";
 
-// Fallback used when no external API keys are configured. Keeps the whole
-// pipeline runnable end-to-end in dev without a paid Deepgram/Anthropic
-// account — the summary just says the recording exists.
+// Fallback used when no AI key is configured. The pipeline still runs
+// end-to-end; it just produces NOTHING visible. Echoing the written note
+// back as fake "summary" bullets reads as duplicated noise in the feed,
+// so the noop summarizer stays silent and the feed shows only the note
+// and the video player. Set GROQ_API_KEY for real summaries.
 
 export const noopTranscriber: Transcriber = {
   name: "noop",
   async transcribe() {
-    return {
-      text: "[transcription disabled — set DEEPGRAM_API_KEY or OPENAI_API_KEY to enable]",
-    };
+    return { text: "" };
   },
 };
 
 export const noopSummarizer: Summarizer = {
   name: "noop",
-  async summarize({ note }) {
-    const bullets = note
-      .split("\n")
-      .map((l) => l.replace(/^[-*+]\s*(\[.\]\s*)?/, "").trim())
-      .filter((l) => l.length > 0)
-      .slice(0, 5);
-    return {
-      bullets: bullets.length > 0 ? bullets : ["Recording captured."],
-      actionItems: [],
-      blockers: [],
-      mentions: [],
-    };
+  async summarize() {
+    return { bullets: [], actionItems: [], blockers: [], mentions: [] };
   },
 };
 

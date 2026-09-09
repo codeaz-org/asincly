@@ -66,6 +66,10 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
     const [ci] = await db.select().from(checkIns).where(eq(checkIns.id, parsed.checkInId));
     if (!ci || ci.userId !== user.id) return { ok: false, error: "Not your check-in" };
 
+    // One video note per check-in: a new recording replaces the old one.
+    // Orphaned bucket objects are swept by the retention job / S3 lifecycle.
+    await db.delete(recordings).where(eq(recordings.checkInId, parsed.checkInId));
+
     const [rec] = await db
       .insert(recordings)
       .values({
