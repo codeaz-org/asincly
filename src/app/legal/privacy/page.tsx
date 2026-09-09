@@ -23,7 +23,7 @@ export default function PrivacyPage() {
 
       <h2 className="text-xl font-medium mt-8">Why we collect it</h2>
       <p className="text-sm leading-relaxed">
-        To make async standups work: showing your check-ins to your team, running AI on
+        To make async check-ins work: showing them to your team, running AI on
         recordings you attach, sending reminders in your local morning, and preventing
         abuse.
       </p>

@@ -81,11 +81,11 @@ export default async function TeamSettingsPage({
           </form>
         </section>
 
-        {/* Standups: a team can run several */}
+        {/* Check-ins: a team can run several */}
         <section className="space-y-4">
-          <SectionTitle>Standups</SectionTitle>
+          <SectionTitle>Check-ins</SectionTitle>
           <p className="text-sm text-muted-foreground -mt-2">
-            Each standup has its own cadence and check-in window. The feed shows
+            Each check-in has its own cadence and window. The feed shows
             them all.
           </p>
           {teamSchedules.map((sched) => {
@@ -190,7 +190,7 @@ export default async function TeamSettingsPage({
                 type="submit"
                 className="h-11 px-5 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition"
               >
-                Save standup
+                Save check-in
               </button>
             </form>
             {teamSchedules.length > 1 && (
@@ -199,7 +199,7 @@ export default async function TeamSettingsPage({
                   type="submit"
                   className="text-xs text-red-300/80 hover:text-red-300 transition"
                 >
-                  Delete this standup
+                  Delete this check-in
                 </button>
               </form>
             )}
@@ -215,7 +215,7 @@ export default async function TeamSettingsPage({
             <input
               name="name"
               required
-              placeholder="New standup name (e.g. EU sync)"
+              placeholder="New check-in name (e.g. EU sync)"
               className="flex-1 min-w-[200px] h-10 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm focus:outline-none focus:border-white/30 transition"
             />
             <input name="windowOpen" type="time" defaultValue="09:00" className="h-10 rounded-md bg-white/[0.02] border border-white/10 px-2 text-sm font-mono" />
@@ -224,7 +224,7 @@ export default async function TeamSettingsPage({
               type="submit"
               className="h-10 px-4 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition"
             >
-              Add standup
+              Add check-in
             </button>
           </form>
         </section>
@@ -283,7 +283,7 @@ export default async function TeamSettingsPage({
           <div className="rounded-md border border-destructive/30 bg-destructive/[0.04] p-4 space-y-3">
             <p className="text-sm">
               Delete the team <span className="font-medium">{t.name}</span> with all its
-              standups, check-ins, and recordings. The organization and other teams stay.
+              check-ins and recordings. The organization and other teams stay.
             </p>
             <form action={deleteTeam.bind(null, team.teamId)}>
               <button

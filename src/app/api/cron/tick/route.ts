@@ -149,7 +149,7 @@ export async function GET(req: Request) {
         userId: m.userId,
         teamId: s.teamId,
         type: "window_open",
-        title: `Your standup window is open (${s.teamName})`,
+        title: `Your check-in window is open (${s.teamName})`,
         body: "Take a minute — Yesterday, Today, Blockers.",
         linkPath: `/${s.orgSlug}/${s.teamSlug}/check-in`,
         data: { occurrenceId },

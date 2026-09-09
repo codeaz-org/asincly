@@ -34,7 +34,7 @@ export default async function OnboardingPage() {
           <Field name="orgName" placeholder="Acme, Inc." required autoFocus />
         </Section>
 
-        <Section index="02" title="First team" hint="Where your standup happens.">
+        <Section index="02" title="First team" hint="Where your check-ins happen.">
           <Field name="teamName" placeholder="Platform" required />
         </Section>
 
@@ -43,7 +43,7 @@ export default async function OnboardingPage() {
           title="Cadence"
           hint="Pick a rhythm. Times are in each teammate's local zone."
         >
-          <Field name="scheduleName" defaultValue="Daily standup" required />
+          <Field name="scheduleName" defaultValue="Daily check-in" required />
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
             {(
@@ -73,7 +73,7 @@ export default async function OnboardingPage() {
 
           <input
             name="customRrule"
-            placeholder="Custom RRULE — e.g. FREQ=WEEKLY;BYDAY=TU,TH"
+            placeholder="Custom RRULE, e.g. FREQ=WEEKLY;BYDAY=TU,TH"
             className="w-full h-11 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm font-mono placeholder:text-muted-foreground/50 focus:outline-none focus:border-white/30 focus:bg-white/[0.04] transition"
           />
 

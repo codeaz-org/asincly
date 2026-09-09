@@ -28,7 +28,7 @@ export default async function SignInPage() {
             Sign in.
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Async standups without meetings. Enter your work email — we&rsquo;ll
+            Async check-ins instead of meetings. Enter your work email and we&rsquo;ll
             send a one-time link.
           </p>
         </div>

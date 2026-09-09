@@ -35,7 +35,7 @@ export const groqTranscriber: Transcriber = {
   },
 };
 
-const SYSTEM_PROMPT = `You summarize a colleague's async standup for their team.
+const SYSTEM_PROMPT = `You summarize a colleague's async check-in for their team.
 You get a written note (yesterday/today/blockers in markdown) plus a video transcript.
 Your job: produce a compact JSON summary the team can skim in 10 seconds.
 

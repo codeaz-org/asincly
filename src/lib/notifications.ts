@@ -123,7 +123,7 @@ export async function fireMentionEvents(checkInId: string): Promise<void> {
         teamId: ctx.teamId,
         type: "blocker_on_your_item",
         title: `${author} is blocked on you`,
-        body: `In ${ctx.teamName}'s standup. Take a look when you get a chance.`,
+        body: `In ${ctx.teamName}'s check-in. Take a look when you get a chance.`,
         linkPath,
         data: { checkInId, authorId: ctx.authorId },
       });
@@ -135,7 +135,7 @@ export async function fireMentionEvents(checkInId: string): Promise<void> {
         teamId: ctx.teamId,
         type: "mentioned",
         title: `${author} mentioned you`,
-        body: `In ${ctx.teamName}'s standup for today.`,
+        body: `In ${ctx.teamName}'s check-in for today.`,
         linkPath,
         data: { checkInId, authorId: ctx.authorId },
       });

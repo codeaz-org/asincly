@@ -44,7 +44,7 @@ export async function completeOnboarding(formData: FormData) {
   const parsed = CompleteSchema.parse({
     orgName: formData.get("orgName"),
     teamName: formData.get("teamName"),
-    scheduleName: formData.get("scheduleName") || "Daily standup",
+    scheduleName: formData.get("scheduleName") || "Daily check-in",
     preset: formData.get("preset"),
     customRrule: formData.get("customRrule") || undefined,
     windowOpen: formData.get("windowOpen"),

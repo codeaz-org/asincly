@@ -108,7 +108,7 @@ export async function createTeam(orgId: string, formData: FormData) {
     await tx.insert(members).values({ teamId: team.id, userId: user.id, role: "owner" });
     await tx.insert(schedules).values({
       teamId: team.id,
-      name: "Daily standup",
+      name: "Daily check-in",
       rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
       windowOpenLocal: "09:00",
       windowCloseLocal: "11:00",
@@ -167,7 +167,7 @@ export async function deleteTeam(teamId: string) {
   redirect("/");
 }
 
-// ────────── Schedules (a team can run several standups) ──────────
+// ────────── Schedules (a team can run several check-ins) ──────────
 
 const HHMM = /^\d{2}:\d{2}$/;
 

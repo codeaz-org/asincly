@@ -63,7 +63,7 @@ export default async function TeamRosterPage({
                 Create team
               </button>
               <p className="text-[10px] text-muted-foreground">
-                You become its owner. A weekday standup is set up automatically.
+                You become its owner. A weekday check-in is set up automatically.
               </p>
             </form>
           </details>

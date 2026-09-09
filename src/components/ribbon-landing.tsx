@@ -103,7 +103,7 @@ export function RibbonLanding() {
   return (
     <div className="landing flex min-h-dvh flex-col">
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-background/85 backdrop-blur">
-        <div className="mx-auto max-w-6xl px-6 h-16 flex items-center gap-8">
+        <div className="mx-auto max-w-6xl px-6 h-16 flex items-center gap-4 md:gap-8">
           <Logo size={26} className="text-base" />
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
             <a href="#how" className="hover:text-foreground transition">How it works</a>
@@ -119,9 +119,9 @@ export function RibbonLanding() {
           </Link>
           <Link
             href="/sign-in"
-            className="h-9 px-4 rounded-lg bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition inline-flex items-center"
+            className="h-9 px-4 rounded-lg bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition inline-flex items-center whitespace-nowrap"
           >
-            Get started free
+            Get started<span className="hidden sm:inline">&nbsp;free</span>
           </Link>
         </div>
       </header>
@@ -497,6 +497,12 @@ function RibbonCard({
   setPlaying: (fn: boolean) => void;
   onScrub: (v: number) => void;
 }) {
+  const listRef = useRef<HTMLOListElement>(null);
+  // Keep the newest check-in visible as the digest writes itself.
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [done.length]);
   return (
     <div className="demo">
       <div className="demo__head">
@@ -598,7 +604,7 @@ function RibbonCard({
               The day is young. Check-ins land here as each morning arrives.
             </p>
           ) : (
-            <ol className="demo__digestlist">
+            <ol className="demo__digestlist" ref={listRef}>
               {done.map((t) => (
                 <li key={t.monogram} className="demo__digestline">
                   <span className="demo__digestmono">{t.monogram}</span>
@@ -974,11 +980,16 @@ const PAGE_CSS = `
 }
 
 .demo__digest {
-  min-height: 280px;
   border: 1px solid oklch(1 0 0 / 0.06);
   background: oklch(0.10 0.01 250 / 0.7);
   border-radius: 12px; padding: 14px 16px;
-  display: flex; flex-direction: column; min-height: 0;
+  display: flex; flex-direction: column;
+}
+/* Two-column layout: let the ribbon column set the row height, and scroll
+   the digest list inside it instead of stretching the row (which left a
+   void under the scrubber). */
+@media (min-width: 901px) {
+  .demo__digest { height: 0; min-height: 100%; }
 }
 .demo__digesthead {
   display: flex; justify-content: space-between; align-items: baseline;
@@ -999,8 +1010,10 @@ const PAGE_CSS = `
 .demo__digestlist {
   list-style: none; padding: 0; margin: 0;
   display: flex; flex-direction: column; gap: 8px;
-  overflow-y: auto; max-height: 240px;
+  flex: 1; min-height: 0; overflow-y: auto; max-height: 240px;
+  mask-image: linear-gradient(to bottom, transparent, black 18px);
 }
+@media (min-width: 901px) { .demo__digestlist { max-height: none; } }
 .demo__digestline { display: flex; gap: 9px; align-items: flex-start; animation: digest-in 300ms cubic-bezier(.2,.6,.3,1); }
 @keyframes digest-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .demo__digestmono {
@@ -1057,9 +1070,12 @@ const PAGE_CSS = `
   .demo { padding: 16px 14px 14px; }
   .demo__head { flex-direction: column; }
   .demo__clock { text-align: left; }
-  .teammate__btn { width: 32px; height: 32px; }
+  /* Ten dots must fit the card: size from the grid column, not a fixed px. */
+  .teammate__btn { width: 100%; max-width: 32px; height: auto; aspect-ratio: 1; }
   .teammate__mono { font-size: 9.5px; }
+  .teammate__btn--done::after { width: 9px; height: 9px; }
   .teammate__city { display: none; }
+  .demo__hint { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
