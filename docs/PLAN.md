@@ -4,12 +4,12 @@ Each phase ends in something runnable and tested. Don't start a phase until the 
 is green. Tick boxes as work lands.
 
 ## Phase 0 — Repo foundation
-- [ ] `create-next-app` (TS, App Router, Tailwind, ESLint, `src/`, pnpm), shadcn/ui init
-- [ ] Docker Compose: Postgres + MinIO; `.env.example`; `pnpm db:up`
-- [ ] Drizzle setup, first migration, `db:migrate`, `db:studio`
-- [ ] Vitest + Playwright wired; CI (GitHub Actions: lint, typecheck, test, build)
-- [ ] `LICENSE` (AGPL-3.0), `README`, `SECURITY.md`, `CONTRIBUTING.md`
-- [ ] Security headers + CSP baseline
+- [x] `create-next-app` (TS, App Router, Tailwind, ESLint, `src/`, pnpm), shadcn/ui init
+- [x] Docker Compose: Postgres + MinIO; `.env.example`; `pnpm db:up`
+- [x] Drizzle setup, first migration, `db:migrate`, `db:studio`
+- [x] Vitest + Playwright wired; CI (GitHub Actions: lint, typecheck, test, build)
+- [x] `LICENSE` (AGPL-3.0), `README`, `SECURITY.md`, `CONTRIBUTING.md`
+- [x] Security headers + CSP baseline
 
 ## Phase 1 — Auth, orgs, teams, schedules (timezone-correct core)
 - [ ] Auth.js: Google, Microsoft, magic link. Session → `Member` with IANA tz (detected, editable)
