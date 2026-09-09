@@ -12,13 +12,13 @@ is green. Tick boxes as work lands.
 - [x] Security headers + CSP baseline
 
 ## Phase 1 — Auth, orgs, teams, schedules (timezone-correct core)
-- [ ] Auth.js: Google, Microsoft, magic link. Session → `Member` with IANA tz (detected, editable)
-- [ ] Tables + RLS: organization, team, member, schedule, occurrence, audit_log
-- [ ] Onboarding: create org → create team → invite by email → set first schedule
-- [ ] Schedule editor: presets (daily / MWF / weekly) + custom RRULE, window open/close in local time
-- [ ] `lib/time.ts`: "today for member", "current occurrence for team", DST-safe next-window
+- [x] Auth.js: Google, magic link. Session → `Member` with IANA tz (detected, editable). Microsoft SSO deferred.
+- [x] Tables + RLS: organization, team, member, schedule, occurrence, audit_log
+- [x] Onboarding: create org → create team → invite by email → set first schedule
+- [x] Schedule editor: presets (daily / MWF / weekly) + custom RRULE, window open/close in local time
+- [x] `lib/time.ts`: "today for member", "current occurrence for team", DST-safe next-window
       calculation — fully unit-tested with fixtures across 4+ time zones and a DST boundary
-- [ ] Team page with timezone strip (asleep / window open / done)
+- [x] Team page with timezone strip (asleep / window open / done — "done" lands in Phase 2)
 
 ## Phase 2 — Text check-ins and the feed
 - [ ] `check_in` table + RLS. Draft autosave, submit.
