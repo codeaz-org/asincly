@@ -1,6 +1,7 @@
 "use server";
 
 import { and, eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
@@ -8,7 +9,6 @@ import { members, organizations, schedules, teams, users } from "@/db/schema";
 import { PRESET_RRULES, type PresetKey } from "@/lib/time";
 import { requireUser } from "@/lib/session";
 import { slugify } from "@/lib/slug";
-import { withUser } from "@/db/with-user";
 
 const HHMM = /^\d{2}:\d{2}$/;
 
@@ -53,7 +53,12 @@ export async function completeOnboarding(formData: FormData) {
   const orgSlug = await uniqueOrgSlug(slugify(parsed.orgName));
   const teamSlug = slugify(parsed.teamName);
 
-  const created = await withUser(user.id, async (tx) => {
+  // Bootstrap runs on the admin client. RLS's RETURNING clause is checked
+  // against the SELECT policy — the user isn't yet an org member, so the
+  // returning row would be filtered out and the whole insert cascade fails.
+  // The caller is already authenticated (requireUser) and every field is
+  // Zod-validated, so this is the legitimate bootstrap path.
+  const created = await db.transaction(async (tx) => {
     const [org] = await tx
       .insert(organizations)
       .values({ name: parsed.orgName, slug: orgSlug })
@@ -78,23 +83,39 @@ export async function completeOnboarding(formData: FormData) {
 
 const InviteSchema = z.object({
   teamId: z.string().uuid(),
-  emails: z
-    .string()
-    .transform((s) => s.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter(Boolean))
-    .pipe(z.array(z.string().email()).min(1).max(50)),
+  raw: z.string().min(1).max(2000),
 });
 
 export async function inviteMembers(formData: FormData) {
   const user = await requireUser();
   const parsed = InviteSchema.parse({
     teamId: formData.get("teamId"),
-    emails: formData.get("emails"),
+    raw: formData.get("emails"),
   });
 
-  for (const email of parsed.emails) {
-    // Ensure a user row exists for this email. Auth.js will attach the
-    // account on first sign-in via magic link; we're pre-creating the row
-    // so we can insert a member reference now.
+  const emails = Array.from(
+    new Set(
+      parsed.raw
+        .split(/[\s,;]+/)
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => z.string().email().safeParse(e).success),
+    ),
+  ).slice(0, 50);
+
+  if (emails.length === 0) throw new Error("No valid email addresses found");
+
+  // Verify the caller is an admin+ on this team before touching anything.
+  const [callerMember] = await db
+    .select({ role: members.role, orgSlug: organizations.slug, teamSlug: teams.slug })
+    .from(members)
+    .innerJoin(teams, eq(teams.id, members.teamId))
+    .innerJoin(organizations, eq(organizations.id, teams.orgId))
+    .where(and(eq(members.teamId, parsed.teamId), eq(members.userId, user.id)));
+  if (!callerMember || (callerMember.role !== "owner" && callerMember.role !== "admin")) {
+    throw new Error("Not permitted");
+  }
+
+  for (const email of emails) {
     const existing = await db.select().from(users).where(eq(users.email, email));
     const invitee = existing[0] ?? (await db.insert(users).values({ email }).returning())[0];
 
@@ -104,15 +125,17 @@ export async function inviteMembers(formData: FormData) {
       .where(and(eq(members.teamId, parsed.teamId), eq(members.userId, invitee.id)));
     if (already.length > 0) continue;
 
-    await withUser(user.id, (tx) =>
-      tx.insert(members).values({ teamId: parsed.teamId, userId: invitee.id, role: "member" }),
-    );
+    await db
+      .insert(members)
+      .values({ teamId: parsed.teamId, userId: invitee.id, role: "member" });
     // ponytail: no invite email yet. In dev they can /sign-in with the same
     // email and land in the team. Wire Resend invite template in Phase 4.
     if (process.env.NODE_ENV !== "production") {
       console.log(`[invite] added ${email} to team ${parsed.teamId}`);
     }
   }
+
+  revalidatePath(`/${callerMember.orgSlug}/${callerMember.teamSlug}`);
 }
 
 const UpdateTzSchema = z.object({ tz: z.string().min(1).max(64) });
