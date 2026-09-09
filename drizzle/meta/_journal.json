@@ -43,6 +43,20 @@
       "when": 1788965447869,
       "tag": "0005_check_in_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788966375165,
+      "tag": "0006_recording",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788966376017,
+      "tag": "0007_recording_rls",
+      "breakpoints": true
     }
   ]
 }

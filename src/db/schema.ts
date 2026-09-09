@@ -135,6 +135,35 @@ export const occurrences = pgTable(
 );
 
 export const checkInStatus = pgEnum("check_in_status", ["draft", "submitted"]);
+export const recordingStatus = pgEnum("recording_status", [
+  "uploaded",
+  "processing",
+  "ready",
+  "failed",
+]);
+
+// A single video/audio blob attached to a check-in. Payload lives in S3;
+// this row holds the pointer + AI-derived text (encrypted at rest).
+export const recordings = pgTable("recording", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  checkInId: uuid("check_in_id")
+    .notNull()
+    .references(() => checkIns.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  objectKey: text("object_key").notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes"),
+  durationMs: integer("duration_ms"),
+  status: recordingStatus("status").notNull().default("uploaded"),
+  // Encrypted (AES-256-GCM). Zero-length string when absent.
+  transcriptCipher: text("transcript_cipher").notNull().default(""),
+  summaryCipher: text("summary_cipher").notNull().default(""),
+  processingError: text("processing_error"),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const checkIns = pgTable(
   "check_in",
