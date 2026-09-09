@@ -134,6 +134,30 @@ export const occurrences = pgTable(
   (t) => [uniqueIndex("occurrence_schedule_date_uq").on(t.scheduleId, t.scheduleDate)],
 );
 
+export const checkInStatus = pgEnum("check_in_status", ["draft", "submitted"]);
+
+export const checkIns = pgTable(
+  "check_in",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    occurrenceId: uuid("occurrence_id")
+      .notNull()
+      .references(() => occurrences.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: checkInStatus("status").notNull().default("draft"),
+    yesterday: text("yesterday").notNull().default(""),
+    today: text("today").notNull().default(""),
+    blockers: text("blockers").notNull().default(""),
+    localDate: date("local_date").notNull(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("check_in_occurrence_user_uq").on(t.occurrenceId, t.userId)],
+);
+
 export const auditLogs = pgTable("audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),
   orgId: uuid("org_id")

@@ -29,6 +29,20 @@
       "when": 1788958227412,
       "tag": "0003_rls_security_definer",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788965443210,
+      "tag": "0004_check_in",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788965447869,
+      "tag": "0005_check_in_rls",
+      "breakpoints": true
     }
   ]
 }
