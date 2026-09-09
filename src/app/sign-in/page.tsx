@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
+import { Footer } from "@/components/footer";
 
 export default async function SignInPage() {
   const session = await auth();
@@ -8,8 +10,17 @@ export default async function SignInPage() {
   const hasGoogle = !!process.env.AUTH_GOOGLE_ID && !!process.env.AUTH_GOOGLE_SECRET;
 
   return (
-    <main className="min-h-dvh grid place-items-center px-6">
-      <div className="w-full max-w-sm space-y-10">
+    <div className="flex min-h-dvh flex-col">
+      <header className="border-b border-white/[0.06]">
+        <div className="mx-auto max-w-5xl px-6 h-14 flex items-center">
+          <Link href="/" className="inline-flex items-center gap-2">
+            <span className="size-1.5 rounded-full bg-accent" />
+            <span className="text-sm font-medium">asincly</span>
+          </Link>
+        </div>
+      </header>
+      <main className="flex-1 grid place-items-center px-6">
+        <div className="w-full max-w-sm space-y-10">
         <div className="space-y-3">
           <span className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
             <span className="size-1.5 rounded-full bg-accent shadow-[0_0_12px_theme(colors.emerald.400)]" />
@@ -69,7 +80,20 @@ export default async function SignInPage() {
             </form>
           </>
         )}
-      </div>
-    </main>
+          <p className="text-[11px] text-muted-foreground text-center pt-4">
+            By continuing you agree to our{" "}
+            <Link href="/legal/terms" className="underline hover:text-foreground">
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link href="/legal/privacy" className="underline hover:text-foreground">
+              Privacy Policy
+            </Link>
+            .
+          </p>
+        </div>
+      </main>
+      <Footer />
+    </div>
   );
 }

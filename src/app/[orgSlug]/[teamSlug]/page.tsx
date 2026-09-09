@@ -3,12 +3,10 @@ import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { schedules } from "@/db/schema";
-import { Inbox } from "@/components/inbox";
-import { InviteForm } from "@/components/invite-form";
+import { AppShell } from "@/components/app-shell";
 import { Markdown } from "@/components/markdown";
 import { RecordingPlayer } from "@/components/recording-player";
 import { TzDetector } from "@/components/tz-detector";
-import { listRecentForUser, unreadCount } from "@/lib/notifications";
 import { getMyCheckInForOccurrence, getTeamFeed, getTeamRoster } from "@/lib/queries";
 import { getTeamBySlug, requireUser } from "@/lib/session";
 import { localDate, windowFor, windowStatus } from "@/lib/time";
@@ -16,14 +14,13 @@ import { localDate, windowFor, windowStatus } from "@/lib/time";
 type Sched = {
   id: string;
   name: string;
-  rrule: string;
   windowOpenLocal: string;
   windowCloseLocal: string;
 };
 
 type MemberStatus = "done" | "open" | "closed" | "asleep";
 
-export default async function TeamPage({
+export default async function TeamFeedPage({
   params,
 }: {
   params: Promise<{ orgSlug: string; teamSlug: string }>;
@@ -33,41 +30,32 @@ export default async function TeamPage({
   const team = await getTeamBySlug(user.id, teamSlug);
   if (!team) notFound();
 
-  const [activeSchedules, roster, inboxItems, unread] = await Promise.all([
+  const [activeSchedules, roster] = await Promise.all([
     db
       .select({
         id: schedules.id,
         name: schedules.name,
-        rrule: schedules.rrule,
         windowOpenLocal: schedules.windowOpenLocal,
         windowCloseLocal: schedules.windowCloseLocal,
       })
       .from(schedules)
       .where(and(eq(schedules.teamId, team.teamId), eq(schedules.active, true))),
     getTeamRoster(team.teamId),
-    listRecentForUser(user.id),
-    unreadCount(user.id),
   ]);
 
   const primary: Sched | undefined = activeSchedules[0];
-  const isAdmin = team.role === "owner" || team.role === "admin";
-  const isOwner = team.role === "owner";
-
   const now = new Date();
   const todayISO = localDate(now, user.tz);
-
   const feed = await getTeamFeed(team.teamId, todayISO);
   const myCheckIn = await getMyCheckInForOccurrence(feed.today?.occurrenceId, user.id);
-
   const doneUserIds = new Set(feed.today?.entries.map((e) => e.userId) ?? []);
 
-  const memberRows = roster
-    .map((m) => ({
-      ...m,
-      status: memberStatus(now, m.tz, primary, doneUserIds.has(m.userId)),
-    }))
-    .sort(statusThenName);
-
+  const memberRows = roster.map((m) => ({
+    userId: m.userId,
+    name: m.name,
+    email: m.email,
+    status: memberStatus(now, m.tz, primary, doneUserIds.has(m.userId)),
+  }));
   const done = memberRows.filter((r) => r.status === "done").length;
   const open = memberRows.filter((r) => r.status === "open").length;
   const closed = memberRows.filter((r) => r.status === "closed").length;
@@ -77,51 +65,27 @@ export default async function TeamPage({
   const primaryCta = ctaLabel(myCheckIn);
 
   return (
-    <main className="min-h-dvh">
+    <AppShell
+      orgSlug={orgSlug}
+      teamSlug={teamSlug}
+      orgName={team.orgName}
+      teamName={team.teamName}
+      role={team.role}
+      userId={user.id}
+      userEmail={user.email}
+      active="feed"
+    >
       <TzDetector currentTz={user.tz} />
 
-      <div className="mx-auto max-w-4xl px-6 py-10 md:py-14 space-y-14">
-        {/* header */}
-        <header className="flex flex-wrap items-end justify-between gap-4">
-          <div className="space-y-2">
-            <span className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-              <span className="size-1.5 rounded-full bg-accent" />
-              {team.orgName}
-            </span>
-            <h1 className="text-5xl md:text-6xl font-medium tracking-tight leading-none">
-              {team.teamName}
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right text-xs text-muted-foreground font-mono">
-              <div>{user.email}</div>
-              <div className="text-muted-foreground/70">{user.tz}</div>
-            </div>
-            <Inbox
-              items={inboxItems.map((n) => ({
-                id: n.id,
-                type: n.type,
-                title: n.title,
-                body: n.body,
-                linkPath: n.linkPath,
-                createdAt: n.createdAt,
-                readAt: n.readAt,
-              }))}
-              unread={unread}
-            />
-          </div>
-        </header>
-
-        {/* Primary CTA */}
+      <div className="mx-auto max-w-4xl px-6 py-10 md:py-12 space-y-10">
+        {/* Primary CTA card */}
         {primary && (
           <div className="rounded-lg border border-white/10 bg-white/[0.02] px-5 py-5 flex flex-wrap items-center justify-between gap-4">
             <div className="space-y-1">
               <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
                 Today · {todayISO}
               </p>
-              <p className="text-lg font-medium">
-                {primaryCta.headline}
-              </p>
+              <p className="text-lg font-medium">{primaryCta.headline}</p>
               <p className="text-xs text-muted-foreground">{primaryCta.hint}</p>
             </div>
             <Link
@@ -134,7 +98,7 @@ export default async function TeamPage({
         )}
 
         {/* live status band */}
-        <section className="border-y border-border py-4 flex flex-wrap items-center gap-6 text-sm">
+        <section className="border-y border-border py-3 flex flex-wrap items-center gap-6 text-sm">
           <StatBadge label="done" value={done} color="emerald" />
           <StatBadge label="open" value={open} color="amber" />
           <StatBadge label="closed" value={closed} color="zinc" />
@@ -147,15 +111,12 @@ export default async function TeamPage({
           ) : null}
         </section>
 
-        {/* Today's feed */}
+        {/* Today */}
         {feed.today && (
-          <section className="space-y-5">
-            <SectionHeader index="01" title="Today" hint={feed.today.scheduleDate} />
-
+          <section className="space-y-4">
+            <SectionHeader title="Today" />
             {feed.today.entries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No check-ins yet. Be the first.
-              </p>
+              <EmptyState hint="No one has checked in yet. Be the first." />
             ) : (
               <ul className="space-y-4">
                 {feed.today.entries.map((e) => (
@@ -163,8 +124,6 @@ export default async function TeamPage({
                 ))}
               </ul>
             )}
-
-            {/* pending */}
             {memberRows.some((m) => m.status !== "done") && (
               <div className="pt-2">
                 <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-2">
@@ -175,7 +134,7 @@ export default async function TeamPage({
                     .filter((m) => m.status !== "done")
                     .map((m) => (
                       <span
-                        key={m.memberId}
+                        key={m.userId}
                         className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.02] px-3 py-1 text-xs"
                       >
                         <StatusDot status={m.status} />
@@ -188,10 +147,10 @@ export default async function TeamPage({
           </section>
         )}
 
-        {/* Past occurrences */}
+        {/* Recent */}
         {feed.past.length > 0 && (
-          <section className="space-y-5">
-            <SectionHeader index="02" title="Recent" />
+          <section className="space-y-4">
+            <SectionHeader title="Recent" />
             <ul className="space-y-6">
               {feed.past.map((occ) => (
                 <li key={occ.occurrenceId} className="space-y-3">
@@ -209,113 +168,12 @@ export default async function TeamPage({
             </ul>
           </section>
         )}
-
-        {/* Team roster */}
-        <section className="space-y-4">
-          <SectionHeader index="03" title="Team" />
-          <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {memberRows.map((m) => (
-              <li
-                key={m.memberId}
-                className="rounded-md border border-white/[0.06] px-4 py-3.5 hover:border-white/10 transition"
-              >
-                <div className="flex items-center gap-3">
-                  <StatusDot status={m.status} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {m.name ?? m.email}
-                      {m.userId === user.id && (
-                        <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                          you
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground font-mono truncate">
-                      {m.tz}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-mono tabular-nums leading-none">
-                      {localTime(now, m.tz)}
-                    </div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">
-                      {statusLabel(m.status)}
-                    </div>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* Schedule (compact) */}
-        <section className="space-y-4">
-          <SectionHeader
-            index="04"
-            title="Schedule"
-            right={
-              isAdmin && primary ? (
-                <Link
-                  href={`/s/${primary.id}`}
-                  className="text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground transition"
-                >
-                  Edit →
-                </Link>
-              ) : null
-            }
-          />
-          {activeSchedules.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No active schedule.</p>
-          ) : (
-            <ul className="space-y-2">
-              {activeSchedules.map((s) => (
-                <li
-                  key={s.id}
-                  className="rounded-md border border-white/[0.06] px-5 py-4 flex items-center justify-between hover:border-white/10 transition"
-                >
-                  <div>
-                    <p className="text-base font-medium">{s.name}</p>
-                    <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                      {s.rrule}
-                    </p>
-                  </div>
-                  <div className="text-right font-mono text-sm">
-                    <div>
-                      {s.windowOpenLocal.slice(0, 5)} → {s.windowCloseLocal.slice(0, 5)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">local</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* Invite */}
-        {isAdmin && (
-          <section className="space-y-4">
-            <SectionHeader index="05" title="Invite teammates" hint="Optional." />
-            <InviteForm teamId={team.teamId} />
-          </section>
-        )}
-
-        {isOwner && (
-          <div className="pt-2">
-            <Link
-              href={`/${orgSlug}/${teamSlug}/settings`}
-              className="text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground transition"
-            >
-              Team settings · retention · export · danger zone →
-            </Link>
-          </div>
-        )}
       </div>
-    </main>
+    </AppShell>
   );
 }
 
 // ────────── card ──────────
-
 import type { FeedEntry } from "@/lib/queries";
 
 function CheckInCard({
@@ -346,10 +204,7 @@ function CheckInCard({
           </p>
         </div>
         <time className="text-[11px] text-muted-foreground font-mono shrink-0">
-          {entry.submittedAt.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+          {entry.submittedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </time>
       </header>
 
@@ -410,13 +265,9 @@ function CheckInCard({
 
 function SectionKey({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70">
-      {children}
-    </p>
+    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70">{children}</p>
   );
 }
-
-// ────────── helpers ──────────
 
 function memberStatus(
   now: Date,
@@ -432,32 +283,6 @@ function memberStatus(
   if (status === "open") return "open";
   if (status === "closed") return "closed";
   return "asleep";
-}
-
-function statusLabel(s: MemberStatus): string {
-  if (s === "done") return "done";
-  if (s === "open") return "window open";
-  if (s === "closed") return "window closed";
-  return "asleep";
-}
-
-function statusThenName(
-  a: { status: MemberStatus; name: string | null; email: string },
-  b: { status: MemberStatus; name: string | null; email: string },
-): number {
-  const order: Record<MemberStatus, number> = { done: 0, open: 1, closed: 2, asleep: 3 };
-  const d = order[a.status] - order[b.status];
-  if (d !== 0) return d;
-  return (a.name ?? a.email).localeCompare(b.name ?? b.email);
-}
-
-function localTime(now: Date, tz: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: tz,
-  }).format(now);
 }
 
 function ctaLabel(mine: { status: "draft" | "submitted"; hasContent: boolean } | null): {
@@ -493,27 +318,14 @@ function ctaLabel(mine: { status: "draft" | "submitted"; hasContent: boolean } |
   };
 }
 
-// ────────── status pieces ──────────
+function SectionHeader({ title }: { title: string }) {
+  return <h2 className="text-2xl font-medium tracking-tight">{title}</h2>;
+}
 
-function SectionHeader({
-  index,
-  title,
-  hint,
-  right,
-}: {
-  index: string;
-  title: string;
-  hint?: string;
-  right?: React.ReactNode;
-}) {
+function EmptyState({ hint }: { hint: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4">
-      <div className="flex items-baseline gap-3">
-        <span className="font-mono text-xs text-muted-foreground/70">{index}</span>
-        <h2 className="text-2xl font-medium tracking-tight">{title}</h2>
-        {hint && <span className="text-xs text-muted-foreground font-mono">{hint}</span>}
-      </div>
-      {right}
+    <div className="rounded-lg border border-dashed border-white/10 px-5 py-10 text-center">
+      <p className="text-sm text-muted-foreground">{hint}</p>
     </div>
   );
 }
@@ -539,9 +351,7 @@ function StatBadge({
     <span className="inline-flex items-center gap-2 text-sm">
       <span className={`size-2 rounded-full ${dot}`} />
       <span className="font-mono tabular-nums">{value}</span>
-      <span className="text-xs uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
+      <span className="text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
     </span>
   );
 }
