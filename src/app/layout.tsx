@@ -20,10 +20,27 @@ const fraunces = Fraunces({
   axes: ["opsz"],
 });
 
+const description =
+  "Async standups for remote teams. Your team checks in during their own morning. A short screen and camera recording turns into a scannable summary. Nobody waits on anybody.";
+
 export const metadata: Metadata = {
-  title: "Asincly — Standups that respect sleep",
-  description:
-    "Async standups for remote teams. Your team checks in during their own morning. A short screen and camera recording turns into a scannable summary. Nobody waits on anybody.",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  title: {
+    default: "Asincly — Standups that respect sleep",
+    template: "%s · Asincly",
+  },
+  description,
+  openGraph: {
+    title: "Asincly — Standups that respect sleep",
+    description,
+    siteName: "Asincly",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Asincly — Standups that respect sleep",
+    description,
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

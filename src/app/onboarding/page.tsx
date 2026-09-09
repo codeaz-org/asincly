@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Logo } from "@/components/logo";
 import { TzDetector } from "@/components/tz-detector";
 import { completeOnboarding } from "@/lib/actions/onboarding";
 import { getMemberships, requireUser } from "@/lib/session";
@@ -16,8 +17,8 @@ export default async function OnboardingPage() {
       <TzDetector currentTz={user.tz} />
       <form action={completeOnboarding} className="w-full max-w-xl space-y-14">
         <header className="space-y-4">
-          <span className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-accent" />
+          <Logo size={22} className="text-sm" />
+          <span className="block text-xs uppercase tracking-[0.2em] text-muted-foreground">
             setup · one screen
           </span>
           <h1 className="text-5xl font-medium tracking-tight leading-[0.95]">
