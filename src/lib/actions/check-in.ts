@@ -2,6 +2,7 @@
 
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
 import { checkIns, members, occurrences, organizations, schedules, teams } from "@/db/schema";
@@ -126,11 +127,11 @@ export async function submitCheckIn(
   _prev: SubmitResult | null,
   formData: FormData,
 ): Promise<SubmitResult> {
+  let landing: { orgSlug: string; teamSlug: string } | null = null;
   try {
     const user = await requireUser();
     const checkInId = z.string().uuid().parse(formData.get("checkInId"));
 
-    // Persist final field values (in case autosave was mid-flight)
     const yesterday = String(formData.get("yesterday") ?? "");
     const today = String(formData.get("today") ?? "");
     const blockers = String(formData.get("blockers") ?? "");
@@ -162,12 +163,15 @@ export async function submitCheckIn(
     if (!ctx) return { ok: false, error: "Team not found" };
 
     revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}`);
-    return { ok: true, orgSlug: ctx.orgSlug, teamSlug: ctx.teamSlug };
+    landing = { orgSlug: ctx.orgSlug, teamSlug: ctx.teamSlug };
   } catch (e) {
     console.error("[submitCheckIn]", e);
     const msg = e instanceof Error ? e.message : "Submit failed";
     return { ok: false, error: msg };
   }
+  // redirect() throws internally, so it must live outside the try/catch or
+  // it looks like an error.
+  redirect(`/${landing!.orgSlug}/${landing!.teamSlug}`);
 }
 
 export async function reopenCheckIn(checkInId: string) {

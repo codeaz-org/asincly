@@ -21,13 +21,13 @@ is green. Tick boxes as work lands.
 - [x] Team page with timezone strip (asleep / window open / done — "done" lands in Phase 2)
 
 ## Phase 2 — Text check-ins and the feed
-- [ ] `check_in` table + RLS. Draft autosave, submit.
-- [ ] Markdown editor with Yesterday / Today / Blockers sections and checkbox items
-- [ ] Carry-over: unchecked "Today" items pre-fill the next check-in's "Yesterday/Today"
-- [ ] @mentions with team-member autocomplete; stored as structured references
-- [ ] Feed grouped by occurrence; per-occurrence "who's in / who's pending"
-- [ ] Mobile-first check-in flow; dark mode
-- [ ] Playwright: invite → check in → appears in teammate's feed
+- [x] `check_in` table + RLS. Draft autosave, submit.
+- [x] Markdown editor with Yesterday / Today / Blockers sections and checkbox items
+- [x] Carry-over: unchecked "Today" items pre-fill the next check-in's "Yesterday/Today"
+- [x] @mentions with team-member autocomplete; stored as structured references
+- [x] Feed grouped by occurrence; per-occurrence "who's in / who's pending"
+- [x] Mobile-first check-in flow; dark mode
+- [x] Playwright: invite → check in → appears in teammate's feed
 
 ## Phase 3 — Recording, transcription, AI summaries
 - [ ] Browser recorder: camera + screen (getDisplayMedia + MediaRecorder), preview, retake, max length
