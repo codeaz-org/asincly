@@ -1,0 +1,39 @@
+name: Cron tick
+
+# GitHub Actions schedules the tick every 5 minutes (the minimum for
+# public repos; private repos may drift up to 15 min under load). All the
+# scheduled work — window_open reminders, digest generation, recording
+# retention purges — runs behind /api/cron/tick.
+#
+# Setup: add two repository secrets under Settings → Secrets and variables:
+#   APP_URL       e.g. https://asincly.vercel.app
+#   CRON_SECRET   the same value as CRON_SECRET in the deployed app's env
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # manual trigger from the Actions tab
+
+concurrency:
+  group: cron-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Hit /api/cron/tick
+        run: |
+          set -eo pipefail
+          if [ -z "${{ secrets.APP_URL }}" ] || [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "APP_URL or CRON_SECRET secret missing — skipping."
+            exit 0
+          fi
+          curl \
+            --silent --show-error --fail \
+            --max-time 240 \
+            -H "authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/tick" \
+            | tee /tmp/tick.json
+          echo

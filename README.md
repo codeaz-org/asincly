@@ -57,9 +57,23 @@ pnpm db:migrate
 pnpm build && pnpm start      # serves on :3000
 ```
 
-Wire a cron (Vercel Cron, GitHub Actions on schedule, `crontab -e`, whatever) to hit
-`/api/cron/tick?secret=$CRON_SECRET` every few minutes. That handles window-open reminders,
-digest fan-out, and recording retention purges.
+### Cron (already wired, free, zero external service)
+
+The scheduled work — window-open reminders, digest generation, recording retention
+purges — runs from a single endpoint `/api/cron/tick` guarded by `CRON_SECRET`.
+**You don't have to run anything yourself.** Two schedulers ship in the repo, pick the
+one that matches your deployment:
+
+- **Vercel deploy** — `vercel.json` already registers `/api/cron/tick` every 5 minutes.
+  Set `CRON_SECRET` in the Vercel project's env; Vercel signs each request with
+  `Authorization: Bearer $CRON_SECRET` automatically. Done.
+- **Anywhere else (self-host, Render, Fly, bare metal)** — the GitHub Actions workflow
+  at `.github/workflows/cron.yml` fires every 5 minutes and curls your deploy. Set two
+  repository secrets: `APP_URL` (e.g. `https://asincly.your-domain.com`) and `CRON_SECRET`
+  (same value as in the app env).
+
+Local dev: run `pnpm cron:local` to fire a single tick against `localhost:3000` — useful
+for testing reminder logic without waiting for schedules to open.
 
 Object retention on the bucket side (S3 lifecycle rule) is recommended so orphaned files
 from deleted teams get swept — the DB delete leaves them behind on purpose to keep
