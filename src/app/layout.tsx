@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,16 +12,25 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Editorial serif for the ribbon landing's peak + section headings.
+// Optical size axis pulls in one variable file, no per-weight requests.
+const fraunces = Fraunces({
+  variable: "--font-serif",
+  subsets: ["latin"],
+  axes: ["opsz"],
+});
+
 export const metadata: Metadata = {
-  title: "Asincly",
-  description: "Async standups for remote teams.",
+  title: "Asincly — Standups that respect sleep",
+  description:
+    "Async standups for remote teams. Your team checks in during their own morning. A short screen and camera recording turns into a scannable summary. Nobody waits on anybody.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`dark ${geistSans.variable} ${geistMono.variable} h-full`}
+      className={`dark ${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col selection:bg-emerald-400/25 selection:text-emerald-50">
