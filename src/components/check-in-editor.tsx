@@ -63,8 +63,24 @@ export function CheckInEditor(props: Props) {
     null,
   );
 
+  // Cmd/Ctrl+Enter submits from anywhere in the form.
+  const formRef = useRef<HTMLFormElement | null>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        formRef.current?.requestSubmit();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const carriedOver =
+    props.status === "draft" && props.today.trim().startsWith("- [ ]");
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-2">
           <Link
@@ -73,7 +89,7 @@ export function CheckInEditor(props: Props) {
           >
             ← back to feed
           </Link>
-          <h1 className="text-4xl md:text-5xl font-medium tracking-tight leading-none">
+          <h1 className="text-4xl font-medium tracking-tight leading-none">
             Check in.
           </h1>
           <p className="text-sm text-muted-foreground font-mono">{props.localDate}</p>
@@ -81,51 +97,68 @@ export function CheckInEditor(props: Props) {
         <SaveStatus saving={saving} savedAt={savedAt} status={props.status} />
       </header>
 
-      <form action={submitAction} className="space-y-8">
+      <form ref={formRef} action={submitAction}>
         <input type="hidden" name="checkInId" value={props.checkInId} />
         <input type="hidden" name="yesterday" value={y} />
         <input type="hidden" name="today" value={t} />
         <input type="hidden" name="blockers" value={b} />
 
-        <Field
-          label="Yesterday"
-          hint="What you moved forward."
-          value={y}
-          onChange={setY}
-          placeholder="- Shipped the feature flag rollout"
-          mentionCandidates={props.mentionCandidates}
-        />
-        <Field
-          label="Today"
-          hint="`- [ ]` for tasks · @ to mention"
-          value={t}
-          onChange={setT}
-          placeholder="- [ ] Review Sam's PR&#10;- [ ] Draft migration plan"
-          mentionCandidates={props.mentionCandidates}
-        />
-        <Field
-          label="Blockers"
-          hint="What's in your way. Optional."
-          value={b}
-          onChange={setB}
-          placeholder="Waiting on staging env from ops"
-          mentionCandidates={props.mentionCandidates}
-        />
+        <div className="grid lg:grid-cols-[1fr_340px] gap-8 items-start">
+          {/* Left: the three fields */}
+          <div className="space-y-6 min-w-0">
+            {carriedOver && (
+              <p className="text-[11px] text-emerald-300/90 bg-emerald-400/[0.06] border border-emerald-400/20 rounded-md px-3 py-2">
+                Yesterday&rsquo;s unfinished tasks carried over into Today.
+              </p>
+            )}
+            <Field
+              label="Yesterday"
+              hint="What you moved forward."
+              value={y}
+              onChange={setY}
+              placeholder="- Shipped the feature flag rollout"
+              mentionCandidates={props.mentionCandidates}
+            />
+            <Field
+              label="Today"
+              hint="`- [ ]` for tasks · @ to mention"
+              value={t}
+              onChange={setT}
+              placeholder="- [ ] Review Sam's PR&#10;- [ ] Draft migration plan"
+              mentionCandidates={props.mentionCandidates}
+              autoFocus
+            />
+            <Field
+              label="Blockers"
+              hint="What's in your way. Optional."
+              value={b}
+              onChange={setB}
+              placeholder="Waiting on staging env from ops"
+              mentionCandidates={props.mentionCandidates}
+            />
+          </div>
 
-        <Recorder checkInId={props.checkInId} />
-
-        <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-border">
-          <Submit />
-          <Link
-            href={props.backHref}
-            className="h-11 px-4 rounded-md text-sm text-muted-foreground hover:text-foreground inline-flex items-center transition"
-          >
-            {props.status === "submitted" ? "Done" : "Save & close"}
-          </Link>
-          <span className="flex-1" />
-          {submitState && !submitState.ok && (
-            <span className="text-xs text-destructive">{submitState.error}</span>
-          )}
+          {/* Right rail: video + submit, always visible on desktop */}
+          <div className="lg:sticky lg:top-20 space-y-4">
+            <Recorder checkInId={props.checkInId} />
+            <div className="space-y-2">
+              <Submit />
+              <Link
+                href={props.backHref}
+                className="w-full h-10 rounded-md text-sm text-muted-foreground hover:text-foreground inline-flex items-center justify-center transition border border-white/[0.06] hover:border-white/[0.12]"
+              >
+                {props.status === "submitted" ? "Done" : "Save draft & close"}
+              </Link>
+              <p className="text-[11px] text-muted-foreground text-center">
+                ⌘↵ to submit · autosaves as you type
+              </p>
+              {submitState && !submitState.ok && (
+                <p className="text-xs text-destructive text-center" role="alert">
+                  {submitState.error}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       </form>
     </div>
@@ -138,7 +171,7 @@ function Submit() {
     <button
       type="submit"
       disabled={pending}
-      className="h-11 px-6 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 active:scale-[0.99] transition disabled:opacity-50"
+      className="w-full h-11 px-6 rounded-md bg-foreground text-primary-foreground text-sm font-semibold hover:bg-foreground/90 active:scale-[0.99] transition disabled:opacity-50"
     >
       {pending ? "Submitting…" : "Submit check-in"}
     </button>
@@ -152,6 +185,7 @@ function Field({
   onChange,
   placeholder,
   mentionCandidates,
+  autoFocus,
 }: {
   label: string;
   hint?: string;
@@ -159,6 +193,7 @@ function Field({
   onChange: (v: string) => void;
   placeholder?: string;
   mentionCandidates: MentionCandidate[];
+  autoFocus?: boolean;
 }) {
   return (
     <div className="space-y-2">
@@ -173,6 +208,7 @@ function Field({
         onChange={onChange}
         candidates={mentionCandidates}
         placeholder={placeholder}
+        autoFocus={autoFocus}
         rows={4}
         className="w-full min-h-[120px] rounded-md bg-white/[0.02] border border-white/10 px-4 py-3 text-base leading-relaxed placeholder:text-muted-foreground/40 focus:outline-none focus:border-white/30 focus:bg-white/[0.04] transition resize-y font-mono"
       />

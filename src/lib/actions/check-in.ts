@@ -14,7 +14,7 @@ import { localDate } from "@/lib/time";
 // Get (or lazily create) today's occurrence for the primary active schedule
 // of `teamId`, computed in the *caller's* tz. Returns the occurrence id +
 // their existing check-in row if any (also lazily created as a draft).
-export async function getOrCreateTodayContext(teamId: string) {
+export async function getOrCreateTodayContext(teamId: string, scheduleId?: string) {
   const user = await requireUser();
 
   // Membership check
@@ -24,11 +24,12 @@ export async function getOrCreateTodayContext(teamId: string) {
     .where(and(eq(members.teamId, teamId), eq(members.userId, user.id)));
   if (!membership) throw new Error("Not a member of this team");
 
-  const [primary] = await db
+  const active = await db
     .select()
     .from(schedules)
-    .where(and(eq(schedules.teamId, teamId), eq(schedules.active, true)))
-    .limit(1);
+    .where(and(eq(schedules.teamId, teamId), eq(schedules.active, true)));
+  const primary =
+    (scheduleId && active.find((s) => s.id === scheduleId)) || active[0];
   if (!primary) throw new Error("No active schedule for this team");
 
   const today = localDate(new Date(), user.tz);

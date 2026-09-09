@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { InviteForm } from "@/components/invite-form";
+import { createTeam, removeMember } from "@/lib/actions/team-admin";
 import { getTeamRoster } from "@/lib/queries";
 import { getTeamBySlug, requireUser } from "@/lib/session";
 
@@ -31,11 +32,41 @@ export default async function TeamRosterPage({
       active="team"
     >
       <div className="mx-auto max-w-4xl px-6 py-10 md:py-12 space-y-10">
-        <header className="space-y-2">
-          <h1 className="text-3xl font-medium tracking-tight">Team</h1>
-          <p className="text-sm text-muted-foreground">
-            {roster.length} {roster.length === 1 ? "person" : "people"} in {team.teamName}.
-          </p>
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-medium tracking-tight">Team</h1>
+            <p className="text-sm text-muted-foreground">
+              {roster.length} {roster.length === 1 ? "person" : "people"} in {team.teamName}.
+            </p>
+          </div>
+          <details className="relative">
+            <summary className="cursor-pointer list-none h-10 px-4 rounded-md border border-white/10 text-sm hover:bg-white/[0.04] transition inline-flex items-center gap-2">
+              + New team
+            </summary>
+            <form
+              action={createTeam.bind(null, team.orgId)}
+              className="absolute right-0 top-12 z-40 w-72 rounded-md border border-white/10 bg-zinc-950/95 backdrop-blur shadow-xl p-3 space-y-2"
+            >
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                New team in {team.orgName}
+              </p>
+              <input
+                name="name"
+                required
+                placeholder="Team name"
+                className="w-full h-10 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm focus:outline-none focus:border-white/30 transition"
+              />
+              <button
+                type="submit"
+                className="w-full h-10 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition"
+              >
+                Create team
+              </button>
+              <p className="text-[10px] text-muted-foreground">
+                You become its owner. A weekday standup is set up automatically.
+              </p>
+            </form>
+          </details>
         </header>
 
         <section className="space-y-3">
@@ -75,6 +106,18 @@ export default async function TeamRosterPage({
                       <span className="text-[10px] uppercase tracking-wider text-accent border border-accent/30 rounded px-1.5 py-0.5 shrink-0">
                         {m.role}
                       </span>
+                    )}
+                    {m.role !== "owner" && (isAdmin || m.userId === user.id) && (
+                      <form action={removeMember.bind(null, m.memberId)} className="shrink-0">
+                        <button
+                          type="submit"
+                          aria-label={m.userId === user.id ? "Leave team" : `Remove ${m.name ?? m.email}`}
+                          title={m.userId === user.id ? "Leave team" : "Remove from team"}
+                          className="grid place-items-center size-7 rounded-md text-muted-foreground hover:text-red-300 hover:bg-red-400/10 transition text-sm"
+                        >
+                          ×
+                        </button>
+                      </form>
                     )}
                   </div>
                 </li>

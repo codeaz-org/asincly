@@ -4,7 +4,14 @@ import { db } from "@/db";
 import { members, schedules, teams } from "@/db/schema";
 import { AppShell } from "@/components/app-shell";
 import { updateSchedule } from "@/lib/actions/schedule";
-import { deleteOrg, setRecordingRetention } from "@/lib/actions/team-admin";
+import {
+  createSchedule,
+  deleteOrg,
+  deleteSchedule,
+  deleteTeam,
+  renameTeam,
+  setRecordingRetention,
+} from "@/lib/actions/team-admin";
 import { getTeamBySlug, requireUser } from "@/lib/session";
 import { PRESET_RRULES } from "@/lib/time";
 
@@ -25,15 +32,11 @@ export default async function TeamSettingsPage({
   if (!role || role.role !== "owner") notFound();
 
   const [t] = await db.select().from(teams).where(eq(teams.id, team.teamId));
-  const [primary] = await db
+  const teamSchedules = await db
     .select()
     .from(schedules)
-    .where(and(eq(schedules.teamId, team.teamId), eq(schedules.active, true)))
-    .limit(1);
+    .where(eq(schedules.teamId, team.teamId));
 
-  const matchingPreset = primary
-    ? Object.entries(PRESET_RRULES).find(([, r]) => r === primary.rrule)?.[0] ?? "custom"
-    : "weekdays";
   const presets = [
     ["daily", "Every day"],
     ["weekdays", "Weekdays"],
@@ -59,17 +62,63 @@ export default async function TeamSettingsPage({
           <p className="text-sm text-muted-foreground">Owner-only controls for {team.teamName}.</p>
         </header>
 
-        {/* Schedule */}
-        {primary && (
-          <section className="space-y-4">
-            <SectionTitle>Schedule</SectionTitle>
+        {/* Team name */}
+        <section className="space-y-4">
+          <SectionTitle>Team name</SectionTitle>
+          <form action={renameTeam.bind(null, team.teamId)} className="flex gap-2">
+            <input
+              name="name"
+              defaultValue={t.name}
+              required
+              className="flex-1 h-11 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm focus:outline-none focus:border-white/30 transition"
+            />
+            <button
+              type="submit"
+              className="h-11 px-4 rounded-md border border-white/10 text-sm hover:bg-white/[0.04] transition"
+            >
+              Rename
+            </button>
+          </form>
+        </section>
+
+        {/* Standups: a team can run several */}
+        <section className="space-y-4">
+          <SectionTitle>Standups</SectionTitle>
+          <p className="text-sm text-muted-foreground -mt-2">
+            Each standup has its own cadence and check-in window. The feed shows
+            them all.
+          </p>
+          {teamSchedules.map((sched) => {
+            const matching =
+              Object.entries(PRESET_RRULES).find(([, r]) => r === sched.rrule)?.[0] ?? "custom";
+            return (
+          <details
+            key={sched.id}
+            className="rounded-md border border-white/10 overflow-hidden"
+          >
+            <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-3 hover:bg-white/[0.03] transition">
+              <span className="text-sm font-medium flex-1">{sched.name}</span>
+              <span className="font-mono text-xs text-muted-foreground">
+                {sched.windowOpenLocal.slice(0, 5)}–{sched.windowCloseLocal.slice(0, 5)}
+              </span>
+              {sched.active ? (
+                <span className="text-[10px] uppercase tracking-wider text-emerald-300 border border-emerald-400/30 rounded px-1.5 py-0.5">
+                  active
+                </span>
+              ) : (
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground border border-white/10 rounded px-1.5 py-0.5">
+                  off
+                </span>
+              )}
+            </summary>
+            <div className="border-t border-white/[0.06] p-4">
             <form action={updateSchedule} className="space-y-4">
-              <input type="hidden" name="scheduleId" value={primary.id} />
+              <input type="hidden" name="scheduleId" value={sched.id} />
               <div className="space-y-1.5">
                 <Label>Name</Label>
                 <input
                   name="name"
-                  defaultValue={primary.name}
+                  defaultValue={sched.name}
                   required
                   className="w-full h-11 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm focus:outline-none focus:border-white/30 focus:bg-white/[0.04] transition"
                 />
@@ -86,7 +135,7 @@ export default async function TeamSettingsPage({
                         type="radio"
                         name="preset"
                         value={val}
-                        defaultChecked={val === matchingPreset}
+                        defaultChecked={val === matching}
                         className="sr-only"
                       />
                       {label}
@@ -95,8 +144,8 @@ export default async function TeamSettingsPage({
                 </div>
                 <input
                   name="customRrule"
-                  defaultValue={matchingPreset === "custom" ? primary.rrule : ""}
-                  placeholder="Custom RRULE — e.g. FREQ=WEEKLY;BYDAY=TU,TH"
+                  defaultValue={matching === "custom" ? sched.rrule : ""}
+                  placeholder="Custom RRULE, e.g. FREQ=WEEKLY;BYDAY=TU,TH"
                   className="w-full h-11 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm font-mono placeholder:text-muted-foreground/50 focus:outline-none focus:border-white/30 focus:bg-white/[0.04] transition"
                 />
               </div>
@@ -106,7 +155,7 @@ export default async function TeamSettingsPage({
                   <input
                     name="windowOpen"
                     type="time"
-                    defaultValue={primary.windowOpenLocal.slice(0, 5)}
+                    defaultValue={sched.windowOpenLocal.slice(0, 5)}
                     required
                     className="w-full h-11 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm font-mono focus:outline-none focus:border-white/30 transition"
                   />
@@ -116,7 +165,7 @@ export default async function TeamSettingsPage({
                   <input
                     name="windowClose"
                     type="time"
-                    defaultValue={primary.windowCloseLocal.slice(0, 5)}
+                    defaultValue={sched.windowCloseLocal.slice(0, 5)}
                     required
                     className="w-full h-11 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm font-mono focus:outline-none focus:border-white/30 transition"
                   />
@@ -132,7 +181,7 @@ export default async function TeamSettingsPage({
                 <input
                   type="checkbox"
                   name="active"
-                  defaultChecked={primary.active}
+                  defaultChecked={sched.active}
                   value="on"
                   className="size-4 accent-emerald-400"
                 />
@@ -141,11 +190,44 @@ export default async function TeamSettingsPage({
                 type="submit"
                 className="h-11 px-5 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition"
               >
-                Save schedule
+                Save standup
               </button>
             </form>
-          </section>
-        )}
+            {teamSchedules.length > 1 && (
+              <form action={deleteSchedule.bind(null, sched.id)} className="mt-3">
+                <button
+                  type="submit"
+                  className="text-xs text-red-300/80 hover:text-red-300 transition"
+                >
+                  Delete this standup
+                </button>
+              </form>
+            )}
+            </div>
+          </details>
+            );
+          })}
+
+          <form
+            action={createSchedule.bind(null, team.teamId)}
+            className="flex flex-wrap gap-2 items-center rounded-md border border-dashed border-white/15 p-3"
+          >
+            <input
+              name="name"
+              required
+              placeholder="New standup name (e.g. EU sync)"
+              className="flex-1 min-w-[200px] h-10 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm focus:outline-none focus:border-white/30 transition"
+            />
+            <input name="windowOpen" type="time" defaultValue="09:00" className="h-10 rounded-md bg-white/[0.02] border border-white/10 px-2 text-sm font-mono" />
+            <input name="windowClose" type="time" defaultValue="11:00" className="h-10 rounded-md bg-white/[0.02] border border-white/10 px-2 text-sm font-mono" />
+            <button
+              type="submit"
+              className="h-10 px-4 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition"
+            >
+              Add standup
+            </button>
+          </form>
+        </section>
 
         {/* Retention */}
         <section className="space-y-4">
@@ -198,6 +280,20 @@ export default async function TeamSettingsPage({
         {/* Danger */}
         <section className="space-y-3">
           <SectionTitle className="text-destructive/90">Danger zone</SectionTitle>
+          <div className="rounded-md border border-destructive/30 bg-destructive/[0.04] p-4 space-y-3">
+            <p className="text-sm">
+              Delete the team <span className="font-medium">{t.name}</span> with all its
+              standups, check-ins, and recordings. The organization and other teams stay.
+            </p>
+            <form action={deleteTeam.bind(null, team.teamId)}>
+              <button
+                type="submit"
+                className="h-10 px-4 rounded-md border border-destructive/40 text-destructive text-sm font-medium hover:bg-destructive/10 transition"
+              >
+                Delete team
+              </button>
+            </form>
+          </div>
           <div className="rounded-md border border-destructive/30 bg-destructive/[0.04] p-4 space-y-3">
             <p className="text-sm">
               Delete <span className="font-medium">{team.orgName}</span> and every team,

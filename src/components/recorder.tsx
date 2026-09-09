@@ -260,10 +260,10 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300 }: Props) {
         <button
           type="button"
           onClick={requestStreams}
-          className="group w-full rounded-md border border-dashed border-white/15 hover:border-emerald-400/50 hover:bg-emerald-400/[0.03] transition px-6 py-10 flex flex-col items-center gap-3 text-center"
+          className="group w-full rounded-md border border-dashed border-white/15 hover:border-emerald-400/50 hover:bg-emerald-400/[0.03] transition px-5 py-6 flex flex-col items-center gap-2.5 text-center"
         >
-          <span className="grid place-items-center size-14 rounded-full border-2 border-white/20 group-hover:border-emerald-400/70 group-hover:scale-105 transition">
-            <span className="size-5 rounded-full bg-red-500/90 group-hover:bg-red-500 transition" />
+          <span className="grid place-items-center size-11 rounded-full border-2 border-white/20 group-hover:border-emerald-400/70 group-hover:scale-105 transition">
+            <span className="size-4 rounded-full bg-red-500/90 group-hover:bg-red-500 transition" />
           </span>
           <span className="text-sm font-medium">Record a video note</span>
           <span className="text-[11px] text-muted-foreground">
@@ -272,21 +272,23 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300 }: Props) {
         </button>
       )}
 
-      {phase === "requesting" && (
-        <div className="w-full rounded-md border border-dashed border-white/15 px-6 py-10 grid place-items-center">
-          <span className="text-xs text-muted-foreground animate-pulse">
-            Requesting camera + screen…
-          </span>
-        </div>
-      )}
-
-      {/* Live stage: canvas with centered camera-app controls overlaid */}
-      {(phase === "ready" || phase === "recording") && (
+      {/* Live stage: canvas with centered camera-app controls overlaid.
+          The canvas MUST be mounted during "requesting": the compositor
+          grabs its ref the moment permissions resolve, before the phase
+          flips to "ready". */}
+      {(phase === "requesting" || phase === "ready" || phase === "recording") && (
         <div className="relative">
           <canvas
             ref={canvasRef}
             className="w-full aspect-video rounded-md bg-black border border-white/10"
           />
+          {phase === "requesting" && (
+            <div className="absolute inset-0 grid place-items-center">
+              <span className="text-xs text-muted-foreground animate-pulse">
+                Requesting camera + screen…
+              </span>
+            </div>
+          )}
           <div className="absolute inset-x-0 bottom-4 flex flex-col items-center gap-2">
             {phase === "recording" && (
               <span className="inline-flex items-center gap-2 text-xs font-mono rounded-full bg-black/60 backdrop-blur px-3 py-1">
@@ -294,7 +296,7 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300 }: Props) {
                 {formatTime(elapsed)} / {formatTime(maxSeconds)}
               </span>
             )}
-            {phase === "ready" ? (
+            {phase === "ready" && (
               <button
                 type="button"
                 onClick={start}
@@ -303,7 +305,8 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300 }: Props) {
               >
                 <span className="size-9 rounded-full bg-red-500" />
               </button>
-            ) : (
+            )}
+            {phase === "recording" && (
               <button
                 type="button"
                 onClick={stop}

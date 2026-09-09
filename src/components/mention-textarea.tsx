@@ -14,6 +14,7 @@ type Props = {
   onChange: (v: string) => void;
   candidates: MentionCandidate[];
   placeholder?: string;
+  autoFocus?: boolean;
   rows?: number;
   className?: string;
 };
@@ -26,6 +27,7 @@ export function MentionTextarea({
   onChange,
   candidates,
   placeholder,
+  autoFocus,
   rows = 4,
   className = "",
 }: Props) {
@@ -134,6 +136,7 @@ export function MentionTextarea({
         onKeyDown={handleKeyDown}
         onBlur={() => setTimeout(() => setPos(null), 120)}
         placeholder={placeholder}
+        autoFocus={autoFocus}
         rows={rows}
         className={className}
       />
