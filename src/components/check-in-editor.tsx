@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
+import { MentionTextarea, type MentionCandidate } from "@/components/mention-textarea";
 import { saveCheckInDraft, submitCheckIn, type SubmitResult } from "@/lib/actions/check-in";
 
 type Props = {
@@ -13,6 +14,7 @@ type Props = {
   status: "draft" | "submitted";
   backHref: string;
   localDate: string;
+  mentionCandidates: MentionCandidate[];
 };
 
 export function CheckInEditor(props: Props) {
@@ -90,13 +92,15 @@ export function CheckInEditor(props: Props) {
           value={y}
           onChange={setY}
           placeholder="- Shipped the feature flag rollout"
+          mentionCandidates={props.mentionCandidates}
         />
         <Field
           label="Today"
-          hint="What you'll work on. Use `- [ ]` for a checkbox."
+          hint="`- [ ]` for tasks · @ to mention"
           value={t}
           onChange={setT}
           placeholder="- [ ] Review Sam's PR&#10;- [ ] Draft migration plan"
+          mentionCandidates={props.mentionCandidates}
         />
         <Field
           label="Blockers"
@@ -104,6 +108,7 @@ export function CheckInEditor(props: Props) {
           value={b}
           onChange={setB}
           placeholder="Waiting on staging env from ops"
+          mentionCandidates={props.mentionCandidates}
         />
 
         <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-border">
@@ -143,12 +148,14 @@ function Field({
   value,
   onChange,
   placeholder,
+  mentionCandidates,
 }: {
   label: string;
   hint?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  mentionCandidates: MentionCandidate[];
 }) {
   return (
     <div className="space-y-2">
@@ -158,9 +165,10 @@ function Field({
         </label>
         {hint && <span className="text-[11px] text-muted-foreground/70">{hint}</span>}
       </div>
-      <textarea
+      <MentionTextarea
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange}
+        candidates={mentionCandidates}
         placeholder={placeholder}
         rows={4}
         className="w-full min-h-[120px] rounded-md bg-white/[0.02] border border-white/10 px-4 py-3 text-base leading-relaxed placeholder:text-muted-foreground/40 focus:outline-none focus:border-white/30 focus:bg-white/[0.04] transition resize-y font-mono"

@@ -1,5 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { MENTION_HREF_PREFIX } from "@/lib/mentions";
 
 // Tight markdown block for check-in body. GFM enables task lists.
 // Sanitization is on by default in react-markdown (no raw HTML).
@@ -39,16 +40,25 @@ export function Markdown({ children }: { children: string }) {
               {children}
             </code>
           ),
-          a: ({ children, href }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-2 hover:text-accent transition"
-            >
-              {children}
-            </a>
-          ),
+          a: ({ children, href }) => {
+            if (href?.startsWith(MENTION_HREF_PREFIX)) {
+              return (
+                <span className="inline-flex items-center rounded-md bg-accent/15 text-accent border border-accent/25 px-1.5 py-0.5 text-[0.85em] font-medium">
+                  {children}
+                </span>
+              );
+            }
+            return (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-accent transition"
+              >
+                {children}
+              </a>
+            );
+          },
           blockquote: ({ children }) => (
             <blockquote className="border-l-2 border-white/10 pl-3 text-muted-foreground text-sm">
               {children}

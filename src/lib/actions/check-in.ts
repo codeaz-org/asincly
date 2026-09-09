@@ -1,10 +1,11 @@
 "use server";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
 import { checkIns, members, occurrences, organizations, schedules, teams } from "@/db/schema";
+import { carryOver } from "@/lib/carry-over";
 import { requireUser } from "@/lib/session";
 import { localDate } from "@/lib/time";
 
@@ -46,20 +47,48 @@ export async function getOrCreateTodayContext(teamId: string) {
     .from(checkIns)
     .where(and(eq(checkIns.occurrenceId, occ.id), eq(checkIns.userId, user.id)));
 
-  const ci =
-    existing ??
-    (
+  let ci = existing;
+  if (!ci) {
+    // Fresh draft: carry unchecked items forward from the caller's most
+    // recent submitted check-in on this team.
+    const seed = await computeCarryOverSeed(user.id, teamId, occ.id);
+    ci = (
       await db
         .insert(checkIns)
         .values({
           occurrenceId: occ.id,
           userId: user.id,
           localDate: today,
+          yesterday: seed.yesterday,
+          today: seed.today,
         })
         .returning()
     )[0];
+  }
 
   return { occurrenceId: occ.id, checkIn: ci, scheduleId: primary.id, localDate: today };
+}
+
+async function computeCarryOverSeed(userId: string, teamId: string, notOccId: string) {
+  // Find the caller's most recent submitted check-in in this team,
+  // excluding the current occurrence.
+  const [prev] = await db
+    .select({ today: checkIns.today })
+    .from(checkIns)
+    .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
+    .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
+    .where(
+      and(
+        eq(checkIns.userId, userId),
+        eq(schedules.teamId, teamId),
+        eq(checkIns.status, "submitted"),
+        ne(checkIns.occurrenceId, notOccId),
+      ),
+    )
+    .orderBy(desc(checkIns.submittedAt))
+    .limit(1);
+  if (!prev) return { yesterday: "", today: "" };
+  return carryOver(prev.today);
 }
 
 const DraftSchema = z.object({
