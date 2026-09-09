@@ -78,6 +78,13 @@
       "when": 1788975037146,
       "tag": "0010_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788983452181,
+      "tag": "0011_poster",
+      "breakpoints": true
     }
   ]
 }

@@ -46,6 +46,15 @@ test("record, attach, and upload a video note", async () => {
   await expect(page.getByText(/video attached/i)).toBeVisible({ timeout: 30000 });
 
   await page.screenshot({ path: "scrollcraft/lab/asincly/app-video-uploaded.png" });
+
+  // Submit the check-in, then the feed shows the poster card for the video.
+  await page.getByRole("button", { name: /submit check-in/i }).click();
+  await page.waitForURL(new RegExp(`${team.slug}$`));
+  await expect(
+    page.getByRole("button", { name: /play video note/i }),
+  ).toBeVisible({ timeout: 15000 });
+  await page.screenshot({ path: "scrollcraft/lab/asincly/app-feed-video.png" });
+
   await ctx.close();
   await browser.close();
 });

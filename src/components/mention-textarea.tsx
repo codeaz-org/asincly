@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { continueList, indentList, wrapSelection } from "@/lib/md-edit";
 import { formatMention } from "@/lib/mentions";
 
 export type MentionCandidate = {
@@ -19,19 +20,51 @@ type Props = {
   className?: string;
 };
 
-// Textarea + inline @-mention autocomplete.
+export type MentionTextareaHandle = {
+  /** Apply an edit produced by an md-edit helper and refocus the textarea. */
+  applyEdit: (fn: (value: string, selStart: number, selEnd: number) => {
+    value: string;
+    selStart: number;
+    selEnd: number;
+  } | null) => void;
+  focus: () => void;
+};
+
+// Textarea + inline @-mention autocomplete + Obsidian-style list helpers.
 // Trigger: user types "@" (at start or after whitespace) → dropdown appears
 // under the caret. Arrow keys navigate; Enter / Tab accepts; Esc closes.
-export function MentionTextarea({
-  value,
-  onChange,
-  candidates,
-  placeholder,
-  autoFocus,
-  rows = 4,
-  className = "",
-}: Props) {
+// Enter continues - / - [ ] / 1. lists; Tab indents them; Cmd+B/I bold/italic.
+export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(
+  function MentionTextarea(
+    {
+      value,
+      onChange,
+      candidates,
+      placeholder,
+      autoFocus,
+      rows = 4,
+      className = "",
+    }: Props,
+    handleRef,
+  ) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
+
+  useImperativeHandle(handleRef, () => ({
+    applyEdit(fn) {
+      const el = ref.current;
+      if (!el) return;
+      const res = fn(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0);
+      if (!res) return;
+      onChange(res.value);
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(res.selStart, res.selEnd);
+      });
+    },
+    focus() {
+      ref.current?.focus();
+    },
+  }));
   const [query, setQuery] = useState<string | null>(null);
   const [triggerAt, setTriggerAt] = useState<number>(0);
   const [highlight, setHighlight] = useState(0);
@@ -110,8 +143,52 @@ export function MentionTextarea({
     });
   }
 
+  function setValueAndCaret(next: string, caret: number) {
+    onChange(next);
+    const el = ref.current;
+    if (!el) return;
+    requestAnimationFrame(() => el.setSelectionRange(caret, caret));
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (query === null || filtered.length === 0) return;
+    const el = e.currentTarget;
+    const noMenu = query === null || filtered.length === 0;
+
+    if (noMenu) {
+      if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+        const r = continueList(el.value, el.selectionStart ?? 0);
+        if (r) {
+          e.preventDefault();
+          setValueAndCaret(r.value, r.caret);
+        }
+        return;
+      }
+      if (e.key === "Tab") {
+        const r = indentList(el.value, el.selectionStart ?? 0, e.shiftKey);
+        if (r) {
+          e.preventDefault();
+          setValueAndCaret(r.value, r.caret);
+        }
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === "b" || e.key === "i")) {
+        e.preventDefault();
+        const marker = e.key === "b" ? "**" : "*";
+        const r = wrapSelection(
+          el.value,
+          el.selectionStart ?? 0,
+          el.selectionEnd ?? 0,
+          marker,
+        );
+        onChange(r.value);
+        requestAnimationFrame(() => {
+          el.focus();
+          el.setSelectionRange(r.selStart, r.selEnd);
+        });
+        return;
+      }
+      return;
+    }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setHighlight((h) => (h + 1) % filtered.length);
@@ -174,4 +251,4 @@ export function MentionTextarea({
       )}
     </>
   );
-}
+});

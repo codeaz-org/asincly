@@ -49,6 +49,7 @@ export async function getUploadUrl(input: {
 const RegisterSchema = z.object({
   checkInId: z.string().uuid(),
   objectKey: z.string().min(1),
+  posterKey: z.string().min(1).nullable().optional(),
   mimeType: z.string().max(80),
   sizeBytes: z.number().int().nonnegative(),
   durationMs: z.number().int().nonnegative().nullable(),
@@ -76,6 +77,7 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
         checkInId: parsed.checkInId,
         userId: user.id,
         objectKey: parsed.objectKey,
+        posterKey: parsed.posterKey ?? null,
         mimeType: parsed.mimeType,
         sizeBytes: parsed.sizeBytes,
         durationMs: parsed.durationMs,

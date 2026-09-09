@@ -209,6 +209,36 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300 }: Props) {
     setPhase("idle");
   }
 
+  // Grab a poster frame from the preview element so the feed can show a
+  // real thumbnail instead of a black box. Best-effort: any failure just
+  // means no poster.
+  async function capturePoster(): Promise<Blob | null> {
+    const video = previewRef.current;
+    if (!video || !video.videoWidth) return null;
+    try {
+      if (video.currentTime < 0.3 && Number.isFinite(video.duration)) {
+        video.currentTime = Math.min(0.5, video.duration / 2);
+        await new Promise<void>((res) => {
+          const done = () => {
+            video.removeEventListener("seeked", done);
+            res();
+          };
+          video.addEventListener("seeked", done);
+          setTimeout(res, 800);
+        });
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d")?.drawImage(video, 0, 0);
+      return await new Promise((res) =>
+        canvas.toBlob((b) => res(b), "image/jpeg", 0.8),
+      );
+    } catch {
+      return null;
+    }
+  }
+
   async function upload() {
     if (!blob) return;
     setError(null);
@@ -217,6 +247,8 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300 }: Props) {
       const dur = previewRef.current?.duration;
       const durationMs =
         dur && Number.isFinite(dur) ? Math.round(dur * 1000) : null;
+
+      const poster = await capturePoster();
 
       const presign = await getUploadUrl({
         checkInId,
@@ -232,9 +264,28 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300 }: Props) {
       });
       if (!put.ok) throw new Error(`Upload failed (${put.status})`);
 
+      // Poster is best-effort; the recording registers without it on failure.
+      let posterKey: string | null = null;
+      if (poster) {
+        const posterSign = await getUploadUrl({
+          checkInId,
+          mimeType: "image/jpeg",
+          sizeBytes: poster.size,
+        });
+        if (posterSign.ok) {
+          const posterPut = await fetch(posterSign.uploadUrl, {
+            method: "PUT",
+            body: poster,
+            headers: { "content-type": "image/jpeg" },
+          });
+          if (posterPut.ok) posterKey = posterSign.objectKey;
+        }
+      }
+
       const reg = await registerRecording({
         checkInId,
         objectKey: presign.objectKey,
+        posterKey,
         mimeType: blob.type || "video/webm",
         sizeBytes: blob.size,
         durationMs,

@@ -3,6 +3,10 @@ import { headers } from "next/headers";
 import { auth, signOut } from "@/auth";
 import { Inbox } from "@/components/inbox";
 import { Logo } from "@/components/logo";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { users } from "@/db/schema";
+import { setName } from "@/lib/actions/onboarding";
 import { listRecentForUser, unreadCount } from "@/lib/notifications";
 import { getMemberships } from "@/lib/session";
 import { Footer } from "@/components/footer";
@@ -22,10 +26,11 @@ type Props = {
 export async function AppShell(props: Props) {
   // Header lookups are cheap and kept here so every app page gets an
   // identically-populated shell.
-  const [inbox, unread, memberships] = await Promise.all([
+  const [inbox, unread, memberships, [me]] = await Promise.all([
     listRecentForUser(props.userId),
     unreadCount(props.userId),
     getMemberships(props.userId),
+    db.select({ name: users.name }).from(users).where(eq(users.id, props.userId)),
   ]);
   // Touch `headers()` so Next treats the shell as dynamic (nav + inbox change per request).
   await headers();
@@ -109,6 +114,31 @@ export async function AppShell(props: Props) {
           </div>
         </div>
       </header>
+
+      {!me?.name && (
+        <div className="border-b border-amber-400/20 bg-amber-400/[0.05]">
+          <form
+            action={setName}
+            className="mx-auto max-w-5xl px-6 py-2.5 flex flex-wrap items-center gap-3"
+          >
+            <span className="text-sm text-amber-200/90">
+              What should teammates call you?
+            </span>
+            <input
+              name="name"
+              required
+              placeholder="Your name"
+              className="h-9 w-56 rounded-md bg-white/[0.03] border border-white/10 px-3 text-sm focus:outline-none focus:border-amber-400/50 transition"
+            />
+            <button
+              type="submit"
+              className="h-9 px-4 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition"
+            >
+              Save
+            </button>
+          </form>
+        </div>
+      )}
 
       <main className="flex-1">{props.children}</main>
 

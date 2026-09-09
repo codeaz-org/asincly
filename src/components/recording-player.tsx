@@ -3,47 +3,73 @@
 import { useState } from "react";
 import type { FeedRecording } from "@/lib/queries";
 
+// Poster card that swaps into a playing <video> on click. Old recordings
+// without a poster get a quiet gradient placeholder.
 export function RecordingPlayer({ rec }: { rec: FeedRecording }) {
-  const [open, setOpen] = useState(false);
+  const [playing, setPlaying] = useState(false);
 
-  const dur = rec.durationMs
-    ? `${Math.round(rec.durationMs / 1000)}s`
-    : rec.status === "processing"
-      ? "processing…"
-      : rec.status === "failed"
-        ? "failed"
-        : "ready";
+  if (playing) {
+    return (
+      <video
+        controls
+        autoPlay
+        playsInline
+        src={rec.playbackUrl}
+        poster={rec.posterUrl ?? undefined}
+        className="w-full aspect-video rounded-lg bg-black border border-white/10"
+      />
+    );
+  }
+
+  const seconds = rec.durationMs ? Math.round(rec.durationMs / 1000) : null;
+  const duration =
+    seconds !== null
+      ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+      : null;
 
   return (
-    <div className="rounded-md border border-white/[0.08] bg-white/[0.02] overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-white/[0.03] transition"
-      >
+    <button
+      type="button"
+      onClick={() => setPlaying(true)}
+      aria-label={`Play video note${duration ? `, ${duration}` : ""}`}
+      className="group relative w-full max-w-md aspect-video rounded-lg overflow-hidden border border-white/10 bg-gradient-to-br from-white/[0.06] to-transparent text-left"
+    >
+      {rec.posterUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element -- presigned URL, next/image can't optimize it
+        <img
+          src={rec.posterUrl}
+          alt=""
+          className="absolute inset-0 size-full object-cover opacity-90 group-hover:opacity-100 group-hover:scale-[1.02] transition duration-300"
+        />
+      ) : (
         <span
           aria-hidden
-          className={`grid place-items-center size-7 rounded-full bg-white/10 text-xs transition ${
-            open ? "rotate-90" : ""
-          }`}
-        >
-          ▶
-        </span>
-        <span className="flex-1 text-xs">
-          <span className="font-medium">Video note</span>
-          <span className="ml-2 text-muted-foreground font-mono">{dur}</span>
-        </span>
-      </button>
-      {open && (
-        <div className="p-2">
-          <video
-            controls
-            preload="metadata"
-            src={rec.playbackUrl}
-            className="w-full aspect-video rounded bg-black"
-          />
-        </div>
+          className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,oklch(0.35_0.05_250/.6),transparent_60%)]"
+        />
       )}
-    </div>
+      <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+
+      <span className="absolute inset-0 grid place-items-center">
+        <span className="grid place-items-center size-12 rounded-full bg-black/55 backdrop-blur border border-white/25 group-hover:scale-110 group-hover:bg-black/70 transition">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+            <path d="M5 3.5v9l8-4.5z" fill="white" />
+          </svg>
+        </span>
+      </span>
+
+      <span className="absolute bottom-2 left-3 text-[11px] font-medium text-white/90">
+        Video note
+      </span>
+      {duration && (
+        <span className="absolute bottom-2 right-2 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-white/90">
+          {duration}
+        </span>
+      )}
+      {rec.status === "processing" && (
+        <span className="absolute top-2 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-amber-300 animate-pulse">
+          summarizing…
+        </span>
+      )}
+    </button>
   );
 }

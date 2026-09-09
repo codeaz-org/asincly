@@ -7,6 +7,8 @@ import { AppShell } from "@/components/app-shell";
 import { Markdown } from "@/components/markdown";
 import { RecordingPlayer } from "@/components/recording-player";
 import { TzDetector } from "@/components/tz-detector";
+import { avatarHue, displayName, initials } from "@/lib/display";
+import { extractMentions } from "@/lib/mentions";
 import { getMyCheckInForOccurrence, getTeamFeed, getTeamRoster } from "@/lib/queries";
 import { getTeamBySlug, requireUser } from "@/lib/session";
 import { localDate, windowFor, windowStatus } from "@/lib/time";
@@ -120,7 +122,12 @@ export default async function TeamFeedPage({
             ) : (
               <ul className="space-y-4">
                 {feed.today.entries.map((e) => (
-                  <CheckInCard key={e.checkInId} entry={e} isMe={e.userId === user.id} />
+                  <CheckInCard
+                    key={e.checkInId}
+                    entry={e}
+                    isMe={e.userId === user.id}
+                    currentUserId={user.id}
+                  />
                 ))}
               </ul>
             )}
@@ -138,7 +145,7 @@ export default async function TeamFeedPage({
                         className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.02] px-3 py-1 text-xs"
                       >
                         <StatusDot status={m.status} />
-                        {m.name ?? m.email}
+                        {displayName(m.name, m.email)}
                       </span>
                     ))}
                 </div>
@@ -155,12 +162,18 @@ export default async function TeamFeedPage({
               {feed.past.map((occ) => (
                 <li key={occ.occurrenceId} className="space-y-3">
                   <p className="text-xs font-mono text-muted-foreground">
-                    {occ.scheduleDate} · {occ.entries.length}{" "}
+                    {dayLabel(occ.scheduleDate, todayISO)} · {occ.entries.length}{" "}
                     {occ.entries.length === 1 ? "check-in" : "check-ins"}
                   </p>
                   <ul className="space-y-3">
                     {occ.entries.map((e) => (
-                      <CheckInCard key={e.checkInId} entry={e} isMe={e.userId === user.id} compact />
+                      <CheckInCard
+                        key={e.checkInId}
+                        entry={e}
+                        isMe={e.userId === user.id}
+                        currentUserId={user.id}
+                        compact
+                      />
                     ))}
                   </ul>
                 </li>
@@ -176,32 +189,72 @@ export default async function TeamFeedPage({
 // ────────── card ──────────
 import type { FeedEntry } from "@/lib/queries";
 
+function dayLabel(iso: string, todayISO: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  const t = new Date(`${todayISO}T00:00:00Z`);
+  const diff = Math.round((t.getTime() - d.getTime()) / 86_400_000);
+  if (diff === 1) return "yesterday";
+  return d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).toLowerCase();
+}
+
+function mentionsUser(entry: FeedEntry, userId: string): boolean {
+  return [entry.yesterday, entry.today, entry.blockers].some((md) =>
+    extractMentions(md).some((m) => m.userId === userId),
+  );
+}
+
 function CheckInCard({
   entry,
   isMe,
+  currentUserId,
   compact,
 }: {
   entry: FeedEntry;
   isMe: boolean;
+  currentUserId: string;
   compact?: boolean;
 }) {
+  const name = displayName(entry.userName, entry.userEmail);
+  const hue = avatarHue(name);
+  const mentionsMe = !isMe && mentionsUser(entry, currentUserId);
   return (
     <li
-      className={`rounded-lg border ${
+      id={`ci-${entry.checkInId}`}
+      className={`feed-card rounded-lg border ${
         isMe ? "border-accent/40 bg-accent/[0.04]" : "border-white/10 bg-white/[0.02]"
-      } px-5 py-4 space-y-3`}
+      } px-5 py-4 space-y-3 scroll-mt-24`}
     >
-      <header className="flex items-baseline justify-between gap-3">
-        <div className="flex items-baseline gap-2 min-w-0">
-          <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_theme(colors.emerald.400/.6)] mt-1.5 self-center" />
+      <header className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span
+            aria-hidden
+            className="grid place-items-center size-8 rounded-full text-[10px] font-semibold shrink-0"
+            style={{
+              background: `oklch(0.32 0.06 ${hue} / 0.7)`,
+              color: `oklch(0.88 0.06 ${hue})`,
+              border: `1px solid oklch(0.6 0.1 ${hue} / 0.4)`,
+            }}
+          >
+            {initials(entry.userName, entry.userEmail)}
+          </span>
           <p className="text-sm font-medium truncate">
-            {entry.userName ?? entry.userEmail}
+            {name}
             {isMe && (
               <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">
                 you
               </span>
             )}
           </p>
+          {mentionsMe && (
+            <span className="shrink-0 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-200 text-[10px] px-2 py-0.5">
+              mentions you
+            </span>
+          )}
         </div>
         <time className="text-[11px] text-muted-foreground font-mono shrink-0">
           {entry.submittedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -233,13 +286,13 @@ function CheckInCard({
           {entry.today.trim() && (
             <div>
               <SectionKey>today</SectionKey>
-              <Markdown>{entry.today}</Markdown>
+              <Markdown currentUserId={currentUserId}>{entry.today}</Markdown>
             </div>
           )}
           {entry.blockers.trim() && (
             <div>
               <SectionKey>blockers</SectionKey>
-              <Markdown>{entry.blockers}</Markdown>
+              <Markdown currentUserId={currentUserId}>{entry.blockers}</Markdown>
             </div>
           )}
         </div>
@@ -247,15 +300,15 @@ function CheckInCard({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pl-3.5">
           <div className="space-y-1">
             <SectionKey>yesterday</SectionKey>
-            <Markdown>{entry.yesterday}</Markdown>
+            <Markdown currentUserId={currentUserId}>{entry.yesterday}</Markdown>
           </div>
           <div className="space-y-1">
             <SectionKey>today</SectionKey>
-            <Markdown>{entry.today}</Markdown>
+            <Markdown currentUserId={currentUserId}>{entry.today}</Markdown>
           </div>
           <div className="space-y-1">
             <SectionKey>blockers</SectionKey>
-            <Markdown>{entry.blockers}</Markdown>
+            <Markdown currentUserId={currentUserId}>{entry.blockers}</Markdown>
           </div>
         </div>
       )}

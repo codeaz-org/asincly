@@ -11,6 +11,7 @@ export type FeedRecording = {
   durationMs: number | null;
   status: "uploaded" | "processing" | "ready" | "failed";
   playbackUrl: string;
+  posterUrl: string | null;
   summary: Summary | null;
 };
 
@@ -107,6 +108,7 @@ export async function getTeamFeed(teamId: string, todayISO: string) {
             id: recordings.id,
             checkInId: recordings.checkInId,
             objectKey: recordings.objectKey,
+            posterKey: recordings.posterKey,
             mimeType: recordings.mimeType,
             durationMs: recordings.durationMs,
             status: recordings.status,
@@ -123,6 +125,7 @@ export async function getTeamFeed(teamId: string, todayISO: string) {
   const recsByCheckIn = new Map<string, FeedRecording[]>();
   for (const r of recRows) {
     const playbackUrl = await presignedGetUrl(r.objectKey);
+    const posterUrl = r.posterKey ? await presignedGetUrl(r.posterKey) : null;
     let summary: Summary | null = null;
     if (r.summaryCipher) {
       try {
@@ -138,6 +141,7 @@ export async function getTeamFeed(teamId: string, todayISO: string) {
       durationMs: r.durationMs,
       status: r.status,
       playbackUrl,
+      posterUrl,
       summary,
     });
     recsByCheckIn.set(r.checkInId, arr);

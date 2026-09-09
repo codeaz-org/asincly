@@ -86,8 +86,8 @@ export async function fireMentionEvents(checkInId: string): Promise<void> {
     .where(eq(checkIns.id, checkInId));
   if (!ctx) return;
 
-  const author = ctx.authorName ?? ctx.authorEmail;
-  const linkPath = `/${ctx.orgSlug}/${ctx.teamSlug}`;
+  const author = ctx.authorName?.trim() || ctx.authorEmail.split("@")[0];
+  const linkPath = `/${ctx.orgSlug}/${ctx.teamSlug}#ci-${checkInId}`;
 
   const yMentions = extractMentions(ctx.yesterday).map((m) => ({ ...m, source: "yesterday" as const }));
   const tMentions = extractMentions(ctx.today).map((m) => ({ ...m, source: "today" as const }));

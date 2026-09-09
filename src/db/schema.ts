@@ -180,6 +180,7 @@ export const recordings = pgTable("recording", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   objectKey: text("object_key").notNull(),
+  posterKey: text("poster_key"),
   mimeType: text("mime_type").notNull(),
   sizeBytes: integer("size_bytes"),
   durationMs: integer("duration_ms"),

@@ -15,6 +15,7 @@ import { slugify } from "@/lib/slug";
 const HHMM = /^\d{2}:\d{2}$/;
 
 const CompleteSchema = z.object({
+  yourName: z.string().min(1).max(80),
   orgName: z.string().min(1).max(80),
   teamName: z.string().min(1).max(80),
   scheduleName: z.string().min(1).max(80),
@@ -42,6 +43,7 @@ export async function completeOnboarding(formData: FormData) {
   const rl = rateLimit(`onboarding:${user.id}`, 5, 60 * 60 * 1000);
   if (!rl.allowed) throw new Error("Too many onboarding attempts — try again later.");
   const parsed = CompleteSchema.parse({
+    yourName: formData.get("yourName"),
     orgName: formData.get("orgName"),
     teamName: formData.get("teamName"),
     scheduleName: formData.get("scheduleName") || "Daily check-in",
@@ -56,6 +58,8 @@ export async function completeOnboarding(formData: FormData) {
       ? (parsed.customRrule ?? "").trim()
       : PRESET_RRULES[parsed.preset as PresetKey];
   if (!rrule) throw new Error("A custom RRULE is required when preset=custom");
+
+  await db.update(users).set({ name: parsed.yourName }).where(eq(users.id, user.id));
 
   const orgSlug = await uniqueOrgSlug(slugify(parsed.orgName));
   const teamSlug = slugify(parsed.teamName);
@@ -190,6 +194,15 @@ export async function inviteMembers(
     const msg = e instanceof Error ? e.message : "Something went wrong.";
     return { ok: false, error: msg };
   }
+}
+
+// Invitees skip onboarding; the app shell shows a one-field banner that
+// posts here until a name exists.
+export async function setName(formData: FormData) {
+  const user = await requireUser();
+  const name = z.string().min(1).max(80).parse(formData.get("name"));
+  await db.update(users).set({ name }).where(eq(users.id, user.id));
+  revalidatePath("/", "layout");
 }
 
 const UpdateTzSchema = z.object({ tz: z.string().min(1).max(64) });

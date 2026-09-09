@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { schedules } from "@/db/schema";
 import { AppShell } from "@/components/app-shell";
+import { displayName } from "@/lib/display";
 import { CheckInEditor } from "@/components/check-in-editor";
 import { getOrCreateTodayContext } from "@/lib/actions/check-in";
 import { getTeamRoster } from "@/lib/queries";
@@ -32,7 +33,7 @@ export default async function CheckInPage({
   ]);
   const candidates = roster
     .filter((r) => r.userId !== user.id)
-    .map((r) => ({ userId: r.userId, name: r.name ?? r.email, email: r.email }));
+    .map((r) => ({ userId: r.userId, name: displayName(r.name, r.email), email: r.email }));
 
   return (
     <AppShell

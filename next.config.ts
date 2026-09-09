@@ -20,7 +20,7 @@ const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
+  `img-src 'self' data: blob: https:${s3Origin ? ` ${s3Origin}` : ""}`,
   `media-src 'self' blob: https:${s3Origin ? ` ${s3Origin}` : ""}`,
   "font-src 'self' data:",
   `connect-src 'self'${s3Origin ? ` ${s3Origin}` : ""}${isDev ? " ws: http://localhost:*" : ""}`,

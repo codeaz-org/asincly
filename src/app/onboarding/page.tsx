@@ -30,16 +30,20 @@ export default async function OnboardingPage() {
           </p>
         </header>
 
-        <Section index="01" title="Organization" hint="A container for your teams.">
-          <Field name="orgName" placeholder="Acme, Inc." required autoFocus />
+        <Section index="01" title="You" hint="What teammates will see on your check-ins.">
+          <Field name="yourName" placeholder="Your name" required autoFocus />
         </Section>
 
-        <Section index="02" title="First team" hint="Where your check-ins happen.">
+        <Section index="02" title="Organization" hint="A container for your teams.">
+          <Field name="orgName" placeholder="Acme, Inc." required />
+        </Section>
+
+        <Section index="03" title="First team" hint="Where your check-ins happen.">
           <Field name="teamName" placeholder="Platform" required />
         </Section>
 
         <Section
-          index="03"
+          index="04"
           title="Cadence"
           hint="Pick a rhythm. Times are in each teammate's local zone."
         >

@@ -4,7 +4,14 @@ import { MENTION_HREF_PREFIX } from "@/lib/mentions";
 
 // Tight markdown block for check-in body. GFM enables task lists.
 // Sanitization is on by default in react-markdown (no raw HTML).
-export function Markdown({ children }: { children: string }) {
+// `currentUserId` makes mentions of the viewer stand out.
+export function Markdown({
+  children,
+  currentUserId,
+}: {
+  children: string;
+  currentUserId?: string;
+}) {
   if (!children.trim()) {
     return <p className="text-sm text-muted-foreground/50 italic">Empty.</p>;
   }
@@ -42,8 +49,17 @@ export function Markdown({ children }: { children: string }) {
           ),
           a: ({ children, href }) => {
             if (href?.startsWith(MENTION_HREF_PREFIX)) {
+              const isMe =
+                currentUserId != null &&
+                href.slice(MENTION_HREF_PREFIX.length) === currentUserId;
               return (
-                <span className="inline-flex items-center rounded-md bg-accent/15 text-accent border border-accent/25 px-1.5 py-0.5 text-[0.85em] font-medium">
+                <span
+                  className={
+                    isMe
+                      ? "inline-flex items-center rounded-md bg-amber-400/20 text-amber-200 border border-amber-400/40 px-1.5 py-0.5 text-[0.85em] font-semibold"
+                      : "inline-flex items-center rounded-md bg-accent/15 text-accent border border-accent/25 px-1.5 py-0.5 text-[0.85em] font-medium"
+                  }
+                >
                   {children}
                 </span>
               );

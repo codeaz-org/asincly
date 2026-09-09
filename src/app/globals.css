@@ -106,3 +106,12 @@
     opacity: 1;
   }
 }
+
+/* Deep-linked check-in (from a mention notification): flash a ring. */
+.feed-card:target {
+  animation: ci-flash 2.4s cubic-bezier(0.2, 0.6, 0.3, 1);
+}
+@keyframes ci-flash {
+  0% { box-shadow: 0 0 0 3px oklch(0.8 0.14 60 / 0.9); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}

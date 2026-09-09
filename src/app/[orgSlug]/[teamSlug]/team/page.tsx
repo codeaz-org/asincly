@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { InviteForm } from "@/components/invite-form";
 import { createTeam, removeMember } from "@/lib/actions/team-admin";
+import { avatarHue, displayName, initials } from "@/lib/display";
 import { getTeamRoster } from "@/lib/queries";
 import { getTeamBySlug, requireUser } from "@/lib/session";
 
@@ -82,12 +83,18 @@ export default async function TeamRosterPage({
                   className="rounded-md border border-white/[0.06] px-4 py-3.5 hover:border-white/10 transition"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="grid place-items-center size-9 rounded-full bg-white/[0.05] text-sm font-medium shrink-0">
-                      {(m.name ?? m.email)[0]?.toUpperCase()}
+                    <div
+                      className="grid place-items-center size-9 rounded-full text-[11px] font-semibold shrink-0"
+                      style={{
+                        background: `oklch(0.32 0.06 ${avatarHue(displayName(m.name, m.email))} / 0.7)`,
+                        color: `oklch(0.88 0.06 ${avatarHue(displayName(m.name, m.email))})`,
+                      }}
+                    >
+                      {initials(m.name, m.email)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">
-                        {m.name ?? m.email}
+                        {displayName(m.name, m.email)}
                         {m.userId === user.id && (
                           <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">
                             you

@@ -3,8 +3,14 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
-import { MentionTextarea, type MentionCandidate } from "@/components/mention-textarea";
+import { Markdown } from "@/components/markdown";
+import {
+  MentionTextarea,
+  type MentionCandidate,
+  type MentionTextareaHandle,
+} from "@/components/mention-textarea";
 import { Recorder } from "@/components/recorder";
+import { toggleLinePrefix, wrapSelection } from "@/lib/md-edit";
 import { saveCheckInDraft, submitCheckIn, type SubmitResult } from "@/lib/actions/check-in";
 
 type Props = {
@@ -195,24 +201,118 @@ function Field({
   mentionCandidates: MentionCandidate[];
   autoFocus?: boolean;
 }) {
+  const taRef = useRef<MentionTextareaHandle | null>(null);
+  const [preview, setPreview] = useState(false);
+
+  // Called from click handlers only — never during render.
+  function applyWrap(marker: string) {
+    taRef.current?.applyEdit((v, s, e) => wrapSelection(v, s, e, marker));
+  }
+  function applyPrefix(pfx: string) {
+    taRef.current?.applyEdit((v, s) => {
+      const r = toggleLinePrefix(v, s, pfx);
+      return r ? { value: r.value, selStart: r.caret, selEnd: r.caret } : null;
+    });
+  }
+  function applyMention() {
+    taRef.current?.applyEdit((v, s, e) => {
+      const needsSpace = s > 0 && !/\s/.test(v[s - 1]);
+      const ins = needsSpace ? " @" : "@";
+      return {
+        value: v.slice(0, s) + ins + v.slice(e),
+        selStart: s + ins.length,
+        selEnd: s + ins.length,
+      };
+    });
+  }
+
   return (
     <div className="space-y-2">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <label className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
           {label}
         </label>
-        {hint && <span className="text-[11px] text-muted-foreground/70">{hint}</span>}
+        <div className="flex items-center gap-1">
+          {!preview && (
+            <div className="flex items-center gap-0.5 mr-2" role="toolbar" aria-label={`${label} formatting`}>
+              <ToolBtn label="Bold (⌘B)" onClick={() => applyWrap("**")}>
+                <span className="font-bold">B</span>
+              </ToolBtn>
+              <ToolBtn label="Italic (⌘I)" onClick={() => applyWrap("*")}>
+                <span className="italic font-serif">i</span>
+              </ToolBtn>
+              <ToolBtn label="Task" onClick={() => applyPrefix("- [ ] ")}>
+                ☐
+              </ToolBtn>
+              <ToolBtn label="Bullet" onClick={() => applyPrefix("- ")}>
+                •
+              </ToolBtn>
+              <ToolBtn label="Mention a teammate" onClick={applyMention}>
+                @
+              </ToolBtn>
+            </div>
+          )}
+          <div className="flex rounded-md border border-white/10 overflow-hidden text-[11px]">
+            <button
+              type="button"
+              onClick={() => setPreview(false)}
+              className={`px-2 py-1 transition ${!preview ? "bg-white/[0.08] text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Write
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreview(true)}
+              className={`px-2 py-1 transition ${preview ? "bg-white/[0.08] text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Preview
+            </button>
+          </div>
+        </div>
       </div>
-      <MentionTextarea
-        value={value}
-        onChange={onChange}
-        candidates={mentionCandidates}
-        placeholder={placeholder}
-        autoFocus={autoFocus}
-        rows={4}
-        className="w-full min-h-[120px] rounded-md bg-white/[0.02] border border-white/10 px-4 py-3 text-base leading-relaxed placeholder:text-muted-foreground/40 focus:outline-none focus:border-white/30 focus:bg-white/[0.04] transition resize-y font-mono"
-      />
+      {preview ? (
+        <div className="w-full min-h-[120px] rounded-md bg-white/[0.01] border border-white/[0.06] px-4 py-3">
+          <Markdown>{value}</Markdown>
+        </div>
+      ) : (
+        <MentionTextarea
+          ref={taRef}
+          value={value}
+          onChange={onChange}
+          candidates={mentionCandidates}
+          placeholder={placeholder}
+          autoFocus={autoFocus}
+          rows={4}
+          className="w-full min-h-[120px] rounded-md bg-white/[0.02] border border-white/10 px-4 py-3 text-base leading-relaxed placeholder:text-muted-foreground/40 focus:outline-none focus:border-white/30 focus:bg-white/[0.04] transition resize-y font-mono"
+        />
+      )}
+      {hint && !preview && (
+        <p className="text-[11px] text-muted-foreground/70">{hint}</p>
+      )}
     </div>
+  );
+}
+
+function ToolBtn({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      className="grid place-items-center size-7 rounded text-[13px] text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition"
+    >
+      {children}
+    </button>
   );
 }
 
