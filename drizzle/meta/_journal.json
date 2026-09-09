@@ -8,6 +8,27 @@
       "when": 1788952911865,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788958073126,
+      "tag": "0001_features",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788958125469,
+      "tag": "0002_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788958227412,
+      "tag": "0003_rls_security_definer",
+      "breakpoints": true
     }
   ]
 }
