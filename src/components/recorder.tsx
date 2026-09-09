@@ -251,104 +251,120 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300 }: Props) {
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4 space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium">Video note</p>
-          <p className="text-[11px] text-muted-foreground">
-            Screen + camera · up to {Math.round(maxSeconds / 60)} min · optional.
-          </p>
-        </div>
-        {phase === "recording" && (
-          <span className="inline-flex items-center gap-2 text-xs font-mono">
-            <span className="size-2 rounded-full bg-red-500 animate-pulse" />
-            {formatTime(elapsed)} / {formatTime(maxSeconds)}
-          </span>
-        )}
-      </div>
-
       {/* Off-screen sources (invisible but decoded) */}
       <video ref={camElRef} className="hidden" playsInline />
       <video ref={screenElRef} className="hidden" playsInline />
 
-      {(phase === "requesting" || phase === "ready" || phase === "recording") && (
-        <canvas
-          ref={canvasRef}
-          className="w-full aspect-video rounded-md bg-black border border-white/10"
-        />
+      {/* Idle: a full-width invitation tile, everything centered */}
+      {phase === "idle" && (
+        <button
+          type="button"
+          onClick={requestStreams}
+          className="group w-full rounded-md border border-dashed border-white/15 hover:border-emerald-400/50 hover:bg-emerald-400/[0.03] transition px-6 py-10 flex flex-col items-center gap-3 text-center"
+        >
+          <span className="grid place-items-center size-14 rounded-full border-2 border-white/20 group-hover:border-emerald-400/70 group-hover:scale-105 transition">
+            <span className="size-5 rounded-full bg-red-500/90 group-hover:bg-red-500 transition" />
+          </span>
+          <span className="text-sm font-medium">Record a video note</span>
+          <span className="text-[11px] text-muted-foreground">
+            Screen + camera · up to {Math.round(maxSeconds / 60)} min · optional
+          </span>
+        </button>
       )}
 
-      {phase === "preview" && blobUrl && (
-        <video
-          ref={previewRef}
-          src={blobUrl}
-          controls
-          className="w-full aspect-video rounded-md bg-black border border-white/10"
-        />
-      )}
-
-      {phase === "uploaded" && (
-        <div className="rounded-md border border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-3 text-sm text-emerald-200">
-          ✓ Video attached to this check-in.
+      {phase === "requesting" && (
+        <div className="w-full rounded-md border border-dashed border-white/15 px-6 py-10 grid place-items-center">
+          <span className="text-xs text-muted-foreground animate-pulse">
+            Requesting camera + screen…
+          </span>
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        {phase === "idle" && (
-          <button
-            type="button"
-            onClick={requestStreams}
-            className="h-10 px-4 rounded-md border border-white/15 text-sm hover:bg-white/[0.04] transition"
-          >
-            Record a video
-          </button>
-        )}
-        {phase === "requesting" && (
-          <span className="text-xs text-muted-foreground">Requesting camera + screen…</span>
-        )}
-        {phase === "ready" && (
-          <button
-            type="button"
-            onClick={start}
-            className="h-10 px-4 rounded-md bg-red-500/90 text-white text-sm font-medium hover:bg-red-500 transition inline-flex items-center gap-2"
-          >
-            <span className="size-2 rounded-full bg-white" />
-            Start recording
-          </button>
-        )}
-        {phase === "recording" && (
-          <button
-            type="button"
-            onClick={stop}
-            className="h-10 px-4 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition"
-          >
-            Stop
-          </button>
-        )}
-        {phase === "preview" && (
-          <>
-            <button
-              type="button"
-              onClick={upload}
-              className="h-10 px-4 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition"
-            >
-              Attach to check-in
-            </button>
-            <button
-              type="button"
-              onClick={retake}
-              className="h-10 px-4 rounded-md text-sm text-muted-foreground hover:text-foreground transition"
-            >
-              Retake
-            </button>
-          </>
-        )}
-        {phase === "uploading" && (
-          <span className="text-xs text-muted-foreground">Uploading…</span>
-        )}
+      {/* Live stage: canvas with centered camera-app controls overlaid */}
+      {(phase === "ready" || phase === "recording") && (
+        <div className="relative">
+          <canvas
+            ref={canvasRef}
+            className="w-full aspect-video rounded-md bg-black border border-white/10"
+          />
+          <div className="absolute inset-x-0 bottom-4 flex flex-col items-center gap-2">
+            {phase === "recording" && (
+              <span className="inline-flex items-center gap-2 text-xs font-mono rounded-full bg-black/60 backdrop-blur px-3 py-1">
+                <span className="size-2 rounded-full bg-red-500 animate-pulse" />
+                {formatTime(elapsed)} / {formatTime(maxSeconds)}
+              </span>
+            )}
+            {phase === "ready" ? (
+              <button
+                type="button"
+                onClick={start}
+                aria-label="Start recording"
+                className="grid place-items-center size-14 rounded-full border-[3px] border-white/90 bg-black/40 backdrop-blur hover:scale-105 active:scale-95 transition"
+              >
+                <span className="size-9 rounded-full bg-red-500" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={stop}
+                aria-label="Stop recording"
+                className="grid place-items-center size-14 rounded-full border-[3px] border-white/90 bg-black/40 backdrop-blur hover:scale-105 active:scale-95 transition"
+              >
+                <span className="size-5 rounded-[4px] bg-red-500" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
-        <span className="flex-1" />
-        {error && <span className="text-xs text-destructive">{error}</span>}
-      </div>
+      {(phase === "preview" || phase === "uploading") && blobUrl && (
+        <div className="space-y-3">
+          <video
+            ref={previewRef}
+            src={blobUrl}
+            controls
+            className={`w-full aspect-video rounded-md bg-black border border-white/10 ${
+              phase === "uploading" ? "opacity-60" : ""
+            }`}
+          />
+          <div className="flex justify-center gap-3">
+            {phase === "preview" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={upload}
+                  className="h-11 px-6 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition"
+                >
+                  Attach to check-in
+                </button>
+                <button
+                  type="button"
+                  onClick={retake}
+                  className="h-11 px-4 rounded-md text-sm text-muted-foreground hover:text-foreground transition"
+                >
+                  Retake
+                </button>
+              </>
+            ) : (
+              <span className="h-11 inline-flex items-center text-xs text-muted-foreground animate-pulse">
+                Uploading your video…
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {phase === "uploaded" && (
+        <div className="rounded-md border border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-6 text-sm text-emerald-200 text-center">
+          ✓ Video attached. AI will summarize it for your team.
+        </div>
+      )}
+
+      {error && (
+        <p className="text-xs text-destructive text-center" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

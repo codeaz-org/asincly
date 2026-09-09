@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
 import { Footer } from "@/components/footer";
+import { Logo } from "@/components/logo";
 
 export default async function SignInPage() {
   const session = await auth();
@@ -13,10 +14,7 @@ export default async function SignInPage() {
     <div className="flex min-h-dvh flex-col">
       <header className="border-b border-white/[0.06]">
         <div className="mx-auto max-w-5xl px-6 h-14 flex items-center">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <span className="size-1.5 rounded-full bg-accent" />
-            <span className="text-sm font-medium">asincly</span>
-          </Link>
+          <Logo size={22} className="text-sm" />
         </div>
       </header>
       <main className="flex-1 grid place-items-center px-6">

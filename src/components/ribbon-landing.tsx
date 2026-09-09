@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Footer } from "@/components/footer";
+import { Logo } from "@/components/logo";
 
 // ── The team on the ribbon ──────────────────────────────────────────────────
 // Ten teammates spanning ten IANA zones, sorted east → west. Each wakes at a
@@ -147,11 +148,11 @@ export function RibbonLanding() {
           drifts in/out at its scroll fraction. The ribbon underneath is
           uninterrupted; these blocks are purely typography. */}
       <main className="relative z-10 flex-1">
-        <HourWindow from={0.00} to={0.08} align="lead">
+        <HourWindow p={p} from={0.00} to={0.08} align="lead">
           {/* Silence: no headline. The ribbon breathes. */}
         </HourWindow>
 
-        <HourWindow from={0.08} to={0.20} align="lead" srKey="hero">
+        <HourWindow p={p} from={0.08} to={0.20} align="lead" srKey="hero">
           <span className="tag">04:00 · Auckland stirs</span>
           <h1 className="display">
             Standups
@@ -164,7 +165,7 @@ export function RibbonLanding() {
           </p>
         </HourWindow>
 
-        <HourWindow from={0.20} to={0.36} align="trail" srKey="transform">
+        <HourWindow p={p} from={0.20} to={0.36} align="trail" srKey="transform">
           <span className="tag">09:00 · one check-in</span>
           <h2 className="serif">Talk. It becomes text.</h2>
           <p className="lede">
@@ -174,7 +175,7 @@ export function RibbonLanding() {
           <TransformDemo p={p} from={0.20} to={0.36} />
         </HourWindow>
 
-        <HourWindow from={0.36} to={0.52} align="lead" srKey="digest-preview">
+        <HourWindow p={p} from={0.36} to={0.52} align="lead" srKey="digest-preview">
           <span className="tag">13:00 · the occurrence</span>
           <h2 className="serif">A meeting you can read.</h2>
           <p className="lede">
@@ -184,14 +185,13 @@ export function RibbonLanding() {
           <SummaryStack p={p} from={0.36} to={0.52} />
         </HourWindow>
 
-        <HourWindow from={0.52} to={0.80} align="split" srKey="peak">
+        <HourWindow p={p} from={0.52} to={0.80} align="split" srKey="peak">
           <span className="tag tag--peak">17:00 · the day sweep</span>
           <h2 className="display display--serif">
             Your team works
             <br />
             <em>while you sleep.</em>
           </h2>
-          <div className="peak-space" aria-hidden />
           <p className="lede lede--peak">
             Watch a day pass. The sun crosses the ribbon. Ten teammates check in
             during their own morning. By your evening, the digest has written
@@ -199,7 +199,7 @@ export function RibbonLanding() {
           </p>
         </HourWindow>
 
-        <HourWindow from={0.80} to={0.92} align="lead" srKey="trust">
+        <HourWindow p={p} from={0.80} to={0.92} align="lead" srKey="trust">
           <span className="tag">20:00 · dusk</span>
           <ul className="trust">
             <li><strong>Self-host</strong> · single <code>docker compose up</code></li>
@@ -210,7 +210,7 @@ export function RibbonLanding() {
           </ul>
         </HourWindow>
 
-        <HourWindow from={0.92} to={1.00} align="lead" srKey="close">
+        <HourWindow p={p} from={0.92} to={1.00} align="lead" srKey="close" holdEnd>
           <span className="tag">23:30 · your turn</span>
           <p className="close">
             <span className="serif">Start your team&rsquo;s morning.</span>
@@ -239,10 +239,7 @@ export function RibbonLanding() {
 function TopBar() {
   return (
     <header className="topbar">
-      <span className="topbar__brand">
-        <span className="topbar__dot" aria-hidden />
-        asincly
-      </span>
+      <Logo size={22} className="topbar__brand" href="/" />
       <nav className="topbar__nav">
         <Link href="/legal/privacy" className="topbar__link">
           Privacy
@@ -441,36 +438,58 @@ function DigestPanel({
 // A hour-window is copy layered above the fixed ribbon. It fades in/out at
 // its scroll fractions. This is the plateau window pattern from worldflight —
 // we're not in worldflight mode but the copy contract is the same: a
-// triangle-fade means only one pixel is fully legible, so we plateau instead.
+// triangle-fade means only one pixel is fully legible, so we plateau instead:
+// ramp in over the first 15% of the window, hold at 1, ramp out over the
+// last 15%. Outside its window a block is invisible, so adjacent windows
+// never collide on screen and the authored opening silence actually holds.
+// (Under prefers-reduced-motion the CSS forces opacity 1 on every block so
+// the whole story reads statically.)
 function HourWindow({
+  p,
   from,
   to,
   align,
   children,
   srKey,
+  holdEnd,
 }: {
+  p: number;
   from: number;
   to: number;
   align: "lead" | "trail" | "split";
   children?: React.ReactNode;
   srKey?: string;
+  /** The close window never ramps out: the last feeling has to hold. */
+  holdEnd?: boolean;
 }) {
   const span = to - from;
-  // The window's vertical size in viewport-heights. Peak (span 0.28) gets ~2.6vh;
+  // The window's vertical size in viewport-heights. Peak (span 0.28) gets ~2.8vh;
   // shorter windows shorter. The ribbon persists across all of them.
   const vh = Math.max(60, span * 1000);
+
+  const local = (p - from) / span;
+  const ramp = 0.15;
+  const opacity = holdEnd
+    ? local <= 0
+      ? 0
+      : Math.min(1, local / ramp)
+    : local <= 0 || local >= 1
+      ? 0
+      : Math.min(1, local / ramp, (1 - local) / ramp);
+
   return (
     <section
       className={`hourwindow hourwindow--${align}`}
-      style={{
-        ["--from" as string]: from,
-        ["--to" as string]: to,
-        minHeight: `${vh}vh`,
-      }}
+      style={{ minHeight: `${vh}vh` }}
       data-sr-key={srKey}
     >
       <div className="hourwindow__wrap">
-        <div className="hourwindow__inner">{children}</div>
+        <div
+          className="hourwindow__inner"
+          style={{ ["--w-opacity" as string]: opacity.toFixed(3) }}
+        >
+          {children}
+        </div>
       </div>
     </section>
   );
@@ -551,8 +570,8 @@ function SummaryStack({
   return (
     <div className="summaries" aria-hidden>
       {rows.map((r, i) => {
-        const trigger = 0.1 + i * 0.15;
-        const opacity = clamp((local - trigger) / 0.15, 0, 1);
+        const trigger = 0.06 + i * 0.09;
+        const opacity = clamp((local - trigger) / 0.12, 0, 1);
         return (
           <div
             key={r.m}
@@ -614,15 +633,11 @@ const PAGE_CSS = `
   display: flex; align-items: center; justify-content: space-between;
   padding: 20px clamp(24px, 4vw, 40px);
   color: oklch(0.94 0.006 240);
+  background: linear-gradient(180deg, oklch(0.10 0.01 255 / 0.85), transparent);
 }
 .topbar__brand {
   display: inline-flex; align-items: center; gap: 8px;
   font-size: 13px; font-weight: 500; letter-spacing: 0.02em;
-}
-.topbar__dot {
-  width: 6px; height: 6px; border-radius: 999px;
-  background: oklch(0.72 0.16 155);
-  box-shadow: 0 0 12px oklch(0.72 0.16 155 / 0.7);
 }
 .topbar__nav { display: inline-flex; align-items: center; gap: 16px; }
 .topbar__link {
@@ -643,6 +658,9 @@ const PAGE_CSS = `
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
   padding: 24px clamp(24px, 4vw, 48px) 32px;
   pointer-events: none;
+  /* Shield: copy scrolling beneath fades into the canvas instead of poking
+     out in the ribbon's padding gutter. */
+  background: linear-gradient(180deg, transparent 0%, oklch(0.09 0.01 260 / 0.9) 45%, oklch(0.09 0.01 260) 100%);
 }
 .ribbon__inner {
   position: relative;
@@ -871,6 +889,7 @@ const PAGE_CSS = `
   display: flex; flex-direction: column; gap: 20px;
   color: oklch(0.94 0.006 240);
   padding-bottom: 220px; /* clears the fixed ribbon */
+  opacity: var(--w-opacity, 1);
 }
 
 .tag {
@@ -929,7 +948,6 @@ const PAGE_CSS = `
   color: oklch(0.72 0.02 240);
 }
 
-.peak-space { min-height: 20vh; }
 
 .trust {
   list-style: none; padding: 0; margin: 0;
@@ -1056,12 +1074,14 @@ const PAGE_CSS = `
   border: 1px solid oklch(0.68 0.18 30 / 0.35);
 }
 
-/* Reduced motion: kill non-essential animation */
+/* Reduced motion: kill non-essential animation; every copy block reads at
+   full opacity so the whole story is legible statically. */
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   .teammate__btn--checking .teammate__ring { animation: none; }
   .transform__rec { animation: none; }
   .ribbon__sun { transition: none; }
+  .hourwindow__inner { opacity: 1 !important; }
 }
 
 /* Compact mobile: hide city labels, cluster monograms tighter, smaller ribbon */

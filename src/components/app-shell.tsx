@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { auth, signOut } from "@/auth";
 import { Inbox } from "@/components/inbox";
+import { Logo } from "@/components/logo";
 import { listRecentForUser, unreadCount } from "@/lib/notifications";
 import { getMemberships } from "@/lib/session";
 import { Footer } from "@/components/footer";
@@ -43,10 +44,7 @@ export async function AppShell(props: Props) {
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-background/80 backdrop-blur">
         <div className="mx-auto max-w-5xl px-6 h-14 flex items-center gap-4">
-          <Link href="/" className="inline-flex items-center gap-2 shrink-0" aria-label="Asincly">
-            <span className="size-1.5 rounded-full bg-accent shadow-[0_0_10px_theme(colors.emerald.400/.7)]" />
-            <span className="text-sm font-medium tracking-tight">asincly</span>
-          </Link>
+          <Logo size={22} className="shrink-0 text-sm" />
 
           <span className="text-muted-foreground/40">/</span>
 
