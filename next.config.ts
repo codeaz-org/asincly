@@ -43,8 +43,17 @@ const securityHeaders = [
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
 ];
 
+// Next blocks dev resources (HMR, chunks) for any host other than localhost, so
+// opening the dev server from a phone via the LAN IP serves HTML that never
+// hydrates. Opt-in per machine; never applies to production builds.
+const allowedDevOrigins = (process.env.DEV_ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  allowedDevOrigins,
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
