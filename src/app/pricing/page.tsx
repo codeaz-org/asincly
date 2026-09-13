@@ -12,6 +12,9 @@ export const metadata = {
   description: "Free for up to 3 members. Pro is €8 per member per month. Self-hosting is free with every feature.",
 };
 
+// BILLING_ENABLED is read at request time, not baked in at build time.
+export const dynamic = "force-dynamic";
+
 // Hosted cloud only. Self-hosted installs have no plans, so no pricing page.
 export default function PricingPage() {
   if (!isBillingEnabled()) notFound();
