@@ -141,7 +141,7 @@ export async function AppShell(props: Props) {
       <div className="hidden md:block">
         <Footer />
       </div>
-      <BottomNav teamRoot={teamRoot} myState={props.myState} checkInLabel={checkInLabel} />
+      <BottomNav teamRoot={teamRoot} myState={props.myState} checkInLabel={checkInLabel} canCheckIn={props.role !== "guest"} />
     </div>
   );
 }

@@ -76,10 +76,14 @@ export default async function TodayPage({
   ]);
 
   const names = namesById(roster);
+  const isGuest = team.role === "guest";
+  // Guests read along: they aren't on the rail and aren't waited for.
+  const contributors = roster.filter((m) => m.role !== "guest");
   const doneIds = new Set(entries.map((e) => e.userId));
 
+
   // ── Rail + pending (today only) ──
-  const railMembers = roster.map((m) => ({
+  const railMembers = contributors.map((m) => ({
     userId: m.userId,
     name: m.name,
     email: m.email,
@@ -129,11 +133,11 @@ export default async function TodayPage({
 
   const orderedEntries = [...entries].sort((a, b) => Number(b.userId === user.id) - Number(a.userId === user.id));
   const headline = isToday
-    ? roster.length === 1
+    ? contributors.length === 1 && !isGuest
       ? entries.length === 1
         ? "You're checked in."
         : "Just you, for now."
-      : `${entries.length} of ${roster.length} checked in`
+      : `${entries.length} of ${contributors.length} checked in`
     : `${entries.length} check-in${entries.length === 1 ? "" : "s"}`;
 
   return (
@@ -157,14 +161,16 @@ export default async function TodayPage({
             nowISO={today.now.toISOString()}
             viewerId={user.id}
           />
-          <YourCard
-            mine={today.mine}
-            state={today.markState}
-            schedule={today.primary}
-            away={today.myAway}
-            checkInHref={checkInFlowPath(orgSlug, teamSlug)}
-            viewerTz={user.tz}
-          />
+          {!isGuest && (
+            <YourCard
+              mine={today.mine}
+              state={today.markState}
+              schedule={today.primary}
+              away={today.myAway}
+              checkInHref={checkInFlowPath(orgSlug, teamSlug)}
+              viewerTz={user.tz}
+            />
+          )}
         </>
       )}
 
@@ -229,7 +235,7 @@ export default async function TodayPage({
                 viewerId={user.id}
                 names={names}
                 focus={focus === e.checkInId}
-                viewerCanManage={team.role !== "member"}
+                viewerCanManage={team.role === "owner" || team.role === "admin"}
                 detailHref={checkInDetailPath(orgSlug, teamSlug, e.checkInId)}
               />
             ))}
@@ -246,7 +252,7 @@ export default async function TodayPage({
         </section>
       )}
 
-      {isToday && roster.length === 1 && (
+      {isToday && roster.length === 1 && !isGuest && (
         <Empty
           state="open"
           title="Standups need a team."

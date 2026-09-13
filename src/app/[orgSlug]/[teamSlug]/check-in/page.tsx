@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { MarkLoader } from "@/components/brand/loader";
 import { CheckInFlow } from "@/components/check-in/flow";
@@ -27,6 +28,7 @@ export default async function CheckInPage({
   const { orgSlug, teamSlug } = await params;
   const { schedule } = await searchParams;
   const { user, team } = await getTeamPageContext(orgSlug, teamSlug);
+  if (team.role === "guest") redirect(teamPath(orgSlug, teamSlug));
 
   const [ctx, roster, activeSchedules, plan] = await Promise.all([
     getOrCreateTodayContext(team.teamId, schedule),

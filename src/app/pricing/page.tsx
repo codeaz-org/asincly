@@ -19,9 +19,7 @@ export default function PricingPage() {
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-30 border-b border-line bg-ground/80 backdrop-blur-xl">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 h-16 flex items-center gap-4">
-          <Link href="/" aria-label="Asincly home">
-            <Logo size={22} className="text-ink" />
-          </Link>
+          <Logo size={22} className="text-ink" />
           <span className="flex-1" />
           <Link href="/sign-in" className="text-sm text-soft hover:text-ink transition">
             Sign in

@@ -354,7 +354,13 @@ export async function toggleResolved(input: unknown): Promise<ActionResult> {
 
 async function teamContext(teamId: string, userId: string) {
   const [row] = await db
-    .select({ orgId: teams.orgId, orgSlug: organizations.slug, teamSlug: teams.slug, teamName: teams.name })
+    .select({
+      orgId: teams.orgId,
+      orgSlug: organizations.slug,
+      teamSlug: teams.slug,
+      teamName: teams.name,
+      role: members.role,
+    })
     .from(members)
     .innerJoin(teams, eq(teams.id, members.teamId))
     .innerJoin(organizations, eq(organizations.id, teams.orgId))
@@ -369,6 +375,7 @@ export async function setAway(input: unknown): Promise<ActionResult> {
   const { teamId, startsOn, endsOn, note } = parsed.data;
   const ctx = await teamContext(teamId, user.id);
   if (!ctx) return fail("Team not found");
+  if (ctx.role === "guest") return fail("Guests don't have check-in availability");
 
   const [row] = await withUser(user.id, async (tx) => {
     // One active period at a time: replace any that overlap.
@@ -439,13 +446,14 @@ export async function nudge(input: unknown): Promise<ActionResult> {
 
   const ctx = await teamContext(teamId, user.id);
   if (!ctx) return fail("Team not found");
+  if (ctx.role === "guest") return fail("Guests can't nudge");
   const targetOnTeam = await withUser(user.id, (tx) =>
     tx
-      .select({ id: members.id })
+      .select({ id: members.id, role: members.role })
       .from(members)
       .where(and(eq(members.teamId, teamId), eq(members.userId, targetId))),
   );
-  if (targetOnTeam.length === 0) return fail("Not on this team");
+  if (targetOnTeam.length === 0 || targetOnTeam[0].role === "guest") return fail("Not on this team");
 
   // One nudge per pair per day.
   const recent = await db

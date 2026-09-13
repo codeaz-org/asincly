@@ -76,16 +76,18 @@ export default async function PeoplePage({ params }: { params: Promise<{ orgSlug
         </p>
       </header>
 
-      <section className="space-y-3" aria-labelledby="you">
-        <SectionTitle>
-          <span id="you">Your availability</span>
-        </SectionTitle>
-        <AwayControl
-          teamId={team.teamId}
-          todayISO={today.todayISO}
-          current={today.away.find((a) => a.userId === user.id && a.endsOn >= today.todayISO) ?? null}
-        />
-      </section>
+      {team.role !== "guest" && (
+        <section className="space-y-3" aria-labelledby="you">
+          <SectionTitle>
+            <span id="you">Your availability</span>
+          </SectionTitle>
+          <AwayControl
+            teamId={team.teamId}
+            todayISO={today.todayISO}
+            current={today.away.find((a) => a.userId === user.id && a.endsOn >= today.todayISO) ?? null}
+          />
+        </section>
+      )}
 
       <section className="space-y-3" aria-labelledby="team">
         <SectionTitle count={roster.length}>
@@ -98,22 +100,32 @@ export default async function PeoplePage({ params }: { params: Promise<{ orgSlug
             const isMe = m.userId === user.id;
             return (
               <Card as="li" key={m.memberId} className="p-4 flex items-center gap-3">
-                <Avatar name={m.name} email={m.email} size={42} status={p.status} />
+                <Avatar name={m.name} email={m.email} size={42} status={m.role === "guest" ? undefined : p.status} />
                 <div className="flex-1 min-w-0">
                   <p className="text-[15px] font-medium text-ink truncate">
                     {displayName(m.name, m.email)}
                     {isMe && <span className="ml-2 kicker text-[10px]">you</span>}
                   </p>
                   <p className="text-xs text-soft truncate">
-                    {STATUS_TEXT[p.status]}
-                    {away && p.status === "away" && ` until ${dayLabel(away.endsOn)}`}
+                    {m.role === "guest" ? (
+                      "reads along"
+                    ) : (
+                      <>
+                        {STATUS_TEXT[p.status]}
+                        {away && p.status === "away" && ` until ${dayLabel(away.endsOn)}`}
+                      </>
+                    )}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="font-mono text-sm tabular-nums text-ink">{p.localTime}</p>
                   <p className="text-[11px] text-soft">{p.city}</p>
                 </div>
-                {m.role !== "member" && <Pill tone="amber" className="shrink-0">{m.role}</Pill>}
+                {m.role !== "member" && (
+                  <Pill tone={m.role === "guest" ? "neutral" : "amber"} className="shrink-0">
+                    {m.role}
+                  </Pill>
+                )}
                 {m.role !== "owner" && (isAdmin || isMe) && (
                   <form action={removeMember.bind(null, m.memberId)} className="shrink-0">
                     <Button

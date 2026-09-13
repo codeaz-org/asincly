@@ -64,7 +64,7 @@ export default async function CheckInDetailPage({
         entry={detail.entry}
         viewerId={user.id}
         names={namesById(roster)}
-        viewerCanManage={team.role !== "member"}
+        viewerCanManage={team.role === "owner" || team.role === "admin"}
         expanded
       />
 

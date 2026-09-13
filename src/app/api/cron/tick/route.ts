@@ -100,11 +100,13 @@ export async function GET(req: Request) {
     .where(eq(schedules.active, true));
 
   for (const s of scheds) {
-    const teamMembers = await db
-      .select({ userId: users.id, tz: users.tz, email: users.email })
+    const everyone = await db
+      .select({ userId: users.id, tz: users.tz, email: users.email, role: members.role })
       .from(members)
       .innerJoin(users, eq(users.id, members.userId))
       .where(eq(members.teamId, s.teamId));
+    // Guests read along: they get the digest but no check-in reminders.
+    const teamMembers = everyone.filter((m) => m.role !== "guest");
 
     // Away periods for this team (still running somewhere in the world).
     const away = await getAwayPeriods(s.teamId, now);
@@ -226,7 +228,7 @@ export async function GET(req: Request) {
       if (alreadySent) continue;
 
       const linkPath = `/${s.orgSlug}/${s.teamSlug}`;
-      for (const m of teamMembers) {
+      for (const m of everyone) {
         await notify({
           userId: m.userId,
           teamId: s.teamId,
