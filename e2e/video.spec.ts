@@ -44,9 +44,13 @@ test("record a video → AI drafts the check-in from the previous plan → send"
   await expect(panel.getByText("Ship the old plan")).toBeVisible();
   await expect(panel.getByText("Finish the migration")).toBeVisible();
 
+  // Private talking points jotted before recording stay on screen while talking.
+  await panel.getByLabel("Your notes").fill("- mention the pricing page\n- ask Bobby about review");
+
   await page.getByRole("button", { name: /turn on camera/i }).click();
   await page.getByRole("button", { name: /start recording/i }).click({ timeout: 15000 });
   await page.waitForTimeout(2500);
+  await expect(panel.getByLabel("Your notes")).toHaveValue(/mention the pricing page/);
   await page.getByRole("button", { name: /stop recording/i }).click();
   await page.getByRole("button", { name: /use this video/i }).click({ timeout: 10000 });
 

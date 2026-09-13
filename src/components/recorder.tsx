@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowRight, Camera, Check, MonitorUp, RotateCcw } from "lucide-react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { ArrowRight, Camera, Check, ChevronDown, MonitorUp, NotebookPen, RotateCcw } from "lucide-react";
 import { cn } from "cn";
 import { MarkLoader } from "@/components/brand/loader";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,14 @@ function pick(candidates: string[], fallback: string): string {
 const base = (mime: string) => mime.split(";")[0];
 const noopSubscribe = () => () => {};
 
+function readNotes(key: string): string {
+  try {
+    return localStorage.getItem(key) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCount = 0, context }: Props) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [mode, setMode] = useState<Mode>("camera");
@@ -51,6 +59,22 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
   const [video, setVideo] = useState<Blob | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [hints, setHints] = useState<Record<string, Hint>>({});
+  // Talking points live only on this device (per check-in) until they're
+  // handed to the drafter with the recording.
+  const notesKey = `asincly:notes:${checkInId}`;
+  const storedNotes = useSyncExternalStore(noopSubscribe, () => readNotes(notesKey), () => "");
+  const [typedNotes, setTypedNotes] = useState<string | null>(null);
+  const notes = typedNotes ?? storedNotes;
+  const [sheetOpen, setSheetOpen] = useState(false);
+  function changeNotes(value: string) {
+    setTypedNotes(value);
+    try {
+      if (value.trim()) localStorage.setItem(notesKey, value);
+      else localStorage.removeItem(notesKey);
+    } catch {
+      // Storage blocked: notes still work for this visit.
+    }
+  }
 
   const camStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -323,6 +347,7 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
         sizeBytes: video.size,
         durationMs,
         hints,
+        notes: notes.trim() ? notes.slice(0, 2000) : undefined,
       });
       if (!reg.ok) throw new Error(reg.error);
       onUploaded?.(reg.recordingId);
@@ -334,7 +359,11 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
 
   const live = phase === "requesting" || phase === "ready" || phase === "recording";
   const progress = Math.min(1, elapsed / maxSeconds);
-  const hasContext = !!context && (context.previous.length > 0 || context.openBlockers.length > 0);
+  const hasPlan = !!context && (context.previous.length > 0 || context.openBlockers.length > 0);
+  const showPanel = live || phase === "idle";
+  const panel = (
+    <WhileYouTalk context={context} hints={hints} onHint={setHints} notes={notes} onNotes={changeNotes} />
+  );
 
   return (
     <div className="space-y-4">
@@ -342,7 +371,7 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
       <video ref={camElRef} className="hidden" playsInline />
       <video ref={screenElRef} className="hidden" playsInline />
 
-      <div className={cn("grid gap-4", hasContext && (live || phase === "idle") && "lg:grid-cols-[1fr_300px]")}>
+      <div className={cn("grid gap-4", showPanel && "lg:grid-cols-[1fr_300px]")}>
         <div className="space-y-4 min-w-0">
           {phase === "idle" && (
             <div className="space-y-4">
@@ -365,6 +394,8 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
                   Up to {Math.round(maxSeconds / 60)} min{existingCount > 0 ? " · replaces your current video" : ""}
                 </span>
               </button>
+              {/* Phones: prepare below the camera button before starting. */}
+              <div className="lg:hidden">{panel}</div>
             </div>
           )}
 
@@ -388,10 +419,22 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
                   <div className="h-full bg-danger transition-[width] duration-500" style={{ width: `${progress * 100}%` }} />
                 </div>
               )}
-              {/* Phones: the plan rides over the camera as tappable chips. */}
-              {hasContext && phase !== "requesting" && (
+              {/* Phones: notes and plan ride over the camera in a collapsible sheet. */}
+              {(hasPlan || notes.trim()) && phase !== "requesting" && (
                 <div className="lg:hidden absolute inset-x-0 top-3 px-3">
-                  <PlanChips context={context!} hints={hints} onHint={setHints} />
+                  <div className="rounded-2xl bg-ground/80 backdrop-blur-md border border-line">
+                    <button
+                      type="button"
+                      onClick={() => setSheetOpen((v) => !v)}
+                      aria-expanded={sheetOpen}
+                      className="w-full flex items-center gap-2 px-3 h-10 text-sm text-ink"
+                    >
+                      <NotebookPen className="size-4 text-amber" />
+                      Your notes &amp; plan
+                      <ChevronDown className={cn("ml-auto size-4 transition-transform", sheetOpen && "rotate-180")} />
+                    </button>
+                    {sheetOpen && <div className="max-h-[50vh] overflow-y-auto px-1 pb-1">{panel}</div>}
+                  </div>
                 </div>
               )}
               <div className="absolute inset-x-0 bottom-5 flex flex-col items-center gap-3">
@@ -462,9 +505,9 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
           )}
         </div>
 
-        {hasContext && (live || phase === "idle") && (
+        {showPanel && (
           <aside aria-label="While you talk" className="hidden lg:block">
-            <WhileYouTalk context={context!} hints={hints} onHint={setHints} />
+            {panel}
           </aside>
         )}
       </div>
@@ -501,21 +544,28 @@ function WhileYouTalk({
   context,
   hints,
   onHint,
+  notes,
+  onNotes,
 }: {
-  context: RecorderContext;
+  context?: RecorderContext;
   hints: Record<string, Hint>;
   onHint: (h: Record<string, Hint>) => void;
+  notes: string;
+  onNotes: (value: string) => void;
 }) {
+  const previous = context?.previous ?? [];
+  const blockers = context?.openBlockers ?? [];
+  const notesId = useId();
   return (
-    <div className="sticky top-24 rounded-2xl border border-line bg-ground-raised/70 p-4 space-y-4">
+    <div className="lg:sticky lg:top-24 rounded-2xl border border-line bg-ground-raised/70 p-4 space-y-4">
       <p className="text-xs text-soft">What got done · what&rsquo;s next · anything blocking · who you need</p>
-      {context.previous.length > 0 && (
+      {previous.length > 0 && (
         <div className="space-y-1.5">
           <p className="kicker text-[10px]">
-            Last time{context.lastDateLabel ? ` · ${context.lastDateLabel}` : ""}
+            Last time{context?.lastDateLabel ? ` · ${context.lastDateLabel}` : ""}
           </p>
           <ul className="space-y-0.5">
-            {context.previous.map((item) => {
+            {previous.map((item) => {
               const hint = hints[item.key] ?? (item.checked ? "done" : undefined);
               return (
                 <li key={item.key}>
@@ -537,11 +587,11 @@ function WhileYouTalk({
           <p className="text-[11px] text-faint px-2">Tap to mark, or just say it.</p>
         </div>
       )}
-      {context.openBlockers.length > 0 && (
+      {blockers.length > 0 && (
         <div className="space-y-1.5">
           <p className="kicker text-[10px]">Still blocking you</p>
           <ul className="space-y-1">
-            {context.openBlockers.map((b) => (
+            {blockers.map((b) => (
               <li key={b.key} className="flex items-start gap-2.5 px-2 text-sm text-ink">
                 <span className="mt-1.5 size-1.5 rounded-full bg-danger shrink-0" />
                 {plainText(b.text)}
@@ -550,35 +600,23 @@ function WhileYouTalk({
           </ul>
         </div>
       )}
-    </div>
-  );
-}
-
-function PlanChips({
-  context,
-  hints,
-  onHint,
-}: {
-  context: RecorderContext;
-  hints: Record<string, Hint>;
-  onHint: (h: Record<string, Hint>) => void;
-}) {
-  return (
-    <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]">
-      {context.previous.map((item) => {
-        const hint = hints[item.key] ?? (item.checked ? "done" : undefined);
-        return (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => setHint(hints, item.key, onHint)}
-            className="shrink-0 inline-flex items-center gap-1.5 h-8 rounded-full bg-ground/70 backdrop-blur px-3 text-xs text-ink"
-          >
-            <HintBox hint={hint} small />
-            <span className={cn("max-w-44 truncate", hint === "done" && "line-through text-soft")}>{plainText(item.text)}</span>
-          </button>
-        );
-      })}
+      <div className="space-y-1.5">
+        <label htmlFor={notesId} className="kicker text-[10px] block">
+          Your notes
+        </label>
+        <textarea
+          id={notesId}
+          value={notes}
+          onChange={(e) => onNotes(e.target.value)}
+          maxLength={2000}
+          rows={4}
+          placeholder={"Jot what you want to mention…\n- demo went well\n- ask Lena about the keys"}
+          className="w-full resize-y rounded-xl bg-ink/[0.04] border border-line px-3 py-2 text-sm leading-relaxed text-ink placeholder:text-faint focus:outline-none focus:border-amber/50"
+        />
+        <p className="text-[11px] text-faint">
+          Only you see these. They help the AI catch anything you meant to say.
+        </p>
+      </div>
     </div>
   );
 }
