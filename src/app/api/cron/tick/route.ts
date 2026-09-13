@@ -16,7 +16,9 @@ import {
 } from "@/db/schema";
 import { billingState } from "@/lib/billing/entitlements";
 import { effectiveRetentionDays, entitlementsFor, freeSince, isBillingEnabled } from "@/lib/billing/plans";
+import { dayLabel } from "@/lib/feed-view";
 import { notify } from "@/lib/notifications";
+import { postDigestToSlack, sendSlackReminder } from "@/lib/slack/notify";
 import { localDate, windowFor, windowStatus } from "@/lib/time";
 
 // One-shot tick called on a cron (Vercel Cron, GitHub Actions, cron on a
@@ -40,7 +42,8 @@ export async function GET(req: Request) {
   }
 
   const now = new Date();
-  const stats = { windowOpens: 0, digests: 0, purgedRecordings: 0 };
+  const stats = { windowOpens: 0, digests: 0, purgedRecordings: 0, slackReminders: 0, slackDigests: 0 };
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
   // ── recording retention purge ──
   // For each team with a non-zero retention, delete recording rows older
@@ -90,6 +93,7 @@ export async function GET(req: Request) {
       teamId: schedules.teamId,
       teamName: teams.name,
       teamSlug: teams.slug,
+      orgId: teams.orgId,
       orgSlug: organizations.slug,
       windowOpenLocal: schedules.windowOpenLocal,
       windowCloseLocal: schedules.windowCloseLocal,
@@ -175,6 +179,19 @@ export async function GET(req: Request) {
         data: { occurrenceId },
       });
       stats.windowOpens++;
+      const closesAt = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: m.tz }).format(w.closeAt);
+      if (
+        await sendSlackReminder({
+          teamId: s.teamId,
+          orgId: s.orgId,
+          email: m.email,
+          teamName: s.teamName,
+          closesAt,
+          url: `${appUrl}/${s.orgSlug}/${s.teamSlug}/check-in`,
+        })
+      ) {
+        stats.slackReminders++;
+      }
     }
 
     // ── digest_ready ──
@@ -244,6 +261,19 @@ export async function GET(req: Request) {
         });
       }
       stats.digests++;
+      if (
+        await postDigestToSlack({
+          teamId: s.teamId,
+          orgId: s.orgId,
+          occurrenceId: o.id,
+          teamName: s.teamName,
+          dateLabel: dayLabel(o.scheduleDate),
+          url: `${appUrl}/${s.orgSlug}/${s.teamSlug}?day=${o.scheduleDate}`,
+          expected: teamMembers.length,
+        })
+      ) {
+        stats.slackDigests++;
+      }
     }
   }
 

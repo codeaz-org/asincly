@@ -74,6 +74,20 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
       )}
 
       <section className="space-y-3">
+        <SectionTitle>Integrations</SectionTitle>
+        <Link
+          href={`${teamPath(orgSlug, teamSlug)}/settings/integrations`}
+          className="flex items-center gap-4 rounded-2xl border border-line bg-ground-raised/70 px-4 sm:px-5 py-4 hover:border-line-strong transition"
+        >
+          <span className="flex-1 text-[15px] text-ink">
+            Slack
+            <span className="block text-sm text-soft">Digest in a channel, reminders by DM</span>
+          </span>
+          <span className="text-sm text-soft">Set up →</span>
+        </Link>
+      </section>
+
+      <section className="space-y-3">
         <SectionTitle>Team</SectionTitle>
         <Card className="p-4 sm:p-5">
           <form action={renameTeam.bind(null, team.teamId)} className="space-y-3">

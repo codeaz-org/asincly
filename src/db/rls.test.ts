@@ -4,6 +4,7 @@ import { db } from "./index";
 import {
   blockerActions,
   orgBilling,
+  slackInstalls,
   checkInComments,
   checkInReactions,
   checkIns,
@@ -296,3 +297,30 @@ describe("row-level security: guests and billing", () => {
     expect(updated).toEqual([]);
   });
 });
+
+describe("row-level security: slack_install", () => {
+  it("is visible to team admins only and never writable by the app role", async () => {
+    await db.insert(slackInstalls).values({
+      teamId: teamAId,
+      slackTeamId: "T1",
+      slackTeamName: "Acme",
+      botUserId: "B1",
+      botTokenCipher: "cipher",
+    });
+    try {
+      const asOwner = await withUser(userAId, (tx) => tx.select().from(slackInstalls));
+      const asMember = await withUser(userCId, (tx) => tx.select().from(slackInstalls));
+      const asOutsider = await withUser(userBId, (tx) => tx.select().from(slackInstalls));
+      expect(asOwner.map((r) => r.teamId)).toEqual([teamAId]);
+      expect(asMember).toEqual([]);
+      expect(asOutsider).toEqual([]);
+      const updated = await withUser(userAId, (tx) =>
+        tx.update(slackInstalls).set({ channelId: "C1" }).where(eq(slackInstalls.teamId, teamAId)).returning(),
+      );
+      expect(updated).toEqual([]);
+    } finally {
+      await db.delete(slackInstalls).where(eq(slackInstalls.teamId, teamAId));
+    }
+  });
+});
+

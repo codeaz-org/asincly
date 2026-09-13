@@ -134,6 +134,20 @@
       "when": 1789317894471,
       "tag": "0018_billing_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1789319920882,
+      "tag": "0019_slack",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789319922055,
+      "tag": "0020_slack_rls",
+      "breakpoints": true
     }
   ]
 }

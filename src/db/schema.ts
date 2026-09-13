@@ -360,6 +360,27 @@ export const aiUsage = pgTable(
   (t) => [primaryKey({ columns: [t.orgId, t.period] })],
 );
 
+// ────────── Slack (Pro on the hosted cloud; always available self-hosted) ──────────
+
+// One Slack workspace connection per team. The bot token is encrypted with
+// DATA_ENCRYPTION_KEY; only owners/admins of the team can read the row.
+export const slackInstalls = pgTable("slack_install", {
+  teamId: uuid("team_id")
+    .primaryKey()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  slackTeamId: text("slack_team_id").notNull(),
+  slackTeamName: text("slack_team_name").notNull(),
+  botUserId: text("bot_user_id").notNull(),
+  botTokenCipher: text("bot_token_cipher").notNull(),
+  channelId: text("channel_id"),
+  channelName: text("channel_name"),
+  digestEnabled: boolean("digest_enabled").notNull().default(true),
+  remindersEnabled: boolean("reminders_enabled").notNull().default(false),
+  installedByUserId: text("installed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const auditLogs = pgTable("audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),
   orgId: uuid("org_id")

@@ -22,6 +22,7 @@ import {
 import { audit } from "@/lib/audit";
 import { assertCanCreateTeam, assertFeature, limitResult } from "@/lib/billing/entitlements";
 import { cancelSubscriptionForDeletedOrg, syncSeats } from "@/lib/billing/seats";
+import { revokeSlackFor } from "@/lib/slack/notify";
 import { TeamRulesSchema } from "@/lib/validation/social";
 import { decrypt } from "@/lib/crypto";
 import { requireUser } from "@/lib/session";
@@ -172,6 +173,7 @@ export async function deleteTeam(teamId: string) {
     resourceType: "team",
     resourceId: teamId,
   });
+  await revokeSlackFor({ teamId });
   await db.delete(teams).where(eq(teams.id, teamId));
   await syncSeats(ctx.orgId);
   redirect("/");
@@ -409,6 +411,7 @@ export async function deleteOrg(orgId: string) {
     resourceId: orgId,
   });
   await cancelSubscriptionForDeletedOrg(orgId);
+  await revokeSlackFor({ orgId });
   await db.delete(organizations).where(eq(organizations.id, orgId));
   redirect("/");
 }
