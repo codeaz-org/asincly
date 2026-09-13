@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Applies drizzle/ migrations (same journal as `drizzle-kit migrate`) using
 // only runtime dependencies, so it works in containers and CI.
-// Then, if APP_DB_PASSWORD is set, replaces the development password of the
-// non-superuser `asincly_app` role that the app connects as.
+// Then sets the password of the non-superuser `asincly_app` role the app
+// connects as: APP_DB_PASSWORD, or a development default on local databases.
 import "dotenv/config";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
@@ -19,12 +19,17 @@ try {
   await migrate(drizzle(sql), { migrationsFolder: "drizzle" });
   console.log("migrations applied");
 
+  // The migrations create `asincly_app` without a password; set it here.
   const password = process.env.APP_DB_PASSWORD;
+  const local = /@(localhost|127\.0\.0\.1|postgres)(:\d+)?\//.test(url);
   if (password) {
     await sql.unsafe(`ALTER ROLE asincly_app WITH LOGIN PASSWORD ${quote(password)}`);
     console.log("asincly_app password set from APP_DB_PASSWORD");
-  } else if (process.env.NODE_ENV === "production") {
-    console.warn("APP_DB_PASSWORD is not set: asincly_app still has its development password");
+  } else if (local && process.env.NODE_ENV !== "production") {
+    await sql.unsafe(`ALTER ROLE asincly_app WITH LOGIN PASSWORD 'asincly_app'`);
+    console.log("asincly_app uses the local development password");
+  } else {
+    console.warn("APP_DB_PASSWORD is not set: asincly_app has no password, so DATABASE_URL_APP can't connect");
   }
 
   const [{ bypass }] = await sql`SELECT rolbypassrls OR rolsuper AS bypass FROM pg_roles WHERE rolname = current_user`;

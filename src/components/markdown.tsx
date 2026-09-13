@@ -1,6 +1,14 @@
-import ReactMarkdown from "react-markdown";
+import { Children } from "react";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MENTION_HREF_PREFIX } from "@/lib/mentions";
+
+// react-markdown drops unknown URL schemes, which would turn our
+// `mention:<userId>` links into empty hrefs. Keep those (ids are validated
+// by the mention regex); everything else gets the default sanitising.
+function urlTransform(url: string): string {
+  return /^mention:[a-zA-Z0-9_-]+$/.test(url) ? url : defaultUrlTransform(url);
+}
 
 // Tight markdown block for check-in body. GFM enables task lists.
 // Sanitization is on by default in react-markdown (no raw HTML).
@@ -19,6 +27,7 @@ export function Markdown({
     <div className="prose-tight">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        urlTransform={urlTransform}
         components={{
           p: ({ children }) => <p className="text-sm leading-[1.7] text-foreground/90">{children}</p>,
           ul: ({ children }) => <ul className="text-sm leading-[1.7] space-y-1.5 pl-4 list-disc marker:text-amber/60 text-foreground/90">{children}</ul>,
@@ -26,7 +35,15 @@ export function Markdown({
           li: ({ children, className }) => {
             // GFM task list items get className="task-list-item"
             if (className?.includes("task-list-item")) {
-              return <li className="list-none -ml-4 flex items-start gap-2.5">{children}</li>;
+              // Checkbox + one text span, so inline pieces (mentions, "'s")
+              // don't become separate flex items with gaps between them.
+              const [checkbox, ...text] = Children.toArray(children);
+              return (
+                <li className="list-none -ml-4 flex items-start gap-2.5">
+                  {checkbox}
+                  <span className="min-w-0">{text}</span>
+                </li>
+              );
             }
             return <li>{children}</li>;
           },
@@ -73,8 +90,8 @@ export function Markdown({
                 <span
                   className={
                     isMe
-                      ? "inline-flex items-center rounded-md bg-amber text-amber-ink px-1.5 py-px text-[0.85em] font-semibold"
-                      : "inline-flex items-center rounded-md bg-amber/[0.12] text-amber px-1.5 py-px text-[0.85em] font-medium"
+                      ? "rounded-md bg-amber text-amber-ink px-1 py-px text-[0.92em] font-semibold whitespace-nowrap"
+                      : "rounded-md bg-amber/[0.12] text-amber px-1 py-px text-[0.92em] font-medium whitespace-nowrap"
                   }
                 >
                   {children}

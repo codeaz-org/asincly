@@ -19,8 +19,10 @@ test("owner requires video; a member skips with a reason the owner can see", asy
   const ownerPage = await ownerCtx.newPage();
   await ownerPage.goto(`${teamUrl}/settings`, { waitUntil: "networkidle" });
   const toggle = ownerPage.getByRole("switch", { name: /require a video/i });
-  await toggle.click();
-  await ownerPage.waitForLoadState("networkidle");
+  await Promise.all([
+    ownerPage.waitForResponse((r) => r.request().method() === "POST" && r.ok()),
+    toggle.click(),
+  ]);
   await ownerPage.reload({ waitUntil: "networkidle" });
   await expect(ownerPage.getByRole("switch", { name: /require a video/i })).toHaveAttribute("aria-checked", "true");
 

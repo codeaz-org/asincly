@@ -6,9 +6,10 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'asincly_app') THEN
-    -- ponytail: dev password baked in. In prod, ALTER ROLE asincly_app
-    -- WITH PASSWORD '...' via an out-of-band secret before migrations.
-    CREATE ROLE asincly_app WITH LOGIN PASSWORD 'asincly_app';
+    -- No password here: hosted Postgres (e.g. Neon) rejects weak ones, and
+    -- secrets don't belong in migrations. scripts/migrate.mjs sets it from
+    -- APP_DB_PASSWORD (or a local-only development default).
+    CREATE ROLE asincly_app WITH LOGIN;
   END IF;
 END $$;
 --> statement-breakpoint
