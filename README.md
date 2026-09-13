@@ -170,6 +170,8 @@ The essentials. Everything is documented in [`.env.example`](./.env.example).
 | `GROQ_API_KEY` | Optional | Video transcription and AI drafts |
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Optional | Google sign-in |
 | `NEXT_PUBLIC_SOURCE_URL` | If you modify the code | Link to your fork's source (AGPL §13) |
+| `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` | Optional | Slack digest and DM reminders ([docs/SLACK.md](./docs/SLACK.md)) |
+| `BILLING_ENABLED`, `STRIPE_*` | Hosted cloud only | Plans and Stripe billing. Leave unset when self-hosting |
 
 ## Tech stack
 
@@ -200,7 +202,7 @@ The essentials. Everything is documented in [`.env.example`](./.env.example).
 ## Roadmap
 
 See **[docs/PLAN.md](./docs/PLAN.md)**. Next up:
-- Slack app (digest to a channel, DM reminders, `/standup`)
+- Slack `/standup` text check-in
 - Branded HTML emails
 - Web push / PWA
 - Admin 2FA
@@ -228,6 +230,7 @@ Every new organization gets a **14-day Pro trial, no card required**.
 
 **Self-hosting is not limited:** plans and limits only exist when `BILLING_ENABLED=true`,
 which is how the cloud runs. Your own install has every feature, free, with no license key.
+Running your own paid service on Asincly? See [Billing](./docs/DEPLOYMENT.md#billing-hosted-cloud).
 
 ## Contributing
 

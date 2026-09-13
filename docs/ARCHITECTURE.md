@@ -63,12 +63,43 @@ review, edit, untag, send ────────▶  submitCheckIn (video rule
 - **Audit:** mutations write to `audit_log`.
 - **Headers:** a strict CSP and security headers are set in `next.config.ts`.
 
+## Plans and billing
+
+- **Where plans apply:** only when `BILLING_ENABLED=true`. Otherwise
+  `getEntitlements()` returns `UNLIMITED` and no billing table is touched.
+- **`src/lib/billing/plans.ts`:** pure and tested. It holds prices, limits, and
+  `entitlementsFor(state)`: trial → Pro, active → Pro, past due → Pro for 7 days, anything
+  else → Free.
+- **`src/lib/billing/entitlements.ts`:** the DB-backed checks called at entry points:
+  - invites (seat cap, guests)
+  - team and schedule creation
+  - the require-video rule
+  - video length on register
+  - AI minutes before transcription (`ai_usage`)
+  - locked history on Today and check-in pages
+- **Stripe** (`src/lib/billing/stripe.ts`, `src/lib/actions/billing.ts`):
+  - Checkout Sessions in subscription mode, per-seat quantity, and the Customer Portal.
+  - `/api/stripe/webhook` verifies signatures, is idempotent through `stripe_event`, and
+    maps subscriptions onto `org_billing` (`src/lib/billing/subscription.ts`).
+  - `syncSeats()` keeps the quantity equal to billable members.
+- **Guests** (`member.role = 'guest'`) read, react and reply. RLS uses
+  `is_team_contributor()` so they can't write check-ins, recordings or away periods.
+
+## Slack
+
+- **Install:** OAuth v2 per team (`/api/slack/install`, `/api/slack/callback`) with an
+  HMAC-signed state. The bot token is encrypted in `slack_install`, readable only by team
+  admins under RLS.
+- **Sending:** the cron tick posts digests to the chosen channel and DMs reminders
+  (`src/lib/slack/notify.ts`). Messages are built by pure functions in
+  `src/lib/slack/format.ts`, which escape all user text.
+
 ## Scheduling
 
 `/api/cron/tick` (Bearer `CRON_SECRET`) does three jobs:
-- sends window-open reminders, skipping away members;
-- generates digests;
-- purges recordings past team retention.
+- sends window-open reminders (in-app, email, Slack DM), skipping away members and guests;
+- generates digests (in-app, Slack channel);
+- purges recordings past team retention (plan-aware on the hosted cloud).
 
 It is called by GitHub Actions, the Docker `scheduler` service or Vercel Cron.
 
@@ -85,5 +116,7 @@ It is called by GitHub Actions, the Docker `scheduler` service or Vercel Cron.
 | `src/lib/actions` | Server actions (all Zod-validated) |
 | `src/lib/ai` | Provider interface, Groq, fake, noop, draft schema |
 | `src/lib/draft.ts` | composeDraft / autoTag / untag (pure, tested) |
+| `src/lib/billing` | Plans, entitlements, Stripe client, webhook handling, seat sync |
+| `src/lib/slack` | Slack API client, OAuth state, message formatting, cron senders |
 | `drizzle/` | SQL migrations, including hand-written RLS |
 | `e2e/` | Playwright flows |

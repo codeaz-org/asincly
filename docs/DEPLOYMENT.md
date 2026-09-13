@@ -253,6 +253,58 @@ Keep the bucket **private**. Asincly only hands out short-lived signed URLs.
 - **Modified the code?** Set `NEXT_PUBLIC_SOURCE_URL` to your fork. The AGPL requires
   offering the modified source to your users.
 
+## Slack
+
+Optional. Create a Slack app from the manifest in **[SLACK.md](SLACK.md)**, set
+`SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET`, then connect each team under
+**Settings → Integrations**.
+
+## Billing (hosted cloud)
+
+Self-hosters skip this section: leave `BILLING_ENABLED` unset and every feature is on.
+
+Asincly Cloud, or anyone offering Asincly as a paid service, turns on plans with
+`BILLING_ENABLED=true`. Prices and limits live in `src/lib/billing/plans.ts`.
+
+1. **Try it in a Stripe sandbox first.** `stripe sandbox create` gives test keys without a
+   business registration.
+2. **Create the catalog.** `STRIPE_SECRET_KEY=... node scripts/stripe-setup.mjs` creates the
+   *Asincly Pro* product, a monthly and a yearly per-member price, and a Customer Portal
+   configuration.
+   - It is safe to re-run.
+   - It prints `STRIPE_PRICE_MONTHLY` / `STRIPE_PRICE_YEARLY`.
+   - Prices are created tax-exclusive; pass `--tax-behavior=inclusive` to change that
+     before the first run.
+3. **Add a webhook endpoint** at `https://<your app>/api/stripe/webhook` with these events:
+   - `checkout.session.completed`
+   - `checkout.session.async_payment_succeeded`
+   - `customer.subscription.created`, `customer.subscription.updated`,
+     `customer.subscription.deleted`
+   - `invoice.paid`
+   - `invoice.payment_failed`
+
+   Put its signing secret in `STRIPE_WEBHOOK_SECRET`. Locally:
+   `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
+4. **Set the environment:** `BILLING_ENABLED=true`, `STRIPE_SECRET_KEY` (a restricted `rk_`
+   key is recommended), `STRIPE_WEBHOOK_SECRET`, and optionally the two price ids.
+5. **Tax.** `STRIPE_TAX_ENABLED` stays off until you have active registrations in Stripe
+   Tax.
+   - With it on and no registration, Stripe calculates no tax at all.
+   - Checkout always collects billing addresses and tax IDs, so turning it on later
+     needs no code change.
+   - The product uses tax code `txcd_10103001` (SaaS, business use). Confirm it fits
+     before enabling.
+
+How it behaves:
+
+- **Trial:** new organizations get 14 days of Pro, with no card.
+- **Seats:** they follow billable members (guests are free), with prorated invoice
+  changes.
+- **Failed payment:** Pro stays on for 7 days, then the organization drops to Free.
+- **Downgrades lock, they don't delete.** History older than 14 days is hidden. The
+  retention job trims Free videos to 14 days only 30 days after Pro ended.
+- **Deleting an organization** cancels its subscription immediately.
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -264,3 +316,4 @@ Keep the bucket **private**. Asincly only hands out short-lived signed URLs.
 | `password authentication failed for user "asincly_app"` | Run `pnpm db:migrate` with `APP_DB_PASSWORD` set, and use the same password in `DATABASE_URL_APP` |
 | Video uploads but no draft appears | Set `GROQ_API_KEY`; check server logs for `groq transcribe`/`groq draft` errors and your Groq rate limits |
 | Reminders/digests never happen | The scheduler isn't calling `/api/cron/tick` with the right `CRON_SECRET` |
+| Paid in Stripe but the plan still shows Free | The webhook isn't reaching `/api/stripe/webhook` or `STRIPE_WEBHOOK_SECRET` is wrong; check the endpoint's delivery log in Stripe |
