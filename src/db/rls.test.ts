@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "./index";
 import {
   blockerActions,
+  orgBilling,
   checkInComments,
   checkInReactions,
   checkIns,
@@ -246,5 +247,52 @@ describe("row-level security: social layer", () => {
     ).rejects.toThrow();
     const asB = await withUser(userBId, (tx) => tx.select().from(checkInReactions));
     expect(asB).toEqual([]);
+  });
+});
+
+describe("row-level security: guests and billing", () => {
+  let guestId: string;
+
+  beforeAll(async () => {
+    const [g] = await db
+      .insert(users)
+      .values({ email: uniq("guest") + "@t.local", name: "Guest" })
+      .returning();
+    guestId = g.id;
+    await db.insert(members).values({ teamId: teamAId, userId: guestId, role: "guest" });
+    await db.insert(orgBilling).values({ orgId: orgAId, plan: "pro", status: "trialing" });
+    cleanup.unshift(() => db.delete(users).where(eq(users.id, guestId)));
+  });
+
+  it("lets a guest read and reply but not check in", async () => {
+    const readable = await withUser(guestId, (tx) => tx.select().from(checkIns));
+    expect(readable.some((c) => c.id === checkInAId)).toBe(true);
+
+    await withUser(guestId, (tx) =>
+      tx.insert(checkInComments).values({ checkInId: checkInAId, userId: guestId, body: "Nice work" }),
+    );
+
+    const [ci] = await db.select().from(checkIns).where(eq(checkIns.id, checkInAId));
+    await expect(
+      withUser(guestId, (tx) =>
+        tx.insert(checkIns).values({ occurrenceId: ci.occurrenceId, userId: guestId, localDate: "2026-09-14" }),
+      ),
+    ).rejects.toThrow();
+    await expect(
+      withUser(guestId, (tx) =>
+        tx.insert(memberAway).values({ teamId: teamAId, userId: guestId, startsOn: "2026-09-14", endsOn: "2026-09-15" }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("shows billing only to the organization and never lets the app role write it", async () => {
+    const asA = await withUser(userAId, (tx) => tx.select().from(orgBilling));
+    const asB = await withUser(userBId, (tx) => tx.select().from(orgBilling));
+    expect(asA.map((b) => b.orgId)).toContain(orgAId);
+    expect(asB.some((b) => b.orgId === orgAId)).toBe(false);
+    const updated = await withUser(userAId, (tx) =>
+      tx.update(orgBilling).set({ plan: "free" }).where(eq(orgBilling.orgId, orgAId)).returning(),
+    );
+    expect(updated).toEqual([]);
   });
 });
