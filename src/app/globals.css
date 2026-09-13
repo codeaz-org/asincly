@@ -46,38 +46,71 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Brand palette — the landing page's "async morning" world. */
+  --color-ground: var(--ground);
+  --color-ground-raised: var(--ground-raised);
+  --color-ink: var(--ink);
+  --color-soft: var(--soft);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-amber: var(--amber);
+  --color-amber-deep: var(--amber-deep);
+  --color-amber-ink: var(--amber-ink);
+  --color-cold: var(--cold);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+
+  --animate-mark-sweep: mark-sweep 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  --animate-mark-breathe: mark-breathe 2.6s ease-in-out infinite;
+  --animate-rise-in: rise-in 420ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-/* Dark-only for now — light mode lands with the theme toggle later. */
+/* Dark only. Warm charcoal ground, cream ink, one amber accent. */
 :root,
 .dark {
-  --background: oklch(0.14 0.008 250);
-  --foreground: oklch(0.96 0.006 240);
-  --card: oklch(0.17 0.008 250);
-  --card-foreground: oklch(0.96 0.006 240);
-  --popover: oklch(0.17 0.008 250);
-  --popover-foreground: oklch(0.96 0.006 240);
-  --primary: oklch(0.96 0.006 240);
-  --primary-foreground: oklch(0.15 0.008 250);
-  --secondary: oklch(0.22 0.008 250);
-  --secondary-foreground: oklch(0.96 0.006 240);
-  --muted: oklch(0.22 0.008 250);
-  --muted-foreground: oklch(0.60 0.02 240);
-  --accent: oklch(0.72 0.16 155); /* signature emerald */
-  --accent-foreground: oklch(0.12 0.02 155);
-  --destructive: oklch(0.68 0.20 22);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.72 0.16 155);
-  --radius: 0.5rem;
-  --sidebar: oklch(0.17 0.008 250);
-  --sidebar-foreground: oklch(0.96 0.006 240);
-  --sidebar-primary: oklch(0.72 0.16 155);
-  --sidebar-primary-foreground: oklch(0.12 0.02 155);
-  --sidebar-accent: oklch(0.22 0.008 250);
-  --sidebar-accent-foreground: oklch(0.96 0.006 240);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.72 0.16 155);
+  --ground: oklch(0.17 0.012 60);
+  --ground-raised: oklch(0.205 0.014 60);
+  --ink: oklch(0.94 0.02 75);
+  --soft: oklch(0.68 0.03 70);
+  --faint: oklch(0.52 0.025 70);
+  --line: oklch(0.94 0.02 75 / 0.1);
+  --line-strong: oklch(0.94 0.02 75 / 0.2);
+  --amber: oklch(0.78 0.15 60);
+  --amber-deep: oklch(0.6 0.13 55);
+  --amber-ink: oklch(0.2 0.03 60);
+  --cold: oklch(0.66 0.035 250);
+  --danger: oklch(0.72 0.15 35);
+  --ok: oklch(0.8 0.1 120);
+
+  --background: var(--ground);
+  --foreground: var(--ink);
+  --card: var(--ground-raised);
+  --card-foreground: var(--ink);
+  --popover: oklch(0.2 0.014 60);
+  --popover-foreground: var(--ink);
+  --primary: var(--amber);
+  --primary-foreground: var(--amber-ink);
+  --secondary: oklch(0.24 0.014 60);
+  --secondary-foreground: var(--ink);
+  --muted: oklch(0.24 0.014 60);
+  --muted-foreground: var(--soft);
+  --accent: var(--amber);
+  --accent-foreground: var(--amber-ink);
+  --destructive: var(--danger);
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--amber);
+  --radius: 0.75rem;
+  --sidebar: var(--ground-raised);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--amber);
+  --sidebar-primary-foreground: var(--amber-ink);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--amber);
 }
 
 @layer base {
@@ -85,20 +118,23 @@
     @apply border-border outline-ring/50;
   }
   html {
-    @apply font-sans antialiased;
+    @apply antialiased;
+    font-family: var(--font-sans), "Apple Color Emoji", "Segoe UI Emoji", var(--font-emoji), system-ui, sans-serif;
     color-scheme: dark;
   }
   body {
     @apply bg-background text-foreground;
     background-image:
-      radial-gradient(ellipse 80% 50% at 50% -10%, oklch(0.72 0.16 155 / 0.06), transparent 60%),
-      radial-gradient(ellipse 60% 40% at 100% 100%, oklch(0.60 0.18 260 / 0.04), transparent 60%);
+      radial-gradient(ellipse 110% 70% at 85% -10%, oklch(0.26 0.035 70 / 0.55), transparent 55%),
+      radial-gradient(ellipse 120% 80% at 10% 115%, oklch(0.28 0.06 50 / 0.35), transparent 60%);
     background-attachment: fixed;
   }
-  /* Native form controls: play nice with dark palette */
+  ::selection {
+    background: oklch(0.78 0.15 60 / 0.35);
+  }
   input[type="time"]::-webkit-calendar-picker-indicator,
   input[type="date"]::-webkit-calendar-picker-indicator {
-    filter: invert(0.9);
+    filter: invert(0.9) sepia(0.3);
     opacity: 0.6;
     cursor: pointer;
   }
@@ -107,11 +143,62 @@
   }
 }
 
-/* Deep-linked check-in (from a mention notification): flash a ring. */
-.feed-card:target {
+/* ── Type roles shared by every app screen ── */
+@utility kicker {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+@utility emoji {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", var(--font-emoji), "Noto Color Emoji", sans-serif;
+  font-variant-emoji: emoji;
+}
+@utility display {
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+
+/* ── Motion (state changes only) ── */
+@keyframes mark-sweep {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes mark-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes sunrise-fill {
+  from { clip-path: inset(0 0 0 100%); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@keyframes sunrise-glow {
+  0% { opacity: 0; transform: scale(0.6); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: scale(1.6); }
+}
+
+/* Deep-linked check-in (from ?focus=): flash an amber ring. */
+.feed-card:target,
+.feed-card[data-focus="true"] {
   animation: ci-flash 2.4s cubic-bezier(0.2, 0.6, 0.3, 1);
 }
 @keyframes ci-flash {
-  0% { box-shadow: 0 0 0 3px oklch(0.8 0.14 60 / 0.9); }
-  100% { box-shadow: 0 0 0 3px transparent; }
+  0% { box-shadow: 0 0 0 2px oklch(0.78 0.15 60 / 0.9); }
+  100% { box-shadow: 0 0 0 2px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

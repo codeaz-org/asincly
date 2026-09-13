@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PRESET_RRULES,
+  isValidTimeZone,
   localDate,
   localToUtc,
   nextOccurrenceDate,
@@ -92,5 +93,14 @@ describe("nextOccurrenceDate", () => {
     // 2026-05-12 is a Tuesday.
     const from = new Date("2026-05-12T00:00:00Z");
     expect(nextOccurrenceDate(PRESET_RRULES.mwf, from, "UTC")).toBe("2026-05-13");
+  });
+});
+
+describe("isValidTimeZone", () => {
+  it("accepts IANA names and rejects junk", () => {
+    expect(isValidTimeZone("Europe/Bucharest")).toBe(true);
+    expect(isValidTimeZone("UTC")).toBe(true);
+    expect(isValidTimeZone("Mars/Olympus")).toBe(false);
+    expect(isValidTimeZone("")).toBe(false);
   });
 });

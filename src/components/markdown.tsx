@@ -13,7 +13,7 @@ export function Markdown({
   currentUserId?: string;
 }) {
   if (!children.trim()) {
-    return <p className="text-sm text-muted-foreground/50 italic">Empty.</p>;
+    return <p className="text-sm text-faint">Nothing here.</p>;
   }
   return (
     <div className="prose-tight">
@@ -21,7 +21,7 @@ export function Markdown({
         remarkPlugins={[remarkGfm]}
         components={{
           p: ({ children }) => <p className="text-sm leading-[1.7] text-foreground/90">{children}</p>,
-          ul: ({ children }) => <ul className="text-sm leading-[1.7] space-y-1.5 pl-4 list-disc marker:text-emerald-400/50 text-foreground/90">{children}</ul>,
+          ul: ({ children }) => <ul className="text-sm leading-[1.7] space-y-1.5 pl-4 list-disc marker:text-amber/60 text-foreground/90">{children}</ul>,
           ol: ({ children }) => <ol className="text-sm leading-[1.7] space-y-1.5 pl-4 list-decimal marker:text-muted-foreground/60 text-foreground/90">{children}</ol>,
           li: ({ children, className }) => {
             // GFM task list items get className="task-list-item"
@@ -36,16 +36,16 @@ export function Markdown({
               type="checkbox"
               checked={checked}
               readOnly
-              className="mt-[0.3rem] size-4 accent-emerald-400 rounded border-white/20"
+              className="mt-[0.3rem] size-4 accent-[oklch(0.78_0.15_60)] rounded border-line"
             />
           ),
           h1: ({ children }) => (
-            <h3 className="text-lg font-medium mt-3 tracking-tight" style={{ fontFamily: "var(--font-serif), Georgia, serif" }}>
+            <h3 className="text-lg font-medium mt-3 tracking-tight">
               {children}
             </h3>
           ),
           h2: ({ children }) => (
-            <h4 className="text-base font-medium mt-3 tracking-tight" style={{ fontFamily: "var(--font-serif), Georgia, serif" }}>
+            <h4 className="text-base font-medium mt-3 tracking-tight">
               {children}
             </h4>
           ),
@@ -54,13 +54,13 @@ export function Markdown({
           ),
           strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
           em: ({ children }) => (
-            <em style={{ fontFamily: "var(--font-serif), Georgia, serif" }} className="text-foreground/95">
+            <em className="text-foreground/95">
               {children}
             </em>
           ),
-          hr: () => <hr className="my-3 border-white/[0.08]" />,
+          hr: () => <hr className="my-3 border-line" />,
           code: ({ children }) => (
-            <code className="rounded bg-emerald-400/[0.08] border border-emerald-400/15 px-1.5 py-0.5 text-[0.82em] font-mono text-emerald-100/90">
+            <code className="rounded bg-ink/[0.06] border border-line px-1.5 py-0.5 text-[0.82em] font-mono text-ink">
               {children}
             </code>
           ),
@@ -73,8 +73,8 @@ export function Markdown({
                 <span
                   className={
                     isMe
-                      ? "inline-flex items-center rounded-md bg-amber-400/20 text-amber-200 border border-amber-400/40 px-1.5 py-0.5 text-[0.85em] font-semibold"
-                      : "inline-flex items-center rounded-md bg-accent/15 text-accent border border-accent/25 px-1.5 py-0.5 text-[0.85em] font-medium"
+                      ? "inline-flex items-center rounded-md bg-amber text-amber-ink px-1.5 py-px text-[0.85em] font-semibold"
+                      : "inline-flex items-center rounded-md bg-amber/[0.12] text-amber px-1.5 py-px text-[0.85em] font-medium"
                   }
                 >
                   {children}
@@ -93,7 +93,7 @@ export function Markdown({
             );
           },
           blockquote: ({ children }) => (
-            <blockquote className="border-l-2 border-amber-400/40 pl-3 text-muted-foreground text-sm italic">
+            <blockquote className="border-l-2 border-amber/40 pl-3 text-muted-foreground text-sm italic">
               {children}
             </blockquote>
           ),

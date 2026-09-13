@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { members, organizations, schedules, teams, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { rateLimit } from "@/lib/rate-limit";
-import { PRESET_RRULES, type PresetKey } from "@/lib/time";
+import { PRESET_RRULES, isValidTimeZone, type PresetKey } from "@/lib/time";
 import { requireUser } from "@/lib/session";
 import { slugify } from "@/lib/slug";
 
@@ -205,7 +205,7 @@ export async function setName(formData: FormData) {
   revalidatePath("/", "layout");
 }
 
-const UpdateTzSchema = z.object({ tz: z.string().min(1).max(64) });
+const UpdateTzSchema = z.object({ tz: z.string().min(1).max(64).refine(isValidTimeZone, "Unknown time zone") });
 
 export async function updateOwnTz(tz: string) {
   const user = await requireUser();

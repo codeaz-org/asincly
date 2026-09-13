@@ -2,11 +2,23 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { AtSign, Bell, CircleAlert, Hand, MessageCircle, Sparkles, Sunrise, Check } from "lucide-react";
 import { markAllRead } from "@/lib/actions/notifications";
+import { Button } from "@/components/ui/button";
+import { PopoverContent, PopoverRoot, PopoverTrigger } from "@/components/ui/menu";
+import { LogoMark } from "@/components/brand/mark";
 
 export type InboxItem = {
   id: string;
-  type: "mentioned" | "blocker_on_your_item" | "window_open" | "digest_ready";
+  type:
+    | "mentioned"
+    | "blocker_on_your_item"
+    | "window_open"
+    | "digest_ready"
+    | "commented"
+    | "help_offered"
+    | "blocker_resolved"
+    | "nudged";
   title: string;
   body: string | null;
   linkPath: string | null;
@@ -18,102 +30,71 @@ export function Inbox({ items, unread }: { items: InboxItem[]; unread: number })
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="relative inline-flex items-center justify-center size-9 rounded-md border border-white/10 hover:bg-white/[0.04] transition"
-        aria-label="Inbox"
+    <PopoverRoot open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        aria-label={unread > 0 ? `Inbox, ${unread} unread` : "Inbox"}
+        className="relative grid place-items-center size-9 rounded-lg text-soft hover:text-ink hover:bg-ink/[0.05] transition outline-none focus-visible:ring-2 focus-visible:ring-amber"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          className="size-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M6 8a6 6 0 0 1 12 0v5l1.5 3H4.5L6 13Z" />
-          <path d="M10 19a2 2 0 0 0 4 0" />
-        </svg>
+        <Bell className="size-[18px]" />
         {unread > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-accent text-[10px] font-mono text-accent-foreground grid place-items-center">
+          <span className="absolute top-1 right-1 min-w-4 h-4 px-1 rounded-full bg-amber text-[10px] font-semibold text-amber-ink grid place-items-center tabular-nums">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
-      </button>
-
-      {open && (
-        <>
-          <button
-            type="button"
-            aria-hidden
-            onClick={() => setOpen(false)}
-            className="fixed inset-0 z-40 cursor-default"
-          />
-          <div className="absolute right-0 top-11 z-50 w-80 max-w-[calc(100vw-1.5rem)] rounded-md border border-white/10 bg-zinc-950/95 backdrop-blur shadow-xl overflow-hidden">
-            <header className="flex items-center justify-between px-3 py-2 border-b border-white/5">
-              <span className="text-xs uppercase tracking-wider text-muted-foreground">
-                Inbox
-              </span>
-              {unread > 0 && (
-                <form action={markAllRead}>
-                  <button
-                    type="submit"
-                    className="text-[11px] text-muted-foreground hover:text-foreground transition"
-                  >
-                    Mark all read
-                  </button>
-                </form>
-              )}
-            </header>
-            {items.length === 0 ? (
-              <p className="px-4 py-8 text-sm text-muted-foreground text-center">
-                No notifications.
-              </p>
-            ) : (
-              <ul className="max-h-96 overflow-y-auto">
-                {items.map((n) => (
-                  <li key={n.id} className={n.readAt ? "opacity-70" : ""}>
-                    <NotificationRow item={n} onNavigate={() => setOpen(false)} />
-                  </li>
-                ))}
-              </ul>
-            )}
+      </PopoverTrigger>
+      <PopoverContent className="w-[22rem] max-w-[calc(100vw-1.5rem)] p-0 overflow-hidden">
+        <header className="flex items-center justify-between px-4 py-3 border-b border-line">
+          <span className="kicker">Inbox</span>
+          {unread > 0 && (
+            <form action={markAllRead}>
+              <Button type="submit" variant="ghost" size="sm" className="h-7 -mr-2">
+                <Check /> Mark all read
+              </Button>
+            </form>
+          )}
+        </header>
+        {items.length === 0 ? (
+          <div className="px-6 py-10 flex flex-col items-center gap-3 text-center">
+            <LogoMark size={28} state="done" className="text-ink" />
+            <p className="text-sm text-soft">All caught up.</p>
           </div>
-        </>
-      )}
-    </div>
+        ) : (
+          <ul className="max-h-[26rem] overflow-y-auto py-1">
+            {items.map((n) => (
+              <li key={n.id}>
+                <NotificationRow item={n} onNavigate={() => setOpen(false)} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </PopoverContent>
+    </PopoverRoot>
   );
 }
 
-function NotificationRow({
-  item,
-  onNavigate,
-}: {
-  item: InboxItem;
-  onNavigate: () => void;
-}) {
-  const dot = dotFor(item.type);
+function NotificationRow({ item, onNavigate }: { item: InboxItem; onNavigate: () => void }) {
   const content = (
-    <div className="flex items-start gap-3 px-3 py-3 hover:bg-white/[0.03] transition">
-      <span className={`mt-1.5 size-1.5 rounded-full ${dot}`} />
+    <div className="flex items-start gap-3 px-4 py-3 hover:bg-ink/[0.04] transition">
+      <span
+        className={`mt-0.5 grid place-items-center size-7 rounded-full shrink-0 [&_svg]:size-3.5 ${
+          item.readAt ? "bg-ink/[0.05] text-soft" : "bg-amber/[0.14] text-amber"
+        }`}
+      >
+        {iconFor(item.type)}
+      </span>
       <div className="flex-1 min-w-0 space-y-0.5">
-        <p className="text-sm font-medium truncate">{item.title}</p>
-        {item.body && (
-          <p className="text-xs text-muted-foreground truncate">{item.body}</p>
-        )}
-        <p className="text-[10px] font-mono text-muted-foreground/70">
+        <p className={`text-sm leading-snug ${item.readAt ? "text-soft" : "text-ink font-medium"}`}>{item.title}</p>
+        {item.body && <p className="text-xs text-soft line-clamp-2">{item.body}</p>}
+        <p className="text-[10px] font-mono text-faint" suppressHydrationWarning>
           {relative(item.createdAt)}
         </p>
       </div>
+      {!item.readAt && <span aria-label="unread" className="mt-2 size-1.5 rounded-full bg-amber shrink-0" />}
     </div>
   );
   if (item.linkPath) {
     return (
-      <Link href={item.linkPath} onClick={onNavigate} className="block">
+      <Link href={item.linkPath} onClick={onNavigate} className="block outline-none focus-visible:bg-ink/[0.06]">
         {content}
       </Link>
     );
@@ -121,20 +102,33 @@ function NotificationRow({
   return content;
 }
 
-function dotFor(t: InboxItem["type"]): string {
-  if (t === "mentioned") return "bg-accent";
-  if (t === "blocker_on_your_item") return "bg-red-400";
-  if (t === "window_open") return "bg-amber-400";
-  return "bg-indigo-400";
+function iconFor(t: InboxItem["type"]): React.ReactNode {
+  switch (t) {
+    case "mentioned":
+      return <AtSign />;
+    case "blocker_on_your_item":
+      return <CircleAlert />;
+    case "window_open":
+      return <Sunrise />;
+    case "commented":
+      return <MessageCircle />;
+    case "help_offered":
+      return <Hand />;
+    case "blocker_resolved":
+      return <Check />;
+    case "nudged":
+      return <Hand />;
+    default:
+      return <Sparkles />;
+  }
 }
 
 function relative(d: Date): string {
-  const diff = Date.now() - d.getTime();
+  const diff = Date.now() - new Date(d).getTime();
   const m = Math.round(diff / 60_000);
   if (m < 1) return "just now";
   if (m < 60) return `${m}m ago`;
   const h = Math.round(m / 60);
   if (h < 24) return `${h}h ago`;
-  const days = Math.round(h / 24);
-  return `${days}d ago`;
+  return `${Math.round(h / 24)}d ago`;
 }

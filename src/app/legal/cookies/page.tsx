@@ -13,7 +13,7 @@ export default function CookiesPage() {
       <h2 className="text-xl font-medium mt-8">The cookie we set</h2>
       <table className="text-sm w-full">
         <thead>
-          <tr className="border-b border-white/10 text-muted-foreground text-left">
+          <tr className="border-b border-line text-muted-foreground text-left">
             <th className="py-2 pr-4">Name</th>
             <th className="py-2 pr-4">Purpose</th>
             <th className="py-2 pr-4">Lifetime</th>
@@ -21,7 +21,7 @@ export default function CookiesPage() {
           </tr>
         </thead>
         <tbody>
-          <tr className="border-b border-white/5">
+          <tr className="border-b border-line">
             <td className="py-2 pr-4 font-mono">authjs.session-token</td>
             <td className="py-2 pr-4">Keeps you signed in.</td>
             <td className="py-2 pr-4 font-mono">30 days</td>

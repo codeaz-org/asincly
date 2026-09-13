@@ -45,5 +45,5 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers,
   // Expired/invalid magic links land back on our sign-in page instead of
   // Auth.js's unstyled default error screen.
-  pages: { signIn: "/sign-in", error: "/sign-in" },
+  pages: { signIn: "/sign-in", error: "/sign-in", verifyRequest: "/sign-in?sent=1" },
 });

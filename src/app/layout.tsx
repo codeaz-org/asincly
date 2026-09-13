@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
-import { Fraunces, Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono, Noto_Color_Emoji } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,16 +12,23 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Editorial serif for the ribbon landing's peak + section headings.
-// Optical size axis pulls in one variable file, no per-weight requests.
-const fraunces = Fraunces({
-  variable: "--font-serif",
-  subsets: ["latin"],
-  axes: ["opsz"],
+// Fallback for systems without a colour emoji font (most Linux desktops), so
+// reactions look the same everywhere. Google splits it by unicode-range, so
+// browsers only download the glyphs actually on screen.
+const notoEmoji = Noto_Color_Emoji({
+  variable: "--font-emoji",
+  weight: "400",
+  subsets: ["emoji"],
+  preload: false,
 });
 
 const description =
   "Async standups for remote teams. Your team checks in during their own morning. A short screen and camera recording turns into a scannable summary. Nobody waits on anybody.";
+
+export const viewport: Viewport = {
+  themeColor: "#1c1814",
+  colorScheme: "dark",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
@@ -47,10 +54,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`dark ${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full`}
+      className={`dark ${geistSans.variable} ${geistMono.variable} ${notoEmoji.variable} h-full`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col selection:bg-emerald-400/25 selection:text-emerald-50">
+      <body className="min-h-full flex flex-col">
         {children}
       </body>
     </html>
