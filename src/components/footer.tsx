@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/logo";
+import { SOURCE_URL } from "@/lib/source";
 
 export function Footer() {
   return (
@@ -8,7 +9,10 @@ export function Footer() {
         <p className="text-xs text-soft inline-flex items-center gap-2">
           <Logo size={18} className="text-ink text-xs" href="/" />
           <span className="text-faint">·</span>
-          AGPL-3.0 · self-hostable
+          Open source ·{" "}
+          <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer" className="hover:text-ink transition">
+            AGPL-3.0
+          </a>
         </p>
         <nav aria-label="Footer" className="flex flex-wrap gap-4 text-xs text-soft">
           <Link href="/legal/terms" className="hover:text-ink transition">
@@ -23,6 +27,9 @@ export function Footer() {
           <Link href="/legal/security" className="hover:text-ink transition">
             Security
           </Link>
+          <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer" className="hover:text-ink transition">
+            Source code
+          </a>
         </nav>
       </div>
     </footer>

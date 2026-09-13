@@ -1,0 +1,119 @@
+# Self-host Asincly on one machine: Postgres + MinIO + app + scheduler.
+#
+#   cp .env.example .env          # fill in the values marked "self-host" in docs/DEPLOYMENT.md
+#   docker compose -f docker-compose.selfhost.yml up -d --build
+#
+# Add `--profile https` with APP_DOMAIN and S3_DOMAIN set to get automatic
+# HTTPS from Caddy (needed for cameras on phones and for real users).
+
+name: asincly
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-asincly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-asincly}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-asincly}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID in .env}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY in .env}
+    ports:
+      # Browsers upload recordings straight to storage with pre-signed URLs,
+      # so S3_ENDPOINT must be reachable from users' browsers.
+      - "9000:9000"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      target: build
+      args: &build-args
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+        NEXT_PUBLIC_SOURCE_URL: ${NEXT_PUBLIC_SOURCE_URL:-https://github.com/codeaz-org/asincly}
+        S3_ENDPOINT: ${S3_ENDPOINT:-http://localhost:9000}
+    command: ["node", "scripts/migrate.mjs"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-asincly}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-asincly}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      target: runtime
+      args: *build-args
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-asincly}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-asincly}
+      DATABASE_URL_APP: postgres://asincly_app:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-asincly}
+      AUTH_TRUST_HOST: "true"
+    ports:
+      - "3000:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+
+  # Reminders, digests and retention purges: hit the tick endpoint every 5 min.
+  scheduler:
+    image: curlimages/curl:8.10.1
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          sleep 300
+          curl -fsS -H "authorization: Bearer $$CRON_SECRET" http://app:3000/api/cron/tick > /dev/null || echo "tick failed"
+        done
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in .env}
+    depends_on:
+      - app
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN for the https profile}
+      S3_DOMAIN: ${S3_DOMAIN:?set S3_DOMAIN for the https profile}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+    depends_on:
+      - app
+      - minio
+
+volumes:
+  pgdata:
+  miniodata:
+  caddydata:

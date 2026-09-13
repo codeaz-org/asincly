@@ -14,6 +14,7 @@ import { setName } from "@/lib/actions/onboarding";
 import { displayName } from "@/lib/display";
 import { listRecentForUser, unreadCount } from "@/lib/notifications";
 import { getMemberships } from "@/lib/session";
+import { SOURCE_URL } from "@/lib/source";
 
 type Props = {
   orgSlug: string;
@@ -82,6 +83,7 @@ export async function AppShell(props: Props) {
             name={displayName(me?.name, props.userEmail)}
             email={props.userEmail}
             settingsHref={canManage ? `${teamRoot}/settings` : null}
+            sourceUrl={SOURCE_URL}
             signOutAction={signOutAction}
           />
         </div>

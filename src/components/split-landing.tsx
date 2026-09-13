@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/logo";
+import { SOURCE_URL } from "@/lib/source";
 
 // ── Split stage ───────────────────────────────────────────────────────────────
 // Two worlds held in tension for the whole page: the 09:30 meeting (cold,
@@ -317,7 +318,9 @@ export function SplitLanding() {
                 tomorrow morning.
               </p>
               <Link href="/sign-in" className="cta">Start your team&rsquo;s morning →</Link>
-              <p className="trust">open source (AGPL-3.0) · self-hostable · encrypted at rest</p>
+              <p className="trust">
+                <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">open source (AGPL-3.0)</a> · self-hostable · encrypted at rest
+              </p>
               <p className="legal">
                 <Link href="/legal/terms">Terms</Link>
                 <Link href="/legal/privacy">Privacy</Link>
@@ -605,6 +608,7 @@ const css = `
 .panel--close .cta:hover { background: oklch(0.83 0.15 60); transform: translateY(-1px); }
 .panel--close .cta:active { transform: translateY(1px) scale(0.98); }
 .panel--close .cta:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+.trust a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .trust {
   font-family: var(--font-geist-mono, ui-monospace, monospace);
   font-size: 11px; letter-spacing: 0.06em; color: var(--warm-soft); margin: 22px 0 0;
@@ -736,7 +740,7 @@ const css = `
   .digest__row:nth-child(n+5) { display: none; }
   .peakline { font-size: clamp(2rem, 9vw, 2.8rem); }
   .panel--close .cta { margin-top: 18px; padding: 12px 20px; font-size: 14px; }
-  .trust { margin-top: 14px; font-size: 10px; }
+  rust { margin-top: 14px; font-size: 10px; }
   .legal { margin-top: 18px; }
   .chrome { padding: 14px 18px; }
   .card__note { font-size: 12px; }

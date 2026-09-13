@@ -80,6 +80,8 @@ const RegisterSchema = z
     durationMs: z.number().int().nonnegative().nullable(),
     // Previous-plan items the author tapped while talking.
     hints: z.record(z.string().regex(/^[0-9a-f]{8}$/), z.enum(["done", "not_done"])).optional(),
+    // Private talking points; handed to the drafter, never persisted.
+    notes: z.string().max(2000).optional(),
   })
   // Keys must be ones we minted for *this* check-in in getUploadUrl, so a
   // caller can't attach another team's object and get a playback URL for it.
@@ -136,7 +138,7 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
 
     // Transcribe + draft after the response; the client polls getRecordingDraft.
     after(async () => {
-      await processRecording(rec.id, parsed.hints ?? {});
+      await processRecording(rec.id, parsed.hints ?? {}, parsed.notes ?? "");
       if (ctx) revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}`);
     });
 

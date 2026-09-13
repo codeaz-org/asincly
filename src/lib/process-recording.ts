@@ -14,7 +14,7 @@ export type DraftHints = Record<string, "done" | "not_done">;
 // Runs after the response (next/server `after`) and reports progress through
 // recording.status so the author's screen can show what's happening.
 // Transcript, draft and summary contents are never logged.
-export async function processRecording(recordingId: string, hints: DraftHints = {}): Promise<void> {
+export async function processRecording(recordingId: string, hints: DraftHints = {}, notes = ""): Promise<void> {
   const [rec] = await db.select().from(recordings).where(eq(recordings.id, recordingId));
   if (!rec) return;
   if (rec.status !== "uploaded" && rec.status !== "failed") return;
@@ -66,6 +66,7 @@ export async function processRecording(recordingId: string, hints: DraftHints = 
         .map((r) => ({ userId: r.userId, name: displayName(r.name, r.email) })),
       authorTz: ctx.authorTz,
       hints,
+      notes,
     });
 
     const summary: Summary = {

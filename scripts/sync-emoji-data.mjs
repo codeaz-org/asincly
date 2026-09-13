@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const EMOJIBASE_VERSION = "17.0.0";
-const FILES = ["en/data.json", "en/messages.json", "en/shortcodes/iamcal.json"];
+const FILES = ["LICENSE", "en/data.json", "en/messages.json", "en/shortcodes/iamcal.json"];
 
 const work = mkdtempSync(join(tmpdir(), "emojibase-"));
 try {

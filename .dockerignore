@@ -1,0 +1,11 @@
+.git
+.next
+node_modules
+.env*
+!.env.example
+test-results
+playwright-report
+coverage
+scrollcraft
+docs/screenshots
+*.log

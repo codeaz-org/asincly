@@ -45,4 +45,6 @@ export type DraftInput = {
   authorTz: string;
   /** Statuses the author tapped while recording; they win over the model. */
   hints: Record<string, "done" | "not_done">;
+  /** Talking points the author jotted before recording (private, not stored). */
+  notes: string;
 };

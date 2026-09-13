@@ -1,0 +1,11 @@
+# Automatic HTTPS (Let's Encrypt) for the app and the recordings bucket.
+# Point both DNS records at this machine before starting the https profile.
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}
+
+{$S3_DOMAIN} {
+	reverse_proxy minio:9000
+}

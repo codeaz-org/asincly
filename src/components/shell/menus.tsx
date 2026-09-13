@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronsUpDown, LogOut, Plus, Settings2, UserRound } from "lucide-react";
+import { Check, ChevronsUpDown, Code2, LogOut, Plus, Settings2, UserRound } from "lucide-react";
 import {
   MenuContent,
   MenuItem,
@@ -62,11 +62,13 @@ export function UserMenu({
   name,
   email,
   settingsHref,
+  sourceUrl,
   signOutAction,
 }: {
   name: string;
   email: string;
   settingsHref: string | null;
+  sourceUrl: string;
   signOutAction: () => Promise<void>;
 }) {
   const initial = (name[0] ?? email[0] ?? "?").toUpperCase();
@@ -92,6 +94,13 @@ export function UserMenu({
             <Settings2 className="size-4 text-soft" /> Team settings
           </MenuLink>
         )}
+        <MenuItem
+          render={<a href={sourceUrl} target="_blank" rel="noopener noreferrer" />}
+          nativeButton={false}
+          className="md:hidden"
+        >
+          <Code2 className="size-4 text-soft" /> Source code
+        </MenuItem>
         <MenuSeparator />
         <form action={signOutAction}>
           <MenuItem

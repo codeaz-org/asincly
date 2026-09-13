@@ -52,6 +52,8 @@ const allowedDevOrigins = (process.env.DEV_ALLOWED_ORIGINS ?? "")
   .filter(Boolean);
 
 const nextConfig: NextConfig = {
+  // Self-contained server for the Docker image; ignored on Vercel.
+  output: "standalone",
   poweredByHeader: false,
   allowedDevOrigins,
   async headers() {

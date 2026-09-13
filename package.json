@@ -1,6 +1,16 @@
 {
   "name": "asincly",
   "version": "0.1.0",
+  "description": "Async standups for remote teams: record a short video, AI writes the check-in, the team reads it in their own morning.",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://github.com/codeaz-org/asincly#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codeaz-org/asincly.git"
+  },
+  "bugs": {
+    "url": "https://github.com/codeaz-org/asincly/issues"
+  },
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -14,11 +24,12 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "node scripts/migrate.mjs",
     "db:studio": "drizzle-kit studio",
     "db:push": "drizzle-kit push",
     "emoji:sync": "node scripts/sync-emoji-data.mjs",
-    "cron:local": "bash -c 'source .env && curl -sSf -H \"authorization: Bearer $CRON_SECRET\" http://localhost:3000/api/cron/tick && echo'"
+    "cron:local": "bash -c 'source .env && curl -sSf -H \"authorization: Bearer $CRON_SECRET\" http://localhost:3000/api/cron/tick && echo'",
+    "db:seed": "node scripts/seed-demo.mjs"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",
