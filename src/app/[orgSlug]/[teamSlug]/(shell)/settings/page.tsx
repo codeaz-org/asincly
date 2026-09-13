@@ -36,7 +36,7 @@ const PRESETS = [
 export default async function TeamSettingsPage({ params }: { params: Promise<{ orgSlug: string; teamSlug: string }> }) {
   const { orgSlug, teamSlug } = await params;
   const { team } = await getTeamPageContext(orgSlug, teamSlug);
-  if (team.role === "member") notFound();
+  if (team.role !== "owner" && team.role !== "admin") notFound();
   const isOwner = team.role === "owner";
 
   const [[t], teamSchedules, plan] = await Promise.all([

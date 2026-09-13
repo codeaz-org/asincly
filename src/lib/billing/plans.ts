@@ -162,3 +162,20 @@ export function formatPrice(minor: number): string {
     minor / 100,
   );
 }
+
+// Rows for the pricing and billing pages, derived from the plan data above.
+export function planComparison(): Array<{ label: string; free: string; pro: string }> {
+  const p = pro(1);
+  const minutes = (s: number) => `${Math.round(s / 60)} min`;
+  return [
+    { label: "Members", free: `Up to ${FREE.maxMembers}`, pro: "Unlimited, billed per member" },
+    { label: "Teams", free: String(FREE.maxTeams), pro: "Unlimited" },
+    { label: "AI drafts from video", free: `${minutes(FREE.aiSecondsPerMonth!)} a month`, pro: `${minutes(p.aiSecondsPerMonth!)} per member a month` },
+    { label: "Video length", free: `${minutes(FREE.maxVideoSeconds)}`, pro: `${minutes(p.maxVideoSeconds)}` },
+    { label: "History", free: `Last ${FREE.historyDays} days`, pro: "Everything, with your retention setting" },
+    { label: "Require a video, multiple schedules", free: "—", pro: "Included" },
+    { label: "Guests (read-only, free)", free: "—", pro: "Included" },
+    { label: "Slack digest & reminders", free: "—", pro: "Included" },
+    { label: "Export and delete your data", free: "Included", pro: "Included" },
+  ];
+}

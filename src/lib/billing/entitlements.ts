@@ -149,3 +149,16 @@ export async function recordAiUsage(orgId: string, seconds: number, now = new Da
       set: { seconds: sql`${aiUsage.seconds} + ${Math.ceil(seconds)}` },
     });
 }
+
+// Everything the Plan & billing page shows.
+export async function getBillingOverview(orgId: string, now = new Date()) {
+  // First, so a missing trial row exists before it is read below.
+  const e = await getEntitlements(orgId, now);
+  const [billing, seats, teamCount, aiUsed] = await Promise.all([
+    db.select().from(orgBilling).where(eq(orgBilling.orgId, orgId)).then((r) => r[0] ?? null),
+    countBillableSeats(orgId),
+    countTeams(orgId),
+    aiSecondsUsed(orgId, now),
+  ]);
+  return { entitlements: e, billing, seats, teamCount, aiUsed };
+}

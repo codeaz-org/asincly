@@ -68,7 +68,7 @@ const BEATS = [0.0, 0.1, 0.26, 0.42, 0.56, 0.6, 0.86];
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export function SplitLanding() {
+export function SplitLanding({ showPricing = false }: { showPricing?: boolean }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [p, setP] = useState(0);
@@ -367,6 +367,7 @@ export function SplitLanding() {
             </span>
           </span>
           <span className="chrome__links">
+            {showPricing && <Link href="/pricing" className="chrome__signin">Pricing</Link>}
             <Link href="/sign-in" className="chrome__signin">Sign in</Link>
             <Link href="/sign-in" className="chrome__start">Start free</Link>
           </span>
