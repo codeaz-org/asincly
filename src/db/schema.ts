@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import type { AdapterAccountType } from "next-auth/adapters";
 
 // ────────── Auth.js tables (Drizzle adapter shape) ──────────
@@ -88,6 +89,8 @@ export const teams = pgTable(
     slug: text("slug").notNull(),
     // Recording auto-purge horizon (days). 0 = never purge.
     recordingRetentionDays: integer("recording_retention_days").notNull().default(90),
+    // Owners/admins can make a video mandatory; members may still skip with a reason.
+    requireVideo: boolean("require_video").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("team_org_slug_uq").on(t.orgId, t.slug)],
@@ -142,6 +145,10 @@ export const notificationType = pgEnum("notification_type", [
   "blocker_on_your_item",
   "window_open",
   "digest_ready",
+  "commented",
+  "help_offered",
+  "blocker_resolved",
+  "nudged",
 ]);
 
 export const notifications = pgTable("notification", {
@@ -165,6 +172,8 @@ export const notifications = pgTable("notification", {
 export const recordingStatus = pgEnum("recording_status", [
   "uploaded",
   "processing",
+  "transcribing",
+  "drafting",
   "ready",
   "failed",
 ]);
@@ -181,6 +190,8 @@ export const recordings = pgTable("recording", {
     .references(() => users.id, { onDelete: "cascade" }),
   objectKey: text("object_key").notNull(),
   posterKey: text("poster_key"),
+  // Audio-only track uploaded next to the video; small enough to transcribe.
+  audioKey: text("audio_key"),
   mimeType: text("mime_type").notNull(),
   sizeBytes: integer("size_bytes"),
   durationMs: integer("duration_ms"),
@@ -188,6 +199,8 @@ export const recordings = pgTable("recording", {
   // Encrypted (AES-256-GCM). Zero-length string when absent.
   transcriptCipher: text("transcript_cipher").notNull().default(""),
   summaryCipher: text("summary_cipher").notNull().default(""),
+  // Encrypted AI draft of yesterday/today/blockers. Only ever returned to the author.
+  draftCipher: text("draft_cipher").notNull().default(""),
   processingError: text("processing_error"),
   processedAt: timestamp("processed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -208,12 +221,97 @@ export const checkIns = pgTable(
     today: text("today").notNull().default(""),
     blockers: text("blockers").notNull().default(""),
     localDate: date("local_date").notNull(),
+    // Set when the team requires video and the author couldn't record.
+    videoSkipReason: text("video_skip_reason"),
+    videoSkipNote: text("video_skip_note"),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("check_in_occurrence_user_uq").on(t.occurrenceId, t.userId)],
 );
+
+// ────────── Social layer on a check-in ──────────
+
+// One row per (check-in, person, kind). Toggling deletes the row.
+export const checkInReactions = pgTable(
+  "check_in_reaction",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    checkInId: uuid("check_in_id")
+      .notNull()
+      .references(() => checkIns.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Any single emoji. `comment_id` set = a reaction on a reply to this check-in.
+    emoji: text("emoji").notNull(),
+    commentId: uuid("comment_id").references(() => checkInComments.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("check_in_reaction_emoji_uq")
+      .on(t.checkInId, t.userId, t.emoji)
+      .where(sql`${t.commentId} IS NULL`),
+    uniqueIndex("comment_reaction_emoji_uq")
+      .on(t.commentId, t.userId, t.emoji)
+      .where(sql`${t.commentId} IS NOT NULL`),
+  ],
+);
+
+// Short plain-text replies under a check-in. Soft-deleted so the thread keeps
+// its shape ("comment removed") without holding the text.
+export const checkInComments = pgTable("check_in_comment", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  checkInId: uuid("check_in_id")
+    .notNull()
+    .references(() => checkIns.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
+export const blockerActionKind = pgEnum("blocker_action_kind", ["help", "resolved"]);
+
+// Actions on a single blocker line. Blockers live as markdown in
+// check_in.blockers; `item_key` is a stable hash of the normalised line
+// (see src/lib/blockers.ts), so edits to other lines don't orphan actions.
+export const blockerActions = pgTable(
+  "blocker_action",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    checkInId: uuid("check_in_id")
+      .notNull()
+      .references(() => checkIns.id, { onDelete: "cascade" }),
+    itemKey: text("item_key").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: blockerActionKind("kind").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("blocker_action_uq").on(t.checkInId, t.itemKey, t.userId, t.kind)],
+);
+
+// A member marks themselves away for a date range (inclusive, in their own
+// local calendar). Away members are skipped by reminders and "not in yet".
+export const memberAway = pgTable("member_away", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  teamId: uuid("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  startsOn: date("starts_on").notNull(),
+  endsOn: date("ends_on").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const auditLogs = pgTable("audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),

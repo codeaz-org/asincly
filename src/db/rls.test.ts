@@ -1,7 +1,19 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "./index";
-import { members, organizations, teams, users } from "./schema";
+import {
+  blockerActions,
+  checkInComments,
+  checkInReactions,
+  checkIns,
+  memberAway,
+  members,
+  occurrences,
+  organizations,
+  schedules,
+  teams,
+  users,
+} from "./schema";
 import { withUser } from "./with-user";
 
 // Requires local Postgres up (pnpm db:up) with migrations applied.
@@ -16,6 +28,8 @@ let orgAId: string;
 let orgBId: string;
 let teamAId: string;
 let teamBId: string;
+let userCId: string;
+let checkInAId: string;
 
 const cleanup: Array<() => Promise<unknown>> = [];
 
@@ -58,7 +72,36 @@ beforeAll(async () => {
     { teamId: teamBId, userId: userBId, role: "owner" },
   ]);
 
+  // Social layer fixture: C joins team A; A has a submitted check-in.
+  const [uC] = await db
+    .insert(users)
+    .values({ email: uniq("c") + "@t.local", name: "C" })
+    .returning();
+  userCId = uC.id;
+  await db.insert(members).values({ teamId: teamAId, userId: userCId, role: "member" });
+  const [sched] = await db
+    .insert(schedules)
+    .values({ teamId: teamAId, name: "Daily", rrule: "FREQ=DAILY", windowOpenLocal: "09:00", windowCloseLocal: "11:00" })
+    .returning();
+  const [occ] = await db
+    .insert(occurrences)
+    .values({ scheduleId: sched.id, scheduleDate: "2026-09-14" })
+    .returning();
+  const [ci] = await db
+    .insert(checkIns)
+    .values({
+      occurrenceId: occ.id,
+      userId: userAId,
+      localDate: "2026-09-14",
+      blockers: "- waiting on keys",
+      status: "submitted",
+      submittedAt: new Date(),
+    })
+    .returning();
+  checkInAId = ci.id;
+
   cleanup.push(
+    () => db.delete(users).where(eq(users.id, userCId)),
     () => db.delete(organizations).where(eq(organizations.id, orgAId)),
     () => db.delete(organizations).where(eq(organizations.id, orgBId)),
     () => db.delete(users).where(eq(users.id, userAId)),
@@ -86,7 +129,8 @@ describe("row-level security", () => {
 
   it("scopes member reads to the caller's team", async () => {
     const asA = await withUser(userAId, (tx) => tx.select().from(members));
-    expect(asA.map((m) => m.userId)).toEqual([userAId]);
+    expect(asA.map((m) => m.userId).sort()).toEqual([userAId, userCId].sort());
+    expect(asA.some((m) => m.userId === userBId)).toBe(false);
   });
 
   it("blocks writes to other teams", async () => {
@@ -95,5 +139,112 @@ describe("row-level security", () => {
         tx.insert(members).values({ teamId: teamBId, userId: userAId, role: "member" }),
       ),
     ).rejects.toThrow();
+  });
+});
+
+describe("row-level security: social layer", () => {
+  it("lets teammates comment and react, hides it from other teams", async () => {
+    await withUser(userCId, (tx) =>
+      tx.insert(checkInComments).values({ checkInId: checkInAId, userId: userCId, body: "nice" }),
+    );
+    await withUser(userCId, (tx) =>
+      tx.insert(checkInReactions).values({ checkInId: checkInAId, userId: userCId, emoji: "🎉" }),
+    );
+    const asA = await withUser(userAId, (tx) => tx.select().from(checkInComments));
+    const asB = await withUser(userBId, (tx) => tx.select().from(checkInComments));
+    const reactionsAsB = await withUser(userBId, (tx) => tx.select().from(checkInReactions));
+    expect(asA.some((c) => c.checkInId === checkInAId)).toBe(true);
+    expect(asB).toEqual([]);
+    expect(reactionsAsB).toEqual([]);
+  });
+
+  it("blocks outsiders from commenting and impersonation", async () => {
+    await expect(
+      withUser(userBId, (tx) =>
+        tx.insert(checkInComments).values({ checkInId: checkInAId, userId: userBId, body: "hi" }),
+      ),
+    ).rejects.toThrow();
+    await expect(
+      withUser(userCId, (tx) =>
+        tx.insert(checkInComments).values({ checkInId: checkInAId, userId: userAId, body: "as A" }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("only lets authors delete their own comments", async () => {
+    const [c] = await withUser(userCId, (tx) =>
+      tx
+        .insert(checkInComments)
+        .values({ checkInId: checkInAId, userId: userCId, body: "keep me" })
+        .returning(),
+    );
+    const deletedByA = await withUser(userAId, (tx) =>
+      tx.delete(checkInComments).where(eq(checkInComments.id, c.id)).returning(),
+    );
+    expect(deletedByA).toEqual([]);
+    const [still] = await db.select().from(checkInComments).where(eq(checkInComments.id, c.id));
+    expect(still?.body).toBe("keep me");
+  });
+
+  it("lets teammates offer help but only the author resolve", async () => {
+    await withUser(userCId, (tx) =>
+      tx.insert(blockerActions).values({ checkInId: checkInAId, itemKey: "0000abcd", userId: userCId, kind: "help" }),
+    );
+    await expect(
+      withUser(userCId, (tx) =>
+        tx
+          .insert(blockerActions)
+          .values({ checkInId: checkInAId, itemKey: "0000abcd", userId: userCId, kind: "resolved" }),
+      ),
+    ).rejects.toThrow();
+    await withUser(userAId, (tx) =>
+      tx
+        .insert(blockerActions)
+        .values({ checkInId: checkInAId, itemKey: "0000abcd", userId: userAId, kind: "resolved" }),
+    );
+    const asB = await withUser(userBId, (tx) => tx.select().from(blockerActions));
+    expect(asB).toEqual([]);
+  });
+
+  it("scopes away periods to the team and to the owner for writes", async () => {
+    await withUser(userCId, (tx) =>
+      tx.insert(memberAway).values({ teamId: teamAId, userId: userCId, startsOn: "2026-09-14", endsOn: "2026-09-16" }),
+    );
+    await expect(
+      withUser(userCId, (tx) =>
+        tx.insert(memberAway).values({ teamId: teamAId, userId: userAId, startsOn: "2026-09-14", endsOn: "2026-09-16" }),
+      ),
+    ).rejects.toThrow();
+    const asA = await withUser(userAId, (tx) => tx.select().from(memberAway));
+    const asB = await withUser(userBId, (tx) => tx.select().from(memberAway));
+    expect(asA.some((r) => r.userId === userCId)).toBe(true);
+    expect(asB).toEqual([]);
+  });
+
+  it("only allows reply reactions that belong to the same check-in", async () => {
+    const [c] = await withUser(userCId, (tx) =>
+      tx.insert(checkInComments).values({ checkInId: checkInAId, userId: userCId, body: "react to me" }).returning(),
+    );
+    await withUser(userAId, (tx) =>
+      tx.insert(checkInReactions).values({ checkInId: checkInAId, commentId: c.id, userId: userAId, emoji: "👍" }),
+    );
+    // Pointing a reaction at a reply while claiming a different check-in fails.
+    const [other] = await db
+      .insert(checkIns)
+      .values({
+        occurrenceId: (await db.select().from(checkIns).where(eq(checkIns.id, checkInAId)))[0].occurrenceId,
+        userId: userCId,
+        localDate: "2026-09-14",
+        status: "submitted",
+        submittedAt: new Date(),
+      })
+      .returning();
+    await expect(
+      withUser(userAId, (tx) =>
+        tx.insert(checkInReactions).values({ checkInId: other.id, commentId: c.id, userId: userAId, emoji: "🎉" }),
+      ),
+    ).rejects.toThrow();
+    const asB = await withUser(userBId, (tx) => tx.select().from(checkInReactions));
+    expect(asB).toEqual([]);
   });
 });
