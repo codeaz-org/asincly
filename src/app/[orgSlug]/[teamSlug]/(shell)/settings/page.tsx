@@ -1,8 +1,13 @@
-import { and, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { ChevronDown, Download } from "lucide-react";
+import { LogoMark } from "@/components/brand/mark";
+import { RulesCard } from "@/components/settings/rules-card";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, Pill, SectionTitle } from "@/components/ui/card";
+import { FieldLabel, Input } from "@/components/ui/field";
 import { db } from "@/db";
-import { members, schedules, teams } from "@/db/schema";
-import { AppShell } from "@/components/app-shell";
+import { schedules, teams } from "@/db/schema";
 import { updateSchedule } from "@/lib/actions/schedule";
 import {
   createSchedule,
@@ -12,345 +17,274 @@ import {
   renameTeam,
   setRecordingRetention,
 } from "@/lib/actions/team-admin";
-import { getTeamBySlug, requireUser } from "@/lib/session";
+import { getTeamPageContext } from "@/lib/team-context";
 import { PRESET_RRULES } from "@/lib/time";
 
-export default async function TeamSettingsPage({
-  params,
-}: {
-  params: Promise<{ orgSlug: string; teamSlug: string }>;
-}) {
+export const metadata = { title: "Settings" };
+
+const PRESETS = [
+  ["daily", "Every day"],
+  ["weekdays", "Weekdays"],
+  ["mwf", "M · W · F"],
+  ["weekly", "Weekly"],
+  ["custom", "Custom"],
+] as const;
+
+export default async function TeamSettingsPage({ params }: { params: Promise<{ orgSlug: string; teamSlug: string }> }) {
   const { orgSlug, teamSlug } = await params;
-  const user = await requireUser();
-  const team = await getTeamBySlug(user.id, teamSlug);
-  if (!team) notFound();
+  const { team } = await getTeamPageContext(orgSlug, teamSlug);
+  if (team.role === "member") notFound();
+  const isOwner = team.role === "owner";
 
-  const [role] = await db
-    .select({ role: members.role })
-    .from(members)
-    .where(and(eq(members.teamId, team.teamId), eq(members.userId, user.id)));
-  if (!role || role.role !== "owner") notFound();
-
-  const [t] = await db.select().from(teams).where(eq(teams.id, team.teamId));
-  const teamSchedules = await db
-    .select()
-    .from(schedules)
-    .where(eq(schedules.teamId, team.teamId));
-
-  const presets = [
-    ["daily", "Every day"],
-    ["weekdays", "Weekdays"],
-    ["mwf", "M · W · F"],
-    ["weekly", "Weekly"],
-    ["custom", "Custom"],
-  ] as const;
+  const [[t], teamSchedules] = await Promise.all([
+    db.select().from(teams).where(eq(teams.id, team.teamId)),
+    db.select().from(schedules).where(eq(schedules.teamId, team.teamId)),
+  ]);
 
   return (
-    <AppShell
-      orgSlug={orgSlug}
-      teamSlug={teamSlug}
-      orgName={team.orgName}
-      teamName={team.teamName}
-      role={team.role}
-      userId={user.id}
-      userEmail={user.email}
-      active="settings"
-    >
-      <div className="mx-auto max-w-2xl px-6 py-10 md:py-12 space-y-12">
-        <header className="space-y-2">
-          <h1 className="text-3xl font-medium tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground">Owner-only controls for {team.teamName}.</p>
-        </header>
+    <div className="mx-auto max-w-2xl px-4 sm:px-6 pt-8 md:pt-12 pb-16 space-y-12">
+      <header className="space-y-2">
+        <p className="kicker">
+          {team.orgName} · {team.role}
+        </p>
+        <h1 className="display text-4xl sm:text-5xl text-ink">Settings</h1>
+        <p className="text-soft">How {team.teamName} checks in, and what happens to its data.</p>
+      </header>
 
-        {/* Team name */}
-        <section className="space-y-4">
-          <SectionTitle>Team name</SectionTitle>
-          <form action={renameTeam.bind(null, team.teamId)} className="flex gap-2">
-            <input
-              name="name"
-              defaultValue={t.name}
-              required
-              className="flex-1 h-11 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm focus:outline-none focus:border-white/30 transition"
-            />
-            <button
-              type="submit"
-              className="h-11 px-4 rounded-md border border-white/10 text-sm hover:bg-white/[0.04] transition"
-            >
-              Rename
-            </button>
-          </form>
-        </section>
-
-        {/* Check-ins: a team can run several */}
-        <section className="space-y-4">
-          <SectionTitle>Check-ins</SectionTitle>
-          <p className="text-sm text-muted-foreground -mt-2">
-            Each check-in has its own cadence and window. The feed shows
-            them all.
-          </p>
-          {teamSchedules.map((sched) => {
-            const matching =
-              Object.entries(PRESET_RRULES).find(([, r]) => r === sched.rrule)?.[0] ?? "custom";
-            return (
-          <details
-            key={sched.id}
-            className="rounded-md border border-white/10 overflow-hidden"
-          >
-            <summary className="cursor-pointer list-none px-4 py-3 flex items-center gap-3 hover:bg-white/[0.03] transition">
-              <span className="text-sm font-medium flex-1">{sched.name}</span>
-              <span className="font-mono text-xs text-muted-foreground">
-                {sched.windowOpenLocal.slice(0, 5)}–{sched.windowCloseLocal.slice(0, 5)}
-              </span>
-              {sched.active ? (
-                <span className="text-[10px] uppercase tracking-wider text-emerald-300 border border-emerald-400/30 rounded px-1.5 py-0.5">
-                  active
-                </span>
-              ) : (
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground border border-white/10 rounded px-1.5 py-0.5">
-                  off
-                </span>
-              )}
-            </summary>
-            <div className="border-t border-white/[0.06] p-4">
-            <form action={updateSchedule} className="space-y-4">
-              <input type="hidden" name="scheduleId" value={sched.id} />
-              <div className="space-y-1.5">
-                <Label>Name</Label>
-                <input
-                  name="name"
-                  defaultValue={sched.name}
-                  required
-                  className="w-full h-11 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm focus:outline-none focus:border-white/30 focus:bg-white/[0.04] transition"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Cadence</Label>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                  {presets.map(([val, label]) => (
-                    <label
-                      key={val}
-                      className="cursor-pointer relative rounded-md border border-white/10 px-3 py-2.5 text-center text-sm hover:bg-white/[0.03] transition has-[input:checked]:border-accent has-[input:checked]:bg-accent/[0.08]"
-                    >
-                      <input
-                        type="radio"
-                        name="preset"
-                        value={val}
-                        defaultChecked={val === matching}
-                        className="sr-only"
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-                <input
-                  name="customRrule"
-                  defaultValue={matching === "custom" ? sched.rrule : ""}
-                  placeholder="Custom RRULE, e.g. FREQ=WEEKLY;BYDAY=TU,TH"
-                  className="w-full h-11 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm font-mono placeholder:text-muted-foreground/50 focus:outline-none focus:border-white/30 focus:bg-white/[0.04] transition"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Window opens</Label>
-                  <input
-                    name="windowOpen"
-                    type="time"
-                    defaultValue={sched.windowOpenLocal.slice(0, 5)}
-                    required
-                    className="w-full h-11 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm font-mono focus:outline-none focus:border-white/30 transition"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Window closes</Label>
-                  <input
-                    name="windowClose"
-                    type="time"
-                    defaultValue={sched.windowCloseLocal.slice(0, 5)}
-                    required
-                    className="w-full h-11 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm font-mono focus:outline-none focus:border-white/30 transition"
-                  />
-                </div>
-              </div>
-              <label className="flex items-center justify-between rounded-md border border-white/10 px-4 py-3 cursor-pointer">
-                <span className="text-sm">
-                  <span className="font-medium">Active</span>
-                  <span className="ml-2 text-muted-foreground">
-                    Reminders and digests fire when on.
-                  </span>
-                </span>
-                <input
-                  type="checkbox"
-                  name="active"
-                  defaultChecked={sched.active}
-                  value="on"
-                  className="size-4 accent-emerald-400"
-                />
-              </label>
-              <button
-                type="submit"
-                className="h-11 px-5 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition"
-              >
-                Save check-in
-              </button>
-            </form>
-            {teamSchedules.length > 1 && (
-              <form action={deleteSchedule.bind(null, sched.id)} className="mt-3">
-                <button
-                  type="submit"
-                  className="text-xs text-red-300/80 hover:text-red-300 transition"
-                >
-                  Delete this check-in
-                </button>
-              </form>
-            )}
+      <section className="space-y-3">
+        <SectionTitle>Team</SectionTitle>
+        <Card className="p-4 sm:p-5">
+          <form action={renameTeam.bind(null, team.teamId)} className="space-y-3">
+            <FieldLabel htmlFor="team-name">Name</FieldLabel>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input id="team-name" name="name" defaultValue={t.name} required className="flex-1" />
+              <Button type="submit" size="lg">Rename</Button>
             </div>
-          </details>
+          </form>
+        </Card>
+      </section>
+
+      <section className="space-y-3">
+        <SectionTitle>Check-in rules</SectionTitle>
+        <Card>
+          <RulesCard teamId={team.teamId} requireVideo={t.requireVideo} />
+        </Card>
+      </section>
+
+      <section className="space-y-3">
+        <SectionTitle count={teamSchedules.length}>Check-in schedules</SectionTitle>
+        <p className="text-sm text-soft -mt-1">
+          Each has its own cadence and window, in every member&rsquo;s local time. Today shows them all.
+        </p>
+        <div className="space-y-2">
+          {teamSchedules.map((sched) => {
+            const matching = Object.entries(PRESET_RRULES).find(([, r]) => r === sched.rrule)?.[0] ?? "custom";
+            return (
+              <Card as="div" key={sched.id} className="overflow-hidden">
+                <details className="group">
+                  <summary className="cursor-pointer list-none px-4 sm:px-5 py-4 flex items-center gap-3 hover:bg-ink/[0.03] transition [&::-webkit-details-marker]:hidden">
+                    <LogoMark size={20} state={sched.active ? "open" : "missed"} className="text-ink" />
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[15px] font-medium text-ink truncate">{sched.name}</span>
+                      <span className="block text-xs text-soft">
+                        {PRESETS.find(([v]) => v === matching)?.[1]} ·{" "}
+                        <span className="font-mono">
+                          {sched.windowOpenLocal.slice(0, 5)}–{sched.windowCloseLocal.slice(0, 5)}
+                        </span>
+                      </span>
+                    </span>
+                    {sched.active ? <Pill tone="amber">active</Pill> : <Pill>paused</Pill>}
+                    <ChevronDown className="size-4 text-soft transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="border-t border-line p-4 sm:p-5 space-y-5">
+                    <form action={updateSchedule} className="space-y-5">
+                      <input type="hidden" name="scheduleId" value={sched.id} />
+                      <div className="space-y-2">
+                        <FieldLabel htmlFor={`name-${sched.id}`}>Name</FieldLabel>
+                        <Input id={`name-${sched.id}`} name="name" defaultValue={sched.name} required />
+                      </div>
+                      <fieldset className="space-y-2">
+                        <legend className="kicker mb-2">Cadence</legend>
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                          {PRESETS.map(([val, label]) => (
+                            <label
+                              key={val}
+                              className="cursor-pointer rounded-xl border border-line px-3 py-2.5 text-center text-sm text-soft hover:text-ink transition has-[input:checked]:border-amber/60 has-[input:checked]:bg-amber/[0.08] has-[input:checked]:text-ink has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-amber"
+                            >
+                              <input type="radio" name="preset" value={val} defaultChecked={val === matching} className="sr-only" />
+                              {label}
+                            </label>
+                          ))}
+                        </div>
+                        <Input
+                          name="customRrule"
+                          aria-label="Custom RRULE"
+                          defaultValue={matching === "custom" ? sched.rrule : ""}
+                          placeholder="Custom RRULE, e.g. FREQ=WEEKLY;BYDAY=TU,TH"
+                          className="h-11 font-mono text-sm"
+                        />
+                      </fieldset>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="space-y-2">
+                          <span className="kicker block">Opens</span>
+                          <Input name="windowOpen" type="time" defaultValue={sched.windowOpenLocal.slice(0, 5)} required className="h-11 font-mono" />
+                        </label>
+                        <label className="space-y-2">
+                          <span className="kicker block">Closes</span>
+                          <Input name="windowClose" type="time" defaultValue={sched.windowCloseLocal.slice(0, 5)} required className="h-11 font-mono" />
+                        </label>
+                      </div>
+                      <label className="flex items-center justify-between gap-4 rounded-xl border border-line px-4 py-3 cursor-pointer">
+                        <span className="text-sm">
+                          <span className="block font-medium text-ink">Active</span>
+                          <span className="block text-soft">Reminders and digests run while on.</span>
+                        </span>
+                        <input type="checkbox" name="active" defaultChecked={sched.active} value="on" className="size-5 accent-[oklch(0.78_0.15_60)]" />
+                      </label>
+                      <Button type="submit" variant="primary" size="lg">
+                        Save schedule
+                      </Button>
+                    </form>
+                    {teamSchedules.length > 1 && (
+                      <form action={deleteSchedule.bind(null, sched.id)}>
+                        <Button type="submit" variant="quiet" size="sm" className="text-danger/80 hover:text-danger">
+                          Delete this schedule
+                        </Button>
+                      </form>
+                    )}
+                  </div>
+                </details>
+              </Card>
             );
           })}
+        </div>
 
-          <form
-            action={createSchedule.bind(null, team.teamId)}
-            className="flex flex-wrap gap-2 items-center rounded-md border border-dashed border-white/15 p-3"
-          >
-            <input
-              name="name"
-              required
-              placeholder="New check-in name (e.g. EU sync)"
-              className="flex-1 min-w-[200px] h-10 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm focus:outline-none focus:border-white/30 transition"
-            />
-            <input name="windowOpen" type="time" defaultValue="09:00" className="h-10 rounded-md bg-white/[0.02] border border-white/10 px-2 text-sm font-mono" />
-            <input name="windowClose" type="time" defaultValue="11:00" className="h-10 rounded-md bg-white/[0.02] border border-white/10 px-2 text-sm font-mono" />
-            <button
-              type="submit"
-              className="h-10 px-4 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition"
-            >
-              Add check-in
-            </button>
-          </form>
-        </section>
+        <form
+          action={createSchedule.bind(null, team.teamId)}
+          className="rounded-2xl border border-dashed border-line-strong p-4 flex flex-wrap items-end gap-2"
+        >
+          <label className="flex-1 min-w-[200px] space-y-1.5">
+            <span className="kicker block text-[10px]">New schedule</span>
+            <Input name="name" required placeholder="e.g. EU sync" className="h-11" />
+          </label>
+          <label className="space-y-1.5">
+            <span className="kicker block text-[10px]">Opens</span>
+            <Input name="windowOpen" type="time" defaultValue="09:00" className="h-11 w-36 px-3 font-mono text-sm" />
+          </label>
+          <label className="space-y-1.5">
+            <span className="kicker block text-[10px]">Closes</span>
+            <Input name="windowClose" type="time" defaultValue="11:00" className="h-11 w-36 px-3 font-mono text-sm" />
+          </label>
+          <Button type="submit" size="lg" className="h-11">
+            Add
+          </Button>
+        </form>
+      </section>
 
-        {/* Retention */}
-        <section className="space-y-4">
-          <SectionTitle>Recording retention</SectionTitle>
+      {isOwner && (
+      <section className="space-y-3">
+        <SectionTitle>Data</SectionTitle>
+        <Card className="divide-y divide-line">
           <form
             action={async (fd) => {
               "use server";
-              await setRecordingRetention({
-                teamId: team.teamId,
-                days: Number(fd.get("days") ?? 90),
-              });
+              await setRecordingRetention({ teamId: team.teamId, days: Number(fd.get("days") ?? 90) });
             }}
-            className="flex items-center gap-3"
+            className="p-4 sm:p-5 flex flex-wrap items-center gap-3"
           >
-            <input
-              name="days"
-              type="number"
-              min={0}
-              max={3650}
-              defaultValue={t.recordingRetentionDays}
-              className="w-24 h-11 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm font-mono focus:outline-none focus:border-white/30 transition"
-            />
-            <span className="text-sm text-muted-foreground">days · 0 = never delete</span>
-            <span className="flex-1" />
-            <button
-              type="submit"
-              className="h-11 px-4 rounded-md border border-white/10 text-sm hover:bg-white/[0.04] transition"
-            >
-              Save
-            </button>
+            <div className="flex-1 min-w-[12rem]">
+              <p className="text-[15px] font-medium text-ink">Recording retention</p>
+              <p className="text-sm text-soft">Videos older than this are deleted. 0 keeps them forever.</p>
+            </div>
+            <label className="flex items-center gap-2">
+              <span className="sr-only">Days</span>
+              <Input name="days" type="number" min={0} max={3650} defaultValue={t.recordingRetentionDays} className="h-11 w-24 px-3 font-mono" />
+              <span className="text-sm text-soft">days</span>
+            </label>
+            <Button type="submit">Save</Button>
           </form>
-        </section>
-
-        {/* Export */}
-        <section className="space-y-3">
-          <SectionTitle>Export team data</SectionTitle>
-          <p className="text-sm text-muted-foreground">
-            A JSON bundle of org, team, members, schedules, occurrences, check-ins, and
-            recordings (transcripts + summaries decrypted).
-          </p>
-          <a
-            href={`/api/teams/${team.teamId}/export`}
-            download
-            className="h-11 px-4 rounded-md border border-white/10 text-sm hover:bg-white/[0.04] transition inline-flex items-center"
-          >
-            Download JSON
-          </a>
-        </section>
-
-        {/* Danger */}
-        <section className="space-y-3">
-          <SectionTitle className="text-destructive/90">Danger zone</SectionTitle>
-          <div className="rounded-md border border-destructive/30 bg-destructive/[0.04] p-4 space-y-3">
-            <p className="text-sm">
-              Delete the team <span className="font-medium">{t.name}</span> with all its
-              check-ins and recordings. The organization and other teams stay.
-            </p>
-            <form action={deleteTeam.bind(null, team.teamId)}>
-              <button
-                type="submit"
-                className="h-10 px-4 rounded-md border border-destructive/40 text-destructive text-sm font-medium hover:bg-destructive/10 transition"
-              >
-                Delete team
-              </button>
-            </form>
+          <div className="p-4 sm:p-5 flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-[12rem]">
+              <p className="text-[15px] font-medium text-ink">Export</p>
+              <p className="text-sm text-soft">
+                JSON of members, schedules, check-ins, replies, reactions and recordings (transcripts decrypted).
+              </p>
+            </div>
+            <a href={`/api/teams/${team.teamId}/export`} download className={buttonVariants({ variant: "secondary" })}>
+              <Download /> Download
+            </a>
           </div>
-          <div className="rounded-md border border-destructive/30 bg-destructive/[0.04] p-4 space-y-3">
-            <p className="text-sm">
-              Delete <span className="font-medium">{team.orgName}</span> and every team,
-              schedule, check-in, and recording under it. Cannot be undone.
-            </p>
-            <form
-              action={async (fd) => {
-                "use server";
-                const confirm = String(fd.get("confirm") ?? "");
-                if (confirm !== team.orgName) {
-                  throw new Error("Type the organization name exactly to confirm.");
-                }
-                await deleteOrg(team.orgId);
-              }}
-              className="flex flex-wrap gap-2"
-            >
-              <input
-                name="confirm"
-                placeholder={`Type "${team.orgName}" to confirm`}
-                className="flex-1 min-w-[240px] h-11 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm focus:outline-none focus:border-destructive/50 transition"
-              />
-              <button
-                type="submit"
-                className="h-11 px-4 rounded-md bg-destructive text-white text-sm font-medium hover:bg-destructive/90 transition"
-              >
-                Delete organization
-              </button>
-            </form>
-          </div>
-        </section>
-      </div>
-    </AppShell>
+        </Card>
+      </section>
+
+      )}
+
+      {isOwner && (
+      <section className="space-y-3">
+        <SectionTitle className="[&_h2]:text-danger">Danger zone</SectionTitle>
+        <div className="rounded-2xl border border-danger/30 bg-danger/[0.04] divide-y divide-danger/20">
+          <DangerForm
+            title={`Delete ${t.name}`}
+            body="Removes this team with all its check-ins, replies and recordings. The organization and other teams stay."
+            confirmText={t.name}
+            button="Delete team"
+            action={async (fd) => {
+              "use server";
+              if (String(fd.get("confirm") ?? "") !== t.name) throw new Error("Type the team name exactly to confirm.");
+              await deleteTeam(team.teamId);
+            }}
+          />
+          <DangerForm
+            title={`Delete ${team.orgName}`}
+            body="Every team, schedule, check-in and recording in the organization. Cannot be undone."
+            confirmText={team.orgName}
+            button="Delete organization"
+            action={async (fd) => {
+              "use server";
+              if (String(fd.get("confirm") ?? "") !== team.orgName) {
+                throw new Error("Type the organization name exactly to confirm.");
+              }
+              await deleteOrg(team.orgId);
+            }}
+          />
+        </div>
+      </section>
+      )}
+    </div>
   );
 }
 
-function SectionTitle({
-  children,
-  className,
+function DangerForm({
+  title,
+  body,
+  confirmText,
+  button,
+  action,
 }: {
-  children: React.ReactNode;
-  className?: string;
+  title: string;
+  body: string;
+  confirmText: string;
+  button: string;
+  action: (fd: FormData) => Promise<void>;
 }) {
   return (
-    <h2
-      className={`text-sm font-medium uppercase tracking-wider text-muted-foreground ${
-        className ?? ""
-      }`}
-    >
-      {children}
-    </h2>
-  );
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-      {children}
-    </span>
+    <form action={action} className="p-4 sm:p-5 space-y-3">
+      <div>
+        <p className="text-[15px] font-medium text-ink">{title}</p>
+        <p className="text-sm text-soft">{body}</p>
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Input
+          name="confirm"
+          required
+          aria-label={`Type ${confirmText} to confirm`}
+          placeholder={`Type "${confirmText}" to confirm`}
+          className="flex-1 h-11 text-sm focus:border-danger/60 focus:ring-danger/15"
+        />
+        <Button type="submit" variant="danger" size="lg" className="h-11">
+          {button}
+        </Button>
+      </div>
+    </form>
   );
 }

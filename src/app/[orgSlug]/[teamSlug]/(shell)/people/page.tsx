@@ -1,155 +1,159 @@
-import { notFound } from "next/navigation";
-import { AppShell } from "@/components/app-shell";
+import { X } from "lucide-react";
+import { AwayControl } from "@/components/people/away-control";
 import { InviteForm } from "@/components/invite-form";
+import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Card, Pill, SectionTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/field";
 import { createTeam, removeMember } from "@/lib/actions/team-admin";
-import { avatarHue, displayName, initials } from "@/lib/display";
-import { getTeamRoster } from "@/lib/queries";
-import { getTeamBySlug, requireUser } from "@/lib/session";
+import { railPositions } from "@/lib/day-rail";
+import { displayName } from "@/lib/display";
+import { dayLabel } from "@/lib/feed-view";
+import { awayToday, getDayFeed, getTeamRoster } from "@/lib/queries";
+import { getTeamPageContext, getViewerToday } from "@/lib/team-context";
 
-export default async function TeamRosterPage({
-  params,
-}: {
-  params: Promise<{ orgSlug: string; teamSlug: string }>;
-}) {
+export const metadata = { title: "People" };
+
+const STATUS_TEXT = {
+  done: "checked in",
+  open: "window open",
+  before: "later today",
+  missed: "window closed",
+  asleep: "asleep",
+  away: "away",
+} as const;
+
+export default async function PeoplePage({ params }: { params: Promise<{ orgSlug: string; teamSlug: string }> }) {
   const { orgSlug, teamSlug } = await params;
-  const user = await requireUser();
-  const team = await getTeamBySlug(user.id, teamSlug);
-  if (!team) notFound();
-
-  const roster = await getTeamRoster(team.teamId);
+  const [{ user, team }, today] = await Promise.all([
+    getTeamPageContext(orgSlug, teamSlug),
+    getViewerToday(orgSlug, teamSlug),
+  ]);
+  const [roster, entries] = await Promise.all([
+    getTeamRoster(team.teamId),
+    getDayFeed(team.teamId, today.todayISO, user.id),
+  ]);
   const isAdmin = team.role === "owner" || team.role === "admin";
+  const done = new Set(entries.map((e) => e.userId));
 
-  const now = new Date();
+  const positions = railPositions(
+    roster.map((m) => ({
+      userId: m.userId,
+      tz: m.tz,
+      done: done.has(m.userId),
+      away: !!awayToday(today.away, m.userId, m.tz, today.now),
+    })),
+    today.primary,
+    today.now,
+  );
+  const byId = new Map(positions.map((p) => [p.userId, p]));
+  // East to west: whoever's day is furthest along first.
+  const offsetHours = (o: string) => {
+    const [h, m] = o.slice(1).split(":").map(Number);
+    return (o.startsWith("-") ? -1 : 1) * (h + m / 60);
+  };
+  const people = [...roster].sort(
+    (a, b) =>
+      offsetHours(byId.get(b.userId)!.utcOffset) - offsetHours(byId.get(a.userId)!.utcOffset) ||
+      displayName(a.name, a.email).localeCompare(displayName(b.name, b.email)),
+  );
 
   return (
-    <AppShell
-      orgSlug={orgSlug}
-      teamSlug={teamSlug}
-      orgName={team.orgName}
-      teamName={team.teamName}
-      role={team.role}
-      userId={user.id}
-      userEmail={user.email}
-      active="team"
-    >
-      <div className="mx-auto max-w-4xl px-6 py-10 md:py-12 space-y-10">
-        <header className="flex flex-wrap items-end justify-between gap-4">
-          <div className="space-y-2">
-            <h1 className="text-3xl font-medium tracking-tight">Team</h1>
-            <p className="text-sm text-muted-foreground">
-              {roster.length} {roster.length === 1 ? "person" : "people"} in {team.teamName}.
-            </p>
-          </div>
-          <details className="relative">
-            <summary className="cursor-pointer list-none h-10 px-4 rounded-md border border-white/10 text-sm hover:bg-white/[0.04] transition inline-flex items-center gap-2">
-              + New team
-            </summary>
-            <form
-              action={createTeam.bind(null, team.orgId)}
-              className="absolute right-0 top-12 z-40 w-72 rounded-md border border-white/10 bg-zinc-950/95 backdrop-blur shadow-xl p-3 space-y-2"
-            >
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                New team in {team.orgName}
-              </p>
-              <input
-                name="name"
-                required
-                placeholder="Team name"
-                className="w-full h-10 rounded-md bg-white/[0.02] border border-white/10 px-3 text-sm focus:outline-none focus:border-white/30 transition"
-              />
-              <button
-                type="submit"
-                className="w-full h-10 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 transition"
-              >
-                Create team
-              </button>
-              <p className="text-[10px] text-muted-foreground">
-                You become its owner. A weekday check-in is set up automatically.
-              </p>
-            </form>
-          </details>
-        </header>
+    <div className="mx-auto max-w-3xl px-4 sm:px-6 pt-8 md:pt-12 pb-16 space-y-10">
+      <header className="space-y-2">
+        <p className="kicker">{team.orgName}</p>
+        <h1 className="display text-4xl sm:text-5xl text-ink">People</h1>
+        <p className="text-soft">
+          {roster.length} {roster.length === 1 ? "person" : "people"} in {team.teamName}, ordered by who&rsquo;s furthest into their day.
+        </p>
+      </header>
 
-        <section className="space-y-3">
-          <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {roster
-              .slice()
-              .sort((a, b) =>
-                (a.name ?? a.email).localeCompare(b.name ?? b.email),
-              )
-              .map((m) => (
-                <li
-                  key={m.memberId}
-                  className="rounded-md border border-white/[0.06] px-4 py-3.5 hover:border-white/10 transition"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="grid place-items-center size-9 rounded-full text-[11px] font-semibold shrink-0"
-                      style={{
-                        background: `oklch(0.32 0.06 ${avatarHue(displayName(m.name, m.email))} / 0.7)`,
-                        color: `oklch(0.88 0.06 ${avatarHue(displayName(m.name, m.email))})`,
-                      }}
+      <section className="space-y-3" aria-labelledby="you">
+        <SectionTitle>
+          <span id="you">Your availability</span>
+        </SectionTitle>
+        <AwayControl
+          teamId={team.teamId}
+          todayISO={today.todayISO}
+          current={today.away.find((a) => a.userId === user.id && a.endsOn >= today.todayISO) ?? null}
+        />
+      </section>
+
+      <section className="space-y-3" aria-labelledby="team">
+        <SectionTitle count={roster.length}>
+          <span id="team">Team</span>
+        </SectionTitle>
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {people.map((m) => {
+            const p = byId.get(m.userId)!;
+            const away = today.away.find((a) => a.userId === m.userId && a.endsOn >= today.todayISO);
+            const isMe = m.userId === user.id;
+            return (
+              <Card as="li" key={m.memberId} className="p-4 flex items-center gap-3">
+                <Avatar name={m.name} email={m.email} size={42} status={p.status} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[15px] font-medium text-ink truncate">
+                    {displayName(m.name, m.email)}
+                    {isMe && <span className="ml-2 kicker text-[10px]">you</span>}
+                  </p>
+                  <p className="text-xs text-soft truncate">
+                    {STATUS_TEXT[p.status]}
+                    {away && p.status === "away" && ` until ${dayLabel(away.endsOn)}`}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="font-mono text-sm tabular-nums text-ink">{p.localTime}</p>
+                  <p className="text-[11px] text-soft">{p.city}</p>
+                </div>
+                {m.role !== "member" && <Pill tone="amber" className="shrink-0">{m.role}</Pill>}
+                {m.role !== "owner" && (isAdmin || isMe) && (
+                  <form action={removeMember.bind(null, m.memberId)} className="shrink-0">
+                    <Button
+                      type="submit"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={isMe ? "Leave team" : `Remove ${displayName(m.name, m.email)}`}
+                      title={isMe ? "Leave team" : "Remove from team"}
+                      className="hover:text-danger"
                     >
-                      {initials(m.name, m.email)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {displayName(m.name, m.email)}
-                        {m.userId === user.id && (
-                          <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                            you
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground truncate">{m.email}</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-sm font-mono tabular-nums">{localTime(now, m.tz)}</div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        {m.tz.split("/").slice(-1)[0].replace("_", " ")}
-                      </div>
-                    </div>
-                    {m.role !== "member" && (
-                      <span className="text-[10px] uppercase tracking-wider text-accent border border-accent/30 rounded px-1.5 py-0.5 shrink-0">
-                        {m.role}
-                      </span>
-                    )}
-                    {m.role !== "owner" && (isAdmin || m.userId === user.id) && (
-                      <form action={removeMember.bind(null, m.memberId)} className="shrink-0">
-                        <button
-                          type="submit"
-                          aria-label={m.userId === user.id ? "Leave team" : `Remove ${m.name ?? m.email}`}
-                          title={m.userId === user.id ? "Leave team" : "Remove from team"}
-                          className="grid place-items-center size-7 rounded-md text-muted-foreground hover:text-red-300 hover:bg-red-400/10 transition text-sm"
-                        >
-                          ×
-                        </button>
-                      </form>
-                    )}
-                  </div>
-                </li>
-              ))}
-          </ul>
-        </section>
+                      <X />
+                    </Button>
+                  </form>
+                )}
+              </Card>
+            );
+          })}
+        </ul>
+      </section>
 
-        {isAdmin && (
-          <section className="space-y-3">
-            <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Invite
-            </h2>
+      {isAdmin && (
+        <section className="space-y-3" aria-labelledby="invite">
+          <SectionTitle>
+            <span id="invite">Invite</span>
+          </SectionTitle>
+          <Card className="p-4 sm:p-5">
             <InviteForm teamId={team.teamId} />
-          </section>
-        )}
-      </div>
-    </AppShell>
-  );
-}
+          </Card>
+        </section>
+      )}
 
-function localTime(now: Date, tz: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: tz,
-  }).format(now);
+      <section className="space-y-3" aria-labelledby="new-team-title" id="new-team">
+        <SectionTitle>
+          <span id="new-team-title">New team in {team.orgName}</span>
+        </SectionTitle>
+        <Card className="p-4 sm:p-5">
+          <form action={createTeam.bind(null, team.orgId)} className="flex flex-col sm:flex-row gap-2">
+            <label htmlFor="new-team-name" className="sr-only">
+              Team name
+            </label>
+            <Input id="new-team-name" name="name" required placeholder="Team name, e.g. Design" className="flex-1" />
+            <Button type="submit" variant="secondary" size="lg">
+              Create team
+            </Button>
+          </form>
+          <p className="mt-2 text-xs text-soft">You become its owner. A weekday check-in is set up automatically.</p>
+        </Card>
+      </section>
+    </div>
+  );
 }

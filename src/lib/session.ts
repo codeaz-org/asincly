@@ -44,12 +44,15 @@ export async function getMemberships(userId: string) {
     .where(eq(members.userId, userId));
 }
 
-export async function getTeamBySlug(userId: string, teamSlug: string) {
+// Team slugs are only unique inside an org, so pass `orgSlug` whenever the
+// URL has one; without it two orgs with a "platform" team would collide.
+export async function getTeamBySlug(userId: string, teamSlug: string, orgSlug?: string) {
   const rows = await db
     .select({
       teamId: teams.id,
       teamName: teams.name,
       teamSlug: teams.slug,
+      requireVideo: teams.requireVideo,
       orgId: organizations.id,
       orgName: organizations.name,
       role: members.role,
@@ -57,6 +60,12 @@ export async function getTeamBySlug(userId: string, teamSlug: string) {
     .from(members)
     .innerJoin(teams, eq(teams.id, members.teamId))
     .innerJoin(organizations, eq(organizations.id, teams.orgId))
-    .where(and(eq(members.userId, userId), eq(teams.slug, teamSlug)));
+    .where(
+      and(
+        eq(members.userId, userId),
+        eq(teams.slug, teamSlug),
+        orgSlug ? eq(organizations.slug, orgSlug) : undefined,
+      ),
+    );
   return rows[0] ?? null;
 }

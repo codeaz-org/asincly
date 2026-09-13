@@ -6,7 +6,11 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
 import {
+  blockerActions,
+  checkInComments,
+  checkInReactions,
   checkIns,
+  memberAway,
   members,
   occurrences,
   organizations,
@@ -16,6 +20,7 @@ import {
   users,
 } from "@/db/schema";
 import { audit } from "@/lib/audit";
+import { TeamRulesSchema } from "@/lib/validation/social";
 import { decrypt } from "@/lib/crypto";
 import { requireUser } from "@/lib/session";
 
@@ -252,6 +257,25 @@ export async function setRecordingRetention(input: {
   revalidatePath(`/${row.orgSlug}/${row.teamSlug}`);
 }
 
+// Owners and admins decide whether a video is expected with every check-in.
+export async function setTeamRules(input: unknown): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireUser();
+  const parsed = TeamRulesSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid settings" };
+  const row = await requireAdmin(parsed.data.teamId, user.id);
+  await db.update(teams).set({ requireVideo: parsed.data.requireVideo }).where(eq(teams.id, parsed.data.teamId));
+  await audit({
+    orgId: row.orgId,
+    actorUserId: user.id,
+    action: "team.set_rules",
+    resourceType: "team",
+    resourceId: parsed.data.teamId,
+    meta: { requireVideo: parsed.data.requireVideo },
+  });
+  revalidatePath(`/${row.orgSlug}/${row.teamSlug}`, "layout");
+  return { ok: true };
+}
+
 export async function exportTeam(teamId: string) {
   const user = await requireUser();
   const row = await requireOwner(teamId, user.id);
@@ -297,9 +321,13 @@ export async function buildExportBundle(teamId: string) {
     : [];
   const ciIds = teamCheckIns.map((c) => c.id);
 
-  const teamRecs = ciIds.length
-    ? await db.select().from(recordings).where(inArray(recordings.checkInId, ciIds))
-    : [];
+  const [teamRecs, comments, reactions, blockerActs, awayPeriods] = await Promise.all([
+    ciIds.length ? db.select().from(recordings).where(inArray(recordings.checkInId, ciIds)) : [],
+    ciIds.length ? db.select().from(checkInComments).where(inArray(checkInComments.checkInId, ciIds)) : [],
+    ciIds.length ? db.select().from(checkInReactions).where(inArray(checkInReactions.checkInId, ciIds)) : [],
+    ciIds.length ? db.select().from(blockerActions).where(inArray(blockerActions.checkInId, ciIds)) : [],
+    db.select().from(memberAway).where(eq(memberAway.teamId, teamId)),
+  ]);
 
   return {
     exportedAt: new Date().toISOString(),
@@ -309,6 +337,10 @@ export async function buildExportBundle(teamId: string) {
     schedules: teamSchedules,
     occurrences: teamOccs,
     checkIns: teamCheckIns,
+    comments: comments.map((c) => (c.deletedAt ? { ...c, body: "" } : c)),
+    reactions,
+    blockerActions: blockerActs,
+    awayPeriods,
     recordings: teamRecs.map((r) => ({
       ...r,
       transcript: safeDecrypt(r.transcriptCipher),

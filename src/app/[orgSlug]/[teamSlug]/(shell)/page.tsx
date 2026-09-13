@@ -1,422 +1,284 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { and, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { schedules } from "@/db/schema";
-import { AppShell } from "@/components/app-shell";
-import { Markdown } from "@/components/markdown";
-import { RecordingPlayer } from "@/components/recording-player";
-import { TzDetector } from "@/components/tz-detector";
-import { avatarHue, displayName, initials } from "@/lib/display";
-import { extractMentions } from "@/lib/mentions";
-import { getMyCheckInForOccurrence, getTeamFeed, getTeamRoster } from "@/lib/queries";
-import { getTeamBySlug, requireUser } from "@/lib/session";
-import { localDate, windowFor, windowStatus } from "@/lib/time";
+import { AtSign, MessageCircle } from "lucide-react";
+import { cn } from "cn";
+import { BlockerRow } from "@/components/dashboard/blocker-row";
+import { CheckInCard } from "@/components/dashboard/check-in-card";
+import { DayRail } from "@/components/dashboard/day-rail";
+import { Pending, type PendingMember } from "@/components/dashboard/pending";
+import { YourCard } from "@/components/dashboard/your-card";
+import { LogoMark } from "@/components/brand/mark";
+import { SectionTitle } from "@/components/ui/card";
+import { Empty } from "@/components/ui/empty";
+import { railPositions } from "@/lib/day-rail";
+import { displayName, firstName } from "@/lib/display";
+import {
+  blockerRows,
+  dayLabel,
+  mentionsUser,
+  namesById,
+  relativeDay,
+} from "@/lib/feed-view";
+import { plainText, taskStats } from "@/lib/note-items";
+import { checkInDetailPath, checkInFlowPath, teamPath } from "@/lib/paths";
+import { awayToday, getDayFeed, getRepliesToMe, getTeamRoster, listRecentDays } from "@/lib/queries";
+import { getTeamPageContext, getViewerToday } from "@/lib/team-context";
 
-type Sched = {
-  id: string;
-  name: string;
-  windowOpenLocal: string;
-  windowCloseLocal: string;
-};
-
-type MemberStatus = "done" | "open" | "closed" | "asleep";
-
-export default async function TeamFeedPage({
+export default async function TodayPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ orgSlug: string; teamSlug: string }>;
+  searchParams: Promise<{ day?: string; focus?: string }>;
 }) {
   const { orgSlug, teamSlug } = await params;
-  const user = await requireUser();
-  const team = await getTeamBySlug(user.id, teamSlug);
-  if (!team) notFound();
-
-  const [activeSchedules, roster] = await Promise.all([
-    db
-      .select({
-        id: schedules.id,
-        name: schedules.name,
-        windowOpenLocal: schedules.windowOpenLocal,
-        windowCloseLocal: schedules.windowCloseLocal,
-      })
-      .from(schedules)
-      .where(and(eq(schedules.teamId, team.teamId), eq(schedules.active, true))),
-    getTeamRoster(team.teamId),
+  const { day, focus } = await searchParams;
+  const [{ user, team }, today] = await Promise.all([
+    getTeamPageContext(orgSlug, teamSlug),
+    getViewerToday(orgSlug, teamSlug),
   ]);
 
-  const primary: Sched | undefined = activeSchedules[0];
-  const now = new Date();
-  const todayISO = localDate(now, user.tz);
-  const feed = await getTeamFeed(team.teamId, todayISO);
-  const myCheckIn = await getMyCheckInForOccurrence(feed.today?.occurrenceId, user.id);
-  const doneUserIds = new Set(feed.today?.entries.map((e) => e.userId) ?? []);
+  const dateISO = day && /^\d{4}-\d{2}-\d{2}$/.test(day) && day <= today.todayISO ? day : today.todayISO;
+  const isToday = dateISO === today.todayISO;
 
-  const memberRows = roster.map((m) => ({
+  const [roster, entries, days, replies] = await Promise.all([
+    getTeamRoster(team.teamId),
+    getDayFeed(team.teamId, dateISO, user.id),
+    listRecentDays(team.teamId, today.todayISO),
+    isToday ? getRepliesToMe(team.teamId, user.id, new Date(today.now.getTime() - 24 * 3600 * 1000)) : Promise.resolve([]),
+  ]);
+
+  const names = namesById(roster);
+  const root = teamPath(orgSlug, teamSlug);
+  const doneIds = new Set(entries.map((e) => e.userId));
+
+  // ── Rail + pending (today only) ──
+  const railMembers = roster.map((m) => ({
     userId: m.userId,
     name: m.name,
     email: m.email,
-    status: memberStatus(now, m.tz, primary, doneUserIds.has(m.userId)),
+    tz: m.tz,
+    done: doneIds.has(m.userId),
+    away: !!awayToday(today.away, m.userId, m.tz, today.now),
   }));
-  const done = memberRows.filter((r) => r.status === "done").length;
-  const open = memberRows.filter((r) => r.status === "open").length;
-  const closed = memberRows.filter((r) => r.status === "closed").length;
-  const asleep = memberRows.filter((r) => r.status === "asleep").length;
+  const positions = railPositions(railMembers, today.primary, today.now);
+  const rosterById = new Map(roster.map((r) => [r.userId, r]));
+  const pending: PendingMember[] = positions
+    .filter((p) => p.status !== "done" && p.userId !== user.id)
+    .sort((a, b) => ["open", "before", "missed", "asleep", "away"].indexOf(a.status) - ["open", "before", "missed", "asleep", "away"].indexOf(b.status))
+    .map((p) => {
+      const r = rosterById.get(p.userId)!;
+      return {
+        userId: p.userId,
+        name: displayName(r.name, r.email),
+        rawName: r.name,
+        email: r.email,
+        status: p.status,
+        localTime: p.localTime,
+        city: p.city,
+      };
+    });
 
-  const checkInHref = `/${orgSlug}/${teamSlug}/check-in`;
-  const primaryCta = ctaLabel(myCheckIn);
+  // ── Digest line ──
+  const openBlockers = entries.flatMap((e) =>
+    blockerRows(e, user.id, names).filter((b) => !b.resolved),
+  );
+  const tasks = entries.reduce((n, e) => n + taskStats(e.today).total, 0);
+  const videos = entries.reduce((n, e) => n + e.recordings.length, 0);
+  const digest = [
+    openBlockers.length > 0 && `${openBlockers.length} open blocker${openBlockers.length > 1 ? "s" : ""}`,
+    tasks > 0 && `${tasks} task${tasks > 1 ? "s" : ""} planned`,
+    videos > 0 && `${videos} video${videos > 1 ? "s" : ""}`,
+  ].filter(Boolean) as string[];
+
+  // ── Needs attention ──
+  // Blocker mentions already appear as blocker rows above.
+  const mentionedMe = entries.filter(
+    (e) => e.userId !== user.id && mentionsUser({ ...e, blockers: "" }, user.id),
+  );
+  const attentionBlockers = [...openBlockers].sort(
+    (a, b) => Number(b.mentionsViewer) - Number(a.mentionsViewer) || Number(b.viewerIsAuthor) - Number(a.viewerIsAuthor),
+  );
+  const hasAttention = attentionBlockers.length > 0 || mentionedMe.length > 0 || replies.length > 0;
+
+  const orderedEntries = [...entries].sort((a, b) => Number(b.userId === user.id) - Number(a.userId === user.id));
+  const headline = isToday
+    ? roster.length === 1
+      ? entries.length === 1
+        ? "You're checked in."
+        : "Just you, for now."
+      : `${entries.length} of ${roster.length} checked in`
+    : `${entries.length} check-in${entries.length === 1 ? "" : "s"}`;
 
   return (
-    <AppShell
-      orgSlug={orgSlug}
-      teamSlug={teamSlug}
-      orgName={team.orgName}
-      teamName={team.teamName}
-      role={team.role}
-      userId={user.id}
-      userEmail={user.email}
-      active="feed"
-    >
-      <TzDetector currentTz={user.tz} />
-
-      <div className="mx-auto max-w-4xl px-6 py-10 md:py-12 space-y-10">
-        {/* Primary CTA card */}
-        {primary && (
-          <div className="rounded-lg border border-white/10 bg-white/[0.02] px-5 py-5 flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-1">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                Today · {todayISO}
-              </p>
-              <p className="text-lg font-medium">{primaryCta.headline}</p>
-              <p className="text-xs text-muted-foreground">{primaryCta.hint}</p>
-            </div>
-            <Link
-              href={checkInHref}
-              className="h-11 px-5 rounded-md bg-foreground text-primary-foreground text-sm font-medium hover:bg-foreground/90 active:scale-[0.99] transition inline-flex items-center gap-2"
-            >
-              {primaryCta.button} →
-            </Link>
-          </div>
-        )}
-
-        {/* live status band */}
-        <section className="border-y border-border py-3 flex flex-wrap items-center gap-6 text-sm">
-          <StatBadge label="done" value={done} color="emerald" />
-          <StatBadge label="open" value={open} color="amber" />
-          <StatBadge label="closed" value={closed} color="zinc" />
-          <StatBadge label="asleep" value={asleep} color="indigo" />
-          <span className="flex-1" />
-          {primary ? (
-            <span className="text-xs text-muted-foreground font-mono">
-              {primary.windowOpenLocal.slice(0, 5)} → {primary.windowCloseLocal.slice(0, 5)} local
-            </span>
-          ) : null}
-        </section>
-
-        {/* Today */}
-        {feed.today && (
-          <section className="space-y-4">
-            <SectionHeader title="Today" />
-            {feed.today.entries.length === 0 ? (
-              <EmptyState hint="No one has checked in yet. Be the first." />
-            ) : (
-              <ul className="space-y-4">
-                {feed.today.entries.map((e) => (
-                  <CheckInCard
-                    key={e.checkInId}
-                    entry={e}
-                    isMe={e.userId === user.id}
-                    currentUserId={user.id}
-                  />
-                ))}
-              </ul>
-            )}
-            {memberRows.some((m) => m.status !== "done") && (
-              <div className="pt-2">
-                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-2">
-                  Pending
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {memberRows
-                    .filter((m) => m.status !== "done")
-                    .map((m) => (
-                      <span
-                        key={m.userId}
-                        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.02] px-3 py-1 text-xs"
-                      >
-                        <StatusDot status={m.status} />
-                        {displayName(m.name, m.email)}
-                      </span>
-                    ))}
-                </div>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* Recent */}
-        {feed.past.length > 0 && (
-          <section className="space-y-4">
-            <SectionHeader title="Recent" />
-            <ul className="space-y-6">
-              {feed.past.map((occ) => (
-                <li key={occ.occurrenceId} className="space-y-3">
-                  <p className="text-xs font-mono text-muted-foreground">
-                    {dayLabel(occ.scheduleDate, todayISO)} · {occ.entries.length}{" "}
-                    {occ.entries.length === 1 ? "check-in" : "check-ins"}
-                  </p>
-                  <ul className="space-y-3">
-                    {occ.entries.map((e) => (
-                      <CheckInCard
-                        key={e.checkInId}
-                        entry={e}
-                        isMe={e.userId === user.id}
-                        currentUserId={user.id}
-                        compact
-                      />
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-      </div>
-    </AppShell>
-  );
-}
-
-// ────────── card ──────────
-import type { FeedEntry } from "@/lib/queries";
-
-function dayLabel(iso: string, todayISO: string): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  const t = new Date(`${todayISO}T00:00:00Z`);
-  const diff = Math.round((t.getTime() - d.getTime()) / 86_400_000);
-  if (diff === 1) return "yesterday";
-  return d.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  }).toLowerCase();
-}
-
-function mentionsUser(entry: FeedEntry, userId: string): boolean {
-  return [entry.yesterday, entry.today, entry.blockers].some((md) =>
-    extractMentions(md).some((m) => m.userId === userId),
-  );
-}
-
-function CheckInCard({
-  entry,
-  isMe,
-  currentUserId,
-  compact,
-}: {
-  entry: FeedEntry;
-  isMe: boolean;
-  currentUserId: string;
-  compact?: boolean;
-}) {
-  const name = displayName(entry.userName, entry.userEmail);
-  const hue = avatarHue(name);
-  const mentionsMe = !isMe && mentionsUser(entry, currentUserId);
-  return (
-    <li
-      id={`ci-${entry.checkInId}`}
-      className={`feed-card rounded-lg border ${
-        isMe ? "border-accent/40 bg-accent/[0.04]" : "border-white/10 bg-white/[0.02]"
-      } px-5 py-4 space-y-3 scroll-mt-24`}
-    >
-      <header className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span
-            aria-hidden
-            className="grid place-items-center size-8 rounded-full text-[10px] font-semibold shrink-0"
-            style={{
-              background: `oklch(0.32 0.06 ${hue} / 0.7)`,
-              color: `oklch(0.88 0.06 ${hue})`,
-              border: `1px solid oklch(0.6 0.1 ${hue} / 0.4)`,
-            }}
-          >
-            {initials(entry.userName, entry.userEmail)}
-          </span>
-          <p className="text-sm font-medium truncate">
-            {name}
-            {isMe && (
-              <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                you
-              </span>
-            )}
+    <div className="mx-auto max-w-3xl px-4 sm:px-6 pt-8 md:pt-12 pb-16 space-y-10">
+      <header className="space-y-5">
+        <div className="space-y-2">
+          <p className="kicker">
+            {isToday ? "Today" : relativeDay(dateISO, today.todayISO)} · {dayLabel(dateISO, "long")}
           </p>
-          {mentionsMe && (
-            <span className="shrink-0 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-200 text-[10px] px-2 py-0.5">
-              mentions you
-            </span>
-          )}
+          <h1 className="display text-[2.1rem] sm:text-5xl text-ink">{headline}</h1>
+          {digest.length > 0 && <p className="text-soft">{digest.join(" · ")}</p>}
         </div>
-        <time className="text-[11px] text-muted-foreground font-mono shrink-0">
-          {entry.submittedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-        </time>
+        <DaySwitcher days={days} todayISO={today.todayISO} current={dateISO} root={root} />
       </header>
 
-      {entry.recordings.length > 0 && (
-        <div className="pl-3.5 space-y-2">
-          {entry.recordings.map((r) => (
-            <div key={r.id} className="space-y-2">
-              {r.summary && r.summary.bullets.length > 0 && (
-                <ul className="text-sm space-y-1">
-                  {r.summary.bullets.map((b, i) => (
-                    <li key={i} className="flex gap-2">
-                      <span className="text-accent shrink-0">→</span>
-                      <span>{b}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <RecordingPlayer rec={r} />
-            </div>
-          ))}
-        </div>
+      {isToday && (
+        <>
+          <DayRail
+            members={railMembers}
+            schedule={today.primary}
+            nowISO={today.now.toISOString()}
+            viewerId={user.id}
+          />
+          <YourCard
+            mine={today.mine}
+            state={today.markState}
+            schedule={today.primary}
+            away={today.myAway}
+            checkInHref={checkInFlowPath(orgSlug, teamSlug)}
+            viewerTz={user.tz}
+          />
+        </>
       )}
 
-      {compact ? (
-        <div className="pl-3.5 space-y-2">
-          {entry.today.trim() && (
-            <div>
-              <SectionKey>today</SectionKey>
-              <Markdown currentUserId={currentUserId}>{entry.today}</Markdown>
-            </div>
-          )}
-          {entry.blockers.trim() && (
-            <div>
-              <SectionKey>blockers</SectionKey>
-              <Markdown currentUserId={currentUserId}>{entry.blockers}</Markdown>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pl-3.5">
-          <div className="space-y-1">
-            <SectionKey>yesterday</SectionKey>
-            <Markdown currentUserId={currentUserId}>{entry.yesterday}</Markdown>
+      {hasAttention && (
+        <section className="space-y-3" aria-labelledby="attention">
+          <SectionTitle>
+            <span id="attention">Needs attention</span>
+          </SectionTitle>
+          <div className="rounded-2xl border border-danger/20 bg-danger/[0.03] px-4 sm:px-5 py-1 divide-y divide-line">
+            {attentionBlockers.map((b) => (
+              <BlockerRow key={`${b.checkInId}-${b.itemKey}`} data={b} readOnly={!isToday && !b.viewerIsAuthor} />
+            ))}
+            {mentionedMe.map((e) => (
+              <Link
+                key={`m-${e.checkInId}`}
+                href={checkInDetailPath(orgSlug, teamSlug, e.checkInId)}
+                className="flex items-center gap-3 py-3 text-sm text-ink hover:text-amber transition"
+              >
+                <span className="grid place-items-center size-6 rounded-full bg-amber/[0.14] text-amber shrink-0">
+                  <AtSign className="size-3.5" />
+                </span>
+                <span className="flex-1">
+                  <span className="font-medium">{firstName(e.userName, e.userEmail)}</span> mentioned you
+                </span>
+              </Link>
+            ))}
+            {replies.map((r) => (
+              <Link
+                key={r.commentId}
+                href={checkInDetailPath(orgSlug, teamSlug, r.checkInId)}
+                className="flex items-center gap-3 py-3 text-sm text-ink hover:text-amber transition"
+              >
+                <span className="grid place-items-center size-6 rounded-full bg-ink/[0.06] text-soft shrink-0">
+                  <MessageCircle className="size-3.5" />
+                </span>
+                <span className="flex-1 min-w-0 truncate">
+                  <span className="font-medium">{firstName(r.authorName, r.authorEmail)}</span> replied:{" "}
+                  <span className="text-soft">{plainText(r.body)}</span>
+                </span>
+              </Link>
+            ))}
           </div>
-          <div className="space-y-1">
-            <SectionKey>today</SectionKey>
-            <Markdown currentUserId={currentUserId}>{entry.today}</Markdown>
-          </div>
-          <div className="space-y-1">
-            <SectionKey>blockers</SectionKey>
-            <Markdown currentUserId={currentUserId}>{entry.blockers}</Markdown>
-          </div>
-        </div>
+        </section>
       )}
-    </li>
-  );
-}
 
-function SectionKey({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70">{children}</p>
-  );
-}
+      <section className="space-y-4" aria-labelledby="feed">
+        <SectionTitle count={entries.length}>
+          <span id="feed">{isToday ? "Check-ins" : `Check-ins · ${dayLabel(dateISO)}`}</span>
+        </SectionTitle>
+        {orderedEntries.length === 0 ? (
+          <Empty
+            state={isToday ? "before" : "missed"}
+            title={isToday ? "Nobody's checked in yet." : "No check-ins that day."}
+            hint={isToday ? "Mornings arrive one time zone at a time. Yours could be first." : undefined}
+          />
+        ) : (
+          <div className="space-y-4">
+            {orderedEntries.map((e) => (
+              <CheckInCard
+                key={e.checkInId}
+                entry={e}
+                viewerId={user.id}
+                names={names}
+                focus={focus === e.checkInId}
+                viewerCanManage={team.role !== "member"}
+                detailHref={checkInDetailPath(orgSlug, teamSlug, e.checkInId)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
 
-function memberStatus(
-  now: Date,
-  tz: string,
-  s: Sched | undefined,
-  done: boolean,
-): MemberStatus {
-  if (done) return "done";
-  if (!s) return "asleep";
-  const today = localDate(now, tz);
-  const w = windowFor(today, s.windowOpenLocal.slice(0, 5), s.windowCloseLocal.slice(0, 5), tz);
-  const status = windowStatus(now, w);
-  if (status === "open") return "open";
-  if (status === "closed") return "closed";
-  return "asleep";
-}
+      {isToday && pending.length > 0 && (
+        <section className="space-y-3" aria-labelledby="pending">
+          <SectionTitle count={pending.length}>
+            <span id="pending">Not in yet</span>
+          </SectionTitle>
+          <Pending teamId={team.teamId} members={pending} />
+        </section>
+      )}
 
-function ctaLabel(mine: { status: "draft" | "submitted"; hasContent: boolean } | null): {
-  headline: string;
-  hint: string;
-  button: string;
-} {
-  if (!mine) {
-    return {
-      headline: "You haven't checked in yet.",
-      hint: "Takes a minute. Yesterday, today, blockers.",
-      button: "Check in",
-    };
-  }
-  if (mine.status === "submitted") {
-    return {
-      headline: "You're in ✓",
-      hint: "You can update your check-in for the rest of the day.",
-      button: "Update",
-    };
-  }
-  if (mine.hasContent) {
-    return {
-      headline: "You've got a draft.",
-      hint: "Autosaved. Finish it and submit.",
-      button: "Continue draft",
-    };
-  }
-  return {
-    headline: "You haven't checked in yet.",
-    hint: "Takes a minute. Yesterday, today, blockers.",
-    button: "Check in",
-  };
-}
+      {isToday && roster.length === 1 && (
+        <Empty
+          state="open"
+          title="Standups need a team."
+          hint="Invite people and they'll show up on the rail in their own time zone."
+          action={
+            <Link href={`${root}/people`} className="text-sm text-amber hover:underline underline-offset-4">
+              Invite teammates →
+            </Link>
+          }
+        />
+      )}
 
-function SectionHeader({ title }: { title: string }) {
-  return <h2 className="text-2xl font-medium tracking-tight">{title}</h2>;
-}
-
-function EmptyState({ hint }: { hint: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-white/10 px-5 py-10 text-center">
-      <p className="text-sm text-muted-foreground">{hint}</p>
+      {entries.length > 0 && !isToday && (
+        <p className="text-center text-xs text-soft">
+          <Link href={root} className="hover:text-ink transition">
+            ← Back to today
+          </Link>
+        </p>
+      )}
     </div>
   );
 }
 
-function StatBadge({
-  label,
-  value,
-  color,
+function DaySwitcher({
+  days,
+  todayISO,
+  current,
+  root,
 }: {
-  label: string;
-  value: number;
-  color: "emerald" | "amber" | "zinc" | "indigo";
+  days: Array<{ date: string; count: number }>;
+  todayISO: string;
+  current: string;
+  root: string;
 }) {
-  const dot =
-    color === "emerald"
-      ? "bg-emerald-400 shadow-[0_0_10px_theme(colors.emerald.400/.6)]"
-      : color === "amber"
-        ? "bg-amber-400 shadow-[0_0_10px_theme(colors.amber.400/.5)]"
-        : color === "indigo"
-          ? "bg-indigo-400"
-          : "bg-zinc-500";
+  const list = [{ date: todayISO, count: days.find((d) => d.date === todayISO)?.count ?? 0 }, ...days.filter((d) => d.date !== todayISO)].slice(0, 10);
+  if (list.length <= 1) return null;
   return (
-    <span className="inline-flex items-center gap-2 text-sm">
-      <span className={`size-2 rounded-full ${dot}`} />
-      <span className="font-mono tabular-nums">{value}</span>
-      <span className="text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
-    </span>
+    <nav aria-label="Days" className="-mx-4 sm:mx-0 overflow-x-auto [scrollbar-width:none]">
+      <ul className="flex gap-1.5 px-4 sm:px-0 w-max">
+        {list.map((d) => {
+          const active = d.date === current;
+          return (
+            <li key={d.date}>
+              <Link
+                href={d.date === todayISO ? root : `${root}?day=${d.date}`}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "inline-flex items-center gap-2 h-9 rounded-full border px-3.5 text-sm transition whitespace-nowrap",
+                  active ? "border-amber/50 bg-amber/[0.1] text-ink" : "border-line text-soft hover:text-ink hover:border-line-strong",
+                )}
+              >
+                {d.date === todayISO && <LogoMark size={12} state={active ? "open" : "before"} className="text-ink" />}
+                {relativeDay(d.date, todayISO)}
+                {d.count > 0 && <span className="text-xs text-faint tabular-nums">{d.count}</span>}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
-}
-
-function StatusDot({ status }: { status: MemberStatus }) {
-  const cls =
-    status === "done"
-      ? "bg-emerald-400 shadow-[0_0_10px_theme(colors.emerald.400/.6)]"
-      : status === "open"
-        ? "bg-amber-400 shadow-[0_0_8px_theme(colors.amber.400/.5)]"
-        : status === "closed"
-          ? "bg-zinc-500"
-          : "bg-indigo-400";
-  return <span className={`size-2 rounded-full ${cls}`} />;
 }

@@ -12,11 +12,12 @@ import {
 } from "@/db/schema";
 import { sendEmail } from "@/lib/email";
 import { extractMentions } from "@/lib/mentions";
+import { checkInDetailPath } from "@/lib/paths";
 
 type Enqueue = {
   userId: string;
   teamId: string;
-  type: "mentioned" | "blocker_on_your_item" | "window_open" | "digest_ready";
+  type: (typeof notifications.$inferInsert)["type"];
   title: string;
   body?: string;
   linkPath?: string;
@@ -63,7 +64,7 @@ export async function notify(input: Enqueue): Promise<void> {
 
 // Fire notifications for people mentioned in a submitted check-in.
 // Blocker mentions get a stronger `blocker_on_your_item` type.
-export async function fireMentionEvents(checkInId: string): Promise<void> {
+export async function fireMentionEvents(checkInId: string, onlyUserIds?: string[]): Promise<void> {
   const [ctx] = await db
     .select({
       authorId: checkIns.userId,
@@ -87,7 +88,7 @@ export async function fireMentionEvents(checkInId: string): Promise<void> {
   if (!ctx) return;
 
   const author = ctx.authorName?.trim() || ctx.authorEmail.split("@")[0];
-  const linkPath = `/${ctx.orgSlug}/${ctx.teamSlug}#ci-${checkInId}`;
+  const linkPath = checkInDetailPath(ctx.orgSlug, ctx.teamSlug, checkInId);
 
   const yMentions = extractMentions(ctx.yesterday).map((m) => ({ ...m, source: "yesterday" as const }));
   const tMentions = extractMentions(ctx.today).map((m) => ({ ...m, source: "today" as const }));
@@ -111,8 +112,10 @@ export async function fireMentionEvents(checkInId: string): Promise<void> {
   const seenMention = new Set<string>();
   const seenBlocker = new Set<string>();
 
+  const only = onlyUserIds ? new Set(onlyUserIds) : null;
   for (const m of combined) {
     if (m.userId === ctx.authorId) continue;
+    if (only && !only.has(m.userId)) continue;
     if (!teamMemberIds.has(m.userId)) continue;
 
     if (m.source === "blockers") {

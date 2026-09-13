@@ -1,6 +1,7 @@
 import { and, eq, gte, inArray, lt } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
+import { awayToday, getAwayPeriods } from "@/lib/queries";
 import {
   checkIns,
   members,
@@ -92,9 +93,13 @@ export async function GET(req: Request) {
       .innerJoin(users, eq(users.id, members.userId))
       .where(eq(members.teamId, s.teamId));
 
+    // Away periods for this team (still running somewhere in the world).
+    const away = await getAwayPeriods(s.teamId, now);
+
     // ── window_open ──
     for (const m of teamMembers) {
       const today = localDate(now, m.tz);
+      if (awayToday(away, m.userId, m.tz, now)) continue;
       const w = windowFor(
         today,
         s.windowOpenLocal.slice(0, 5),
