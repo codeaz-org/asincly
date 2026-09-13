@@ -1,4 +1,5 @@
-import type { AI, Summarizer, Transcriber } from "./types";
+import { EMPTY_DRAFT } from "./draft-schema";
+import type { AI, Drafter, Summarizer, Transcriber } from "./types";
 
 // Fallback used when no AI key is configured. The pipeline still runs
 // end-to-end; it just produces NOTHING visible. Echoing the written note
@@ -20,7 +21,16 @@ export const noopSummarizer: Summarizer = {
   },
 };
 
+export const noopDrafter: Drafter = {
+  name: "noop",
+  configured: false,
+  async draft() {
+    return EMPTY_DRAFT;
+  },
+};
+
 export const noopAI: AI = {
   transcriber: noopTranscriber,
   summarizer: noopSummarizer,
+  drafter: noopDrafter,
 };

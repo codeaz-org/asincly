@@ -1,3 +1,5 @@
+import type { CheckInDraft, DraftInput } from "./draft-schema";
+
 // Pluggable AI provider surface. Adapters are wired in src/lib/ai/index.ts.
 // Every adapter must be swappable per-deployment (env-driven).
 
@@ -43,4 +45,12 @@ export type Summarizer = {
 export type AI = {
   transcriber: Transcriber;
   summarizer: Summarizer;
+  drafter: Drafter;
+};
+
+export type Drafter = {
+  name: string;
+  /** false for the noop drafter: the UI then routes straight to writing. */
+  configured: boolean;
+  draft(input: DraftInput): Promise<CheckInDraft>;
 };

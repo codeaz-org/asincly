@@ -1,32 +1,33 @@
-import { groqSummarizer, groqTranscriber } from "./groq";
-import { noopAI, noopSummarizer, noopTranscriber } from "./noop";
-import type { AI, Summarizer, Transcriber } from "./types";
+import { fakeDrafter, fakeTranscriber } from "./fake";
+import { groqDrafter, groqSummarizer, groqTranscriber } from "./groq";
+import { noopDrafter, noopSummarizer, noopTranscriber } from "./noop";
+import type { AI } from "./types";
 
 // Resolve providers at call time (env only guaranteed at runtime).
-// Order per-capability:
-//   Groq (free, single key covers both)  →  noop fallback
-// Deepgram / Anthropic / OpenAI / Whisper adapters slot in here when a
-// team wants a paid or self-hosted stack.
+//   AI_FAKE=1 (dev/test only) → deterministic fakes
+//   GROQ_API_KEY              → Groq Whisper + Llama
+//   otherwise                 → noop (pipeline runs, drafts are empty)
+// OpenAI / Anthropic / local Whisper adapters slot in here.
 
-function pickTranscriber(): Transcriber {
-  if (process.env.GROQ_API_KEY) return groqTranscriber;
-  return noopTranscriber;
-}
-
-function pickSummarizer(): Summarizer {
-  if (process.env.GROQ_API_KEY) return groqSummarizer;
-  return noopSummarizer;
+function fakeEnabled(): boolean {
+  return process.env.AI_FAKE === "1" && process.env.NODE_ENV !== "production";
 }
 
 export async function getAI(): Promise<AI> {
-  const transcriber = pickTranscriber();
-  const summarizer = pickSummarizer();
-  if (transcriber === noopTranscriber && summarizer === noopSummarizer) return noopAI;
-  return { transcriber, summarizer };
+  if (fakeEnabled()) return { transcriber: fakeTranscriber, summarizer: noopSummarizer, drafter: fakeDrafter };
+  if (process.env.GROQ_API_KEY) {
+    return { transcriber: groqTranscriber, summarizer: groqSummarizer, drafter: groqDrafter };
+  }
+  return { transcriber: noopTranscriber, summarizer: noopSummarizer, drafter: noopDrafter };
+}
+
+export function aiConfigured(): boolean {
+  return fakeEnabled() || !!process.env.GROQ_API_KEY;
 }
 
 export type {
   AI,
+  Drafter,
   Summarizer,
   Transcriber,
   TranscribeInput,
@@ -34,3 +35,4 @@ export type {
   SummarizeInput,
   Summary,
 } from "./types";
+export type { CheckInDraft, DraftInput, PrevItem, RosterEntry, Sections } from "./draft-schema";
