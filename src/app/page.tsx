@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { RibbonLanding } from "@/components/ribbon-landing";
+import { SplitLanding } from "@/components/split-landing";
 import { getMemberships } from "@/lib/session";
 
 export default async function LandingPage() {
@@ -11,5 +11,5 @@ export default async function LandingPage() {
     const first = memberships[0];
     redirect(`/${first.orgSlug}/${first.teamSlug}`);
   }
-  return <RibbonLanding />;
+  return <SplitLanding />;
 }

@@ -29,6 +29,7 @@ changes only grammar and world will fail it.
 | Build | Grammar | Nav treatment | Hero device | Act-sequence shape | Close pattern | Signature move | World | Port |
 |---|---|---|---|---|---|---|---|---|
 | asincly | **Living ribbon** *(new grammar)* | The ribbon itself — 10 monogrammed teammate dots as jump-links, sun sweeps left→right on scroll | Ribbon at 04:30, silence, no headline for one screen | No acts — 7 hour-windows over one continuous scroll track (span 0.08 / 0.12 / 0.16 / 0.16 / **0.28 peak** / 0.12 / 0.08), sticky copy above a fixed ribbon | CTA input slotted into the ribbon as a "+" teammate slot; ribbon rests at 23:30, all 10 dots done | 24-hour team ribbon: scroll = time, per-teammate deterministic 5-state machine (asleep / about / open / checking / done), digest self-assembles line by line as evening arrives | Dark editorial-minimal + emerald accent + amber sun; serif italic for peak/close, sans elsewhere | Next.js `src/app/page.tsx` (replaced marketing landing) |
+| asincly-split | **Split stage** | The divider: side labels via paired kickers, beat stamps, a draggable grip; corner wordmark + two quiet links, no bar | 50/50 hard split, two opposed headlines readable at once on two grounds (cold light vs warm dark) | 7 paired beats on one pinned dual stage (~10vh): hero / calendar-vs-check-in / meeting-vs-summary / chat-vs-digest / breath / **collapse peak (span 0.26)** / close | The collapse: divider sweeps to the left edge, sync world crushes to a tombstone sliver, CTA lives in the winning warm column and holds | Tug-of-war divider: scroll drives the argument's position; the visitor can grab the rope, the page resists and snaps back; beats stamp marks on the rail | Cold fluorescent light vs warm pre-dawn dark, one amber hue at two lightnesses, Geist + Geist Mono, computed demo-team panels | Next.js `src/app/page.tsx` via `src/components/split-landing.tsx` (supersedes ribbon landing on the route; ribbon component retained) |
 
 ---
 
@@ -49,6 +50,12 @@ as a constraint, so writing them down is the whole point.
   the reader adding themselves to a horizontal ribbon.
 - **Act shape** — 7 hour-windows over a single scroll track, peak span
   0.28 (largest by margin), sticky copy over a fixed ribbon canvas.
+- **Grammar "Split stage" with a collapse close** — two grounds held in
+  tension, divider-as-chrome, winner-takes-the-width ending (asincly-split).
+- **Signature move "tug-of-war divider"** — draggable divider with spring-back
+  and beat stamps (asincly-split).
+- **Close pattern "loser as tombstone sliver"** — the losing world survives as
+  a labelled sliver at the screen edge (asincly-split).
 
 ---
 
