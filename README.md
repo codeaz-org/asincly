@@ -1,107 +1,226 @@
+<div align="center">
+
+<img src="src/app/icon.svg" width="72" height="72" alt="Asincly logo" />
+
 # Asincly
 
-Async standups for remote teams. Members check in on their own local schedule with a short
-camera + screen recording and a markdown note; AI turns recordings into bullet summaries,
-extracts action items and mentions; the team reads a per-occurrence digest instead of meeting.
+**Async standups for remote teams.** Talk for two minutes in your own morning; AI writes
+the check-in; your team reads it in theirs. No meeting, nothing missed.
 
-- Landing page: <https://asincly.vercel.app>
-- License: AGPL-3.0 — self-hostable, hosted cloud version available.
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-f59e0b.svg)](./LICENSE)
+[![CI](https://github.com/codeaz-org/asincly/actions/workflows/ci.yml/badge.svg)](https://github.com/codeaz-org/asincly/actions/workflows/ci.yml)
+[![Self-hostable](https://img.shields.io/badge/self--host-Docker%20Compose-2496ED.svg)](./docs/DEPLOYMENT.md#docker-self-host)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
 
-## Quick start (dev)
+[Features](#features) · [Quick start](#quick-start) · [Deploy for free](#deploy) ·
+[Architecture](./docs/ARCHITECTURE.md) · [Contributing](./CONTRIBUTING.md)
+
+<img src="docs/screenshots/today.png" alt="The Today dashboard: a day rail showing every teammate at their local time, blockers that need attention and check-in cards" width="860" />
+
+</div>
+
+---
+
+## Why
+
+A daily standup at 09:30 in New York is 22:30 in Tokyo and 01:30 in Auckland. Someone is
+always awake at the wrong time. Written standups fix that, but nobody likes typing them and
+half the context never makes it in.
+
+Asincly lets each person **record a short video whenever their day starts**. The AI turns it
+into *yesterday / today / blockers*, ticks off last time's plan, tags the teammates you
+mentioned and flags blockers. The team reads a calm, one-screen digest instead of meeting.
+
+## Features
+
+### Record instead of type
+
+<img src="docs/screenshots/record.png" alt="Recording screen with last time's plan, open blockers and private notes beside the camera" width="860" />
+
+- **Video first:** camera or screen + camera, up to 5 minutes; works on phones.
+- **Your previous plan on screen while you talk:** tap items as done or still going, or just
+  say it.
+- **Private notes:** jot talking points beforehand so you don't forget anything.
+- **Write it instead:** a guided yesterday → today → blockers flow for days you'd rather type.
+
+### AI writes the check-in
+
+<img src="docs/screenshots/ai-review.png" alt="Review screen: the AI drafted yesterday, today and a blocker, and tagged two teammates" width="860" />
+
+- **Transcription:** Whisper transcribes an audio-only track, so uploads stay small.
+- **Uses your plan:** the draft marks last time's tasks **done**, **carries unfinished
+  ones forward**, and adds new work and blockers.
+- **Auto-tagging:** teammates you mention are tagged automatically; remove a tag with one
+  tap before sending.
+- **Your words win:** anything you already typed is kept, with a "use AI version" option.
+- **Pluggable AI:** Groq by default (free tier). Without a key, videos still upload and
+  people write the check-in themselves.
+
+### A dashboard that respects time zones
+
+<table>
+<tr>
+<td width="62%"><img src="docs/screenshots/emoji-reactions.png" alt="Check-in cards with Slack-style emoji reactions and the emoji picker open" /></td>
+<td><img src="docs/screenshots/today-mobile.png" alt="Today dashboard on a phone with the bottom navigation" /></td>
+</tr>
+</table>
+
+- **Day rail:** everyone placed at *their* local time, with the check-in window as a band.
+  You can see who's asleep, who's in their window and who's done.
+- **Needs attention:** open blockers with **I can help** / **Resolved**, mentions of you and
+  replies to your check-in.
+- **Summary-first cards:** full note, video on tap, **Slack-style emoji reactions** and
+  replies with `:shortcode:` autocomplete.
+- **Not in yet:** see who hasn't checked in, **nudge** people whose window is open, and set
+  yourself **away**, which pauses reminders.
+
+### Team rules, people and settings
+
+<table>
+<tr>
+<td><img src="docs/screenshots/people.png" alt="People page ordered by who's furthest into their day" /></td>
+<td><img src="docs/screenshots/settings.png" alt="Settings with the Require a video rule, schedules and data controls" /></td>
+</tr>
+</table>
+
+- **Require video (owners and admins):** members who can't record pick a reason, and
+  admins see it.
+- **Schedules:** any number per team (daily, weekdays, M·W·F, weekly, custom RRULE). Each
+  has a window in every member's local time.
+- **Notifications:** in-app and email, for window open, mentions, blockers, replies,
+  offers of help and nudges.
+- **Data controls:** export everything as JSON, set recording retention, hard-delete a team
+  or organization.
+
+### Private by design
+
+- **Tenant isolation in the database:** Postgres **row-level security** on every table.
+- **Encryption at rest:** transcripts, summaries and AI drafts are **encrypted**.
+- **Media never passes through the app server:** browsers upload with pre-signed URLs and
+  play back via short-lived signed links.
+- **Hardening:** audit log, rate limits, strict CSP, Zod validation on every input.
+- **Open source (AGPL-3.0) and self-hostable** with Docker Compose.
+
+## Quick start
+
+**Prerequisites:** Node.js 22+, [pnpm](https://pnpm.io) 12 (`npm i -g corepack@latest && corepack enable`),
+and Docker.
 
 ```bash
+git clone https://github.com/codeaz-org/asincly.git
+cd asincly
 pnpm install
-cp .env.example .env
-pnpm db:up            # Postgres + MinIO via Docker Compose
-pnpm db:migrate       # apply Drizzle migrations
-pnpm dev              # http://localhost:3000
-```
-
-Optional: paste a free [Groq](https://console.groq.com) key into `.env` (`GROQ_API_KEY=...`)
-to get real Whisper transcription + Llama summaries. Without a key the pipeline runs to
-completion using a no-op stub that just echoes your written note.
-
-### Other scripts
-
-| Command            | What it does                                     |
-| ------------------ | ------------------------------------------------ |
-| `pnpm test`        | Vitest (unit)                                    |
-| `pnpm e2e`         | Playwright (end-to-end)                          |
-| `pnpm lint`        | ESLint                                           |
-| `pnpm typecheck`   | `tsc --noEmit`                                   |
-| `pnpm db:studio`   | Drizzle Studio (browse local Postgres)           |
-| `pnpm db:generate` | Generate a new migration from `src/db/schema.ts` |
-| `pnpm db:down`     | Stop the local Docker services                   |
-
-## Stack
-
-Next.js (App Router) · TypeScript · Tailwind · shadcn/ui · Postgres + Drizzle (with FORCE
-row-level security) · Auth.js (Google + magic link) · S3-compatible storage (MinIO local,
-R2/S3 prod) · Groq for AI (Whisper + Llama, free tier) · Resend for email · plain cron
-endpoint for reminders + digest (no Inngest signup required).
-
-## Self-host
-
-Everything runs in Docker for the datastores:
-
-```bash
-cp .env.example .env
-# Fill AUTH_SECRET (openssl rand -base64 32),
-# DATA_ENCRYPTION_KEY (openssl rand -base64 32),
-# CRON_SECRET (openssl rand -hex 32),
-# optionally GROQ_API_KEY, RESEND_API_KEY.
-
-docker compose up -d          # Postgres + MinIO
-pnpm install
+cp .env.example .env          # set AUTH_SECRET, DATA_ENCRYPTION_KEY, CRON_SECRET (openssl commands inside)
+pnpm db:up                    # Postgres + MinIO in Docker
 pnpm db:migrate
-pnpm build && pnpm start      # serves on :3000
+pnpm db:seed                  # optional: a demo team across 9 time zones
+pnpm dev                      # http://localhost:3000
 ```
 
-### Cron (already wired, free, zero external service)
+Sign in at <http://localhost:3000/sign-in>. Without a `RESEND_API_KEY`, the magic link is
+printed in the terminal running `pnpm dev`. With the demo seed, sign in as
+`demo@asincly.local` and open `/northwind/product`.
 
-The scheduled work — window-open reminders, digest generation, recording retention
-purges — runs from a single endpoint `/api/cron/tick` guarded by `CRON_SECRET`.
-**You don't have to run anything yourself.** Two schedulers ship in the repo, pick the
-one that matches your deployment:
+**AI drafts:** add a free [Groq](https://console.groq.com) key as `GROQ_API_KEY`. To try the
+flow without a key, start the dev server with `AI_FAKE=1 pnpm dev` for deterministic
+fake drafts.
 
-- **Vercel deploy** — `vercel.json` already registers `/api/cron/tick` every 5 minutes.
-  Set `CRON_SECRET` in the Vercel project's env; Vercel signs each request with
-  `Authorization: Bearer $CRON_SECRET` automatically. Done.
-- **Anywhere else (self-host, Render, Fly, bare metal)** — the GitHub Actions workflow
-  at `.github/workflows/cron.yml` fires every 5 minutes and curls your deploy. Set two
-  repository secrets: `APP_URL` (e.g. `https://asincly.your-domain.com`) and `CRON_SECRET`
-  (same value as in the app env).
+**Testing on your phone:** cameras need HTTPS. Run `pnpm dev --experimental-https`, and add
+your LAN IP to `DEV_ALLOWED_ORIGINS`.
 
-Local dev: run `pnpm cron:local` to fire a single tick against `localhost:3000` — useful
-for testing reminder logic without waiting for schedules to open.
+## Deploy
 
-Object retention on the bucket side (S3 lifecycle rule) is recommended so orphaned files
-from deleted teams get swept — the DB delete leaves them behind on purpose to keep
-cascading deletes fast.
+**Can it run for free? Yes.** Two ways, with different trade-offs:
 
-### Prod deploy
+| Option | Cost | Commercial use | Guide |
+|---|---|---|---|
+| Vercel Hobby + Neon + Backblaze B2 / Cloudflare R2 + Resend + Groq + GitHub Actions | **$0** | ❌ Vercel Hobby is personal use only | [Path A](./docs/DEPLOYMENT.md#a-free-managed-stack-0) |
+| Oracle Cloud Always Free VM + Docker Compose | **$0** | ✅ | [Path B](./docs/DEPLOYMENT.md#b-free-vm-with-docker-0) |
+| Hetzner CX23 (or any 2 GB VPS) + Docker Compose | **~€5.50/mo** | ✅ | [Path C](./docs/DEPLOYMENT.md#c-cheapest-vps-with-docker-5month) |
+| Vercel Pro + Neon + R2 | **~$20+/mo** | ✅ | [Path D](./docs/DEPLOYMENT.md#d-managed-for-companies-20month) |
 
-Vercel + Neon/Supabase for Postgres + Cloudflare R2 for storage is the shortest path.
-Set the same env vars, point `DATABASE_URL` at Neon, `S3_ENDPOINT` at R2, add a Vercel
-Cron entry for `/api/cron/tick`.
+One-machine self-host with automatic HTTPS:
 
-## Security posture
+```bash
+cp .env.example .env   # fill in the "Docker self-host" section
+docker compose -f docker-compose.selfhost.yml --profile https up -d --build
+```
 
-- Postgres row-level security is `FORCE`-enabled on every domain table. Runtime queries
-  go through a non-superuser `asincly_app` role; every request wraps its queries in a tx
-  that sets `app.current_user_id` so policies can check membership.
-- Recording transcripts and summaries are stored **AES-256-GCM encrypted** at rest
-  (`DATA_ENCRYPTION_KEY` from env). Cipher never touches logs.
-- Uploads go **browser → pre-signed PUT → bucket**, never through our API. Playback via
-  short-lived signed GET URLs.
-- Rate limiting on onboarding, invite, and upload-URL endpoints.
-- Every mutation writes to `audit_log` (who did what to which resource, when).
-- Team owners can export all data (JSON) or hard-delete the org (cascades everything).
-- Recording retention is configurable per team (default 90 days).
-- CSP + HSTS + `X-Frame-Options: DENY` + `Referrer-Policy` on every response.
+Full guide, limits, CORS and troubleshooting: **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)**.
 
-See [SECURITY.md](./SECURITY.md) for the disclosure process.
+## Configuration
+
+The essentials. Everything is documented in [`.env.example`](./.env.example).
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_APP_URL`, `AUTH_URL` | ✅ | Public URL of your deployment |
+| `DATABASE_URL` | ✅ | Postgres owner/admin role (migrations, trusted reads) |
+| `DATABASE_URL_APP` + `APP_DB_PASSWORD` | ✅ | Non-superuser role subject to row-level security |
+| `AUTH_SECRET` | ✅ | Session signing |
+| `DATA_ENCRYPTION_KEY` | ✅ | 32-byte base64 key for encrypted transcripts and drafts |
+| `S3_*` | ✅ | Any S3-compatible bucket (MinIO, R2, B2, S3) |
+| `CRON_SECRET` | ✅ | Protects `/api/cron/tick` (reminders, digests, retention) |
+| `RESEND_API_KEY`, `EMAIL_FROM` | Production | Magic-link sign-in and notification emails |
+| `GROQ_API_KEY` | Optional | Video transcription and AI drafts |
+| `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Optional | Google sign-in |
+| `NEXT_PUBLIC_SOURCE_URL` | If you modify the code | Link to your fork's source (AGPL §13) |
+
+## Tech stack
+
+- **Frontend and app:** Next.js 16 (App Router, React 19, TypeScript strict), Tailwind CSS 4,
+  Base UI
+- **Data:** Postgres + Drizzle ORM (SQL migrations with FORCE RLS), Auth.js (magic link, Google)
+- **Media:** S3-compatible storage with pre-signed uploads (MinIO locally), MediaRecorder
+  video and audio
+- **AI and email:** Groq (Whisper + Llama) behind a pluggable provider interface; Resend
+- **Tests:** Vitest (unit and RLS), Playwright (end-to-end with a fake camera and fake AI)
+
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `pnpm dev` | Start the app on :3000 |
+| `pnpm db:up` / `pnpm db:down` | Start/stop local Postgres + MinIO |
+| `pnpm db:migrate` | Apply migrations (and set the app role's password) |
+| `pnpm db:seed` | Load the demo workspace (local databases only) |
+| `pnpm db:generate` | Create a migration from `src/db/schema.ts` |
+| `pnpm db:studio` | Browse the database |
+| `pnpm test` | Unit + row-level security tests |
+| `pnpm e2e` | Playwright (`AI_FAKE=1 pnpm dev` first; `PW_CHANNEL=chrome` to use installed Chrome) |
+| `pnpm lint` / `pnpm typecheck` | ESLint / TypeScript |
+| `pnpm emoji:sync` | Refresh the self-hosted emoji dataset |
+| `pnpm cron:local` | Fire one scheduler tick against localhost |
+
+## Roadmap
+
+See **[docs/PLAN.md](./docs/PLAN.md)**. Next up:
+- Slack app (digest to a channel, DM reminders, `/standup`)
+- Branded HTML emails
+- Web push / PWA
+- Admin 2FA
+- More AI providers (OpenAI, Anthropic, local Whisper)
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md). Roadmap in [docs/PLAN.md](./docs/PLAN.md).
+Contributions are welcome — bug reports, docs, translations and code. Read
+**[CONTRIBUTING.md](./CONTRIBUTING.md)** for setup, conventions and how tests run. Please
+report security issues privately as described in **[SECURITY.md](./SECURITY.md)**.
+
+## License
+
+Copyright © 2026 the Asincly contributors.
+
+Asincly is free software: you can redistribute it and/or modify it under the terms of the
+**GNU Affero General Public License v3.0 or later**. See [LICENSE](./LICENSE).
+
+In plain terms:
+- **You can:** use it, self-host it for your company, and modify it.
+- **If you modify it and offer it to others over a network** (for example as a hosted
+  service), you must make your modified source available to those users under the same
+  license. Set `NEXT_PUBLIC_SOURCE_URL` to your fork so the in-app "Source code" link
+  points to it.
+- **Unmodified self-hosting** for your own team has no extra obligations.
+
+Third-party components and their licenses are listed in
+[THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).

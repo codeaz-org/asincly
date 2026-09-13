@@ -8,6 +8,26 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    services:
+      # Unit tests include row-level security checks against a real database.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: asincly
+          POSTGRES_PASSWORD: asincly
+          POSTGRES_DB: asincly
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U asincly"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://asincly:asincly@localhost:5432/asincly
+      DATABASE_URL_APP: postgres://asincly_app:asincly_app@localhost:5432/asincly
+      AUTH_SECRET: ci-placeholder-secret
+      DATA_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -15,13 +35,18 @@ jobs:
           version: 12
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm db:migrate
       - run: pnpm test
       - run: pnpm build
-        env:
-          DATABASE_URL: postgres://asincly:asincly@localhost:5432/asincly
-          AUTH_SECRET: ci-placeholder-secret
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the self-host image
+        run: docker build --target runtime -t asincly:ci .
