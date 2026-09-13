@@ -21,7 +21,7 @@ type Props = {
   teamSlug: string;
   teamName: string;
   orgName: string;
-  role: "owner" | "admin" | "member";
+  role: "owner" | "admin" | "member" | "guest";
   userId: string;
   userEmail: string;
   /** The viewer's own state for today — drawn on the mobile check-in button. */

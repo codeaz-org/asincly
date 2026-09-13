@@ -7,6 +7,8 @@ import { z } from "zod";
 import { db } from "@/db";
 import { members, organizations, schedules, teams, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
+import { ensureOrgBilling } from "@/lib/billing/entitlements";
+import { isBillingEnabled } from "@/lib/billing/plans";
 import { rateLimit } from "@/lib/rate-limit";
 import { PRESET_RRULES, isValidTimeZone, type PresetKey } from "@/lib/time";
 import { requireUser } from "@/lib/session";
@@ -92,6 +94,8 @@ export async function completeOnboarding(formData: FormData) {
     resourceId: created.orgId,
     meta: { name: parsed.orgName, teamName: parsed.teamName },
   });
+  // Hosted cloud: every new organization starts on a 14-day Pro trial.
+  if (isBillingEnabled()) await ensureOrgBilling(created.orgId);
 
   redirect(`/${created.orgSlug}/${created.teamSlug}`);
 }
