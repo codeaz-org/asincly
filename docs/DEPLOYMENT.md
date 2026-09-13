@@ -4,12 +4,16 @@ Asincly is a Next.js app plus four services: **Postgres**, **S3-compatible stora
 **email sender** and a **scheduler** that calls `/api/cron/tick` every few minutes. AI
 (Groq) is optional. Pick the path that fits your budget and how you'll use it.
 
-| Path | Monthly cost | Commercial use | Effort | Best for |
+| Path | Monthly cost | Provider allows business use¹ | Effort | Best for |
 |---|---|---|---|---|
 | [A. Free managed stack](#a-free-managed-stack-0) | **$0** | ❌ (Vercel Hobby is personal/non-commercial) | Low | Trying it, personal teams, open-source projects |
 | [B. Free VM with Docker](#b-free-vm-with-docker-0) | **$0** | ✅ | Medium | Small companies that want $0 and full control |
 | [C. Cheapest VPS with Docker](#c-cheapest-vps-with-docker-5month) | **~€5.50** | ✅ | Medium | Reliable production for a team or a few teams |
 | [D. Managed for companies](#d-managed-for-companies-20month) | **~$20+** | ✅ | Low | Teams that don't want to run servers |
+
+¹ About the *hosting provider's* terms only. Asincly's AGPL-3.0 license allows commercial
+use on every path. Self-hosted installs have every feature: leave `BILLING_ENABLED` unset
+(it's only for running a paid cloud).
 
 Prices and free-tier limits were checked in **September 2026** and change often. Verify on
 each provider's pricing page before you commit.
@@ -110,7 +114,7 @@ A recording is about 10–20 MB per 5 minutes at 720p. The default 90-day retent
 
 **Oracle Cloud Always Free VM + [`docker-compose.selfhost.yml`](../docker-compose.selfhost.yml).**
 Everything, including Postgres and MinIO storage, runs on one machine you control.
-Commercial use is allowed.
+Oracle's terms allow business use.
 
 What to know about [Oracle's Always Free tier](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm):
 - **Capacity:** since June 2026 the Ampere A1 allowance is **2 OCPUs and 12 GB RAM**,
@@ -143,7 +147,7 @@ or schedule `pg_dump` yourself.
 Resend + Groq.**
 
 Same steps as path A, with two differences:
-- Commercial use is allowed.
+- Vercel Pro's terms allow business use.
 - You can replace GitHub Actions with Vercel Cron. Add this to `vercel.json`:
   ```json
   { "crons": [{ "path": "/api/cron/tick", "schedule": "*/5 * * * *" }] }
