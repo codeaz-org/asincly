@@ -6,9 +6,11 @@ import { CheckInCard } from "@/components/dashboard/check-in-card";
 import { DayRail } from "@/components/dashboard/day-rail";
 import { Pending, type PendingMember } from "@/components/dashboard/pending";
 import { YourCard } from "@/components/dashboard/your-card";
+import { PlanGate } from "@/components/billing/plan-gate";
 import { LogoMark } from "@/components/brand/mark";
 import { SectionTitle } from "@/components/ui/card";
 import { Empty } from "@/components/ui/empty";
+import { historyCutoff } from "@/lib/billing/plans";
 import { railPositions } from "@/lib/day-rail";
 import { displayName, firstName } from "@/lib/display";
 import {
@@ -21,7 +23,7 @@ import {
 import { plainText, taskStats } from "@/lib/note-items";
 import { checkInDetailPath, checkInFlowPath, teamPath } from "@/lib/paths";
 import { awayToday, getDayFeed, getRepliesToMe, getTeamRoster, listRecentDays } from "@/lib/queries";
-import { getTeamPageContext, getViewerToday } from "@/lib/team-context";
+import { getTeamPageContext, getTeamPlan, getViewerToday } from "@/lib/team-context";
 
 export default async function TodayPage({
   params,
@@ -32,13 +34,39 @@ export default async function TodayPage({
 }) {
   const { orgSlug, teamSlug } = await params;
   const { day, focus } = await searchParams;
-  const [{ user, team }, today] = await Promise.all([
+  const [{ user, team }, today, plan] = await Promise.all([
     getTeamPageContext(orgSlug, teamSlug),
     getViewerToday(orgSlug, teamSlug),
+    getTeamPlan(orgSlug, teamSlug),
   ]);
 
   const dateISO = day && /^\d{4}-\d{2}-\d{2}$/.test(day) && day <= today.todayISO ? day : today.todayISO;
   const isToday = dateISO === today.todayISO;
+  const root = teamPath(orgSlug, teamSlug);
+
+  // Free plan: days older than the history window stay stored but locked.
+  const cutoff = historyCutoff(plan, today.todayISO);
+  if (cutoff && dateISO < cutoff) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 sm:px-6 pt-8 md:pt-12 pb-16 space-y-8">
+        <header className="space-y-2">
+          <p className="kicker">{dayLabel(dateISO, "long")}</p>
+          <h1 className="display text-[2.1rem] sm:text-5xl text-ink">Older check-ins</h1>
+        </header>
+        <PlanGate
+          title={`The Free plan shows the last ${plan.historyDays} days.`}
+          hint="Nothing is deleted. Upgrade to Pro to see your team's full history again."
+          href={`${root}/settings/billing`}
+          canUpgrade={team.role === "owner"}
+        />
+        <p className="text-center text-xs text-soft">
+          <Link href={root} className="hover:text-ink transition">
+            ← Back to today
+          </Link>
+        </p>
+      </div>
+    );
+  }
 
   const [roster, entries, days, replies] = await Promise.all([
     getTeamRoster(team.teamId),
@@ -48,7 +76,6 @@ export default async function TodayPage({
   ]);
 
   const names = namesById(roster);
-  const root = teamPath(orgSlug, teamSlug);
   const doneIds = new Set(entries.map((e) => e.userId));
 
   // ── Rail + pending (today only) ──

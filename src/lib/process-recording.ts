@@ -1,13 +1,17 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { checkIns, members, recordings, schedules, occurrences, users } from "@/db/schema";
+import { checkIns, members, recordings, schedules, occurrences, teams, users } from "@/db/schema";
 import { getAI, type Summary } from "@/lib/ai";
+import { aiSecondsRemaining, recordAiUsage } from "@/lib/billing/entitlements";
 import { getPreviousContext } from "@/lib/check-in-context";
 import { encrypt } from "@/lib/crypto";
 import { displayName } from "@/lib/display";
 import { presignedGetUrl } from "@/lib/s3";
 
 export type DraftHints = Record<string, "done" | "not_done">;
+
+// processingError marker for "the org's AI minutes are used up this month".
+export const QUOTA_EXCEEDED = "quota_exceeded";
 
 // One recording end to end: transcribe the audio track → draft the check-in
 // against the author's previous plan and team roster → encrypt → persist.
@@ -23,21 +27,35 @@ export async function processRecording(recordingId: string, hints: DraftHints = 
     db.update(recordings).set({ status, processingError: null }).where(eq(recordings.id, recordingId));
 
   try {
-    await setStatus("transcribing");
-    const ai = await getAI();
-
     const [ctx] = await db
       .select({
         checkIn: checkIns,
         teamId: schedules.teamId,
+        orgId: teams.orgId,
         authorTz: users.tz,
       })
       .from(checkIns)
       .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
       .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
+      .innerJoin(teams, eq(teams.id, schedules.teamId))
       .innerJoin(users, eq(users.id, checkIns.userId))
       .where(eq(checkIns.id, rec.checkInId));
     if (!ctx) throw new Error("Parent check-in vanished");
+
+    // Hosted plans meter transcription. Over quota, the video stays attached
+    // and the author writes the check-in by hand.
+    const seconds = rec.durationMs ? rec.durationMs / 1000 : 60;
+    const remaining = await aiSecondsRemaining(ctx.orgId);
+    if (remaining !== null && remaining < seconds) {
+      await db
+        .update(recordings)
+        .set({ status: "failed", processingError: QUOTA_EXCEEDED })
+        .where(eq(recordings.id, recordingId));
+      return;
+    }
+
+    await setStatus("transcribing");
+    const ai = await getAI();
 
     const audioKey = rec.audioKey ?? rec.objectKey;
     const audioUrl = await presignedGetUrl(audioKey);
@@ -45,6 +63,7 @@ export async function processRecording(recordingId: string, hints: DraftHints = 
       audioUrl,
       mimeType: rec.audioKey ? audioMime(rec.audioKey) : rec.mimeType,
     });
+    await recordAiUsage(ctx.orgId, seconds);
 
     await setStatus("drafting");
     const [previous, roster] = await Promise.all([

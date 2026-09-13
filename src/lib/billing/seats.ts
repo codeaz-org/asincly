@@ -27,3 +27,13 @@ export async function syncSeats(orgId: string): Promise<void> {
     console.error("[billing] seat sync failed", { orgId, error: (e as Error).message });
   }
 }
+
+// Deleting an organization ends its subscription right away, so nobody keeps
+// paying for a workspace that no longer exists. Throws on Stripe errors so the
+// delete doesn't go ahead while billing is still running.
+export async function cancelSubscriptionForDeletedOrg(orgId: string): Promise<void> {
+  if (!isBillingEnabled()) return;
+  const [row] = await db.select().from(orgBilling).where(eq(orgBilling.orgId, orgId));
+  if (!row?.stripeSubscriptionId || row.status === "canceled" || !stripeConfigured()) return;
+  await getStripe().subscriptions.cancel(row.stripeSubscriptionId, { prorate: true });
+}

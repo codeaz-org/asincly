@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { db } from "@/db";
 import { orgBilling, stripeEvents } from "@/db/schema";
 import { audit } from "@/lib/audit";
+import { syncSeats } from "@/lib/billing/seats";
 import { getStripe } from "@/lib/billing/stripe";
 import { billingFromSubscription, customerId, invoiceSubscriptionId } from "@/lib/billing/subscription";
 
@@ -39,13 +40,11 @@ async function applySubscription(sub: Stripe.Subscription, eventType: string, or
     console.warn("[stripe] subscription for unknown org", { subscription: sub.id, eventType });
     return;
   }
-  // A deleted event for an old subscription must not downgrade an org that
-  // has since started a new one.
-  if (row.stripeSubscriptionId && row.stripeSubscriptionId !== sub.id && eventType === "customer.subscription.deleted") {
-    return;
-  }
   const patch = billingFromSubscription(sub, row, new Date());
   if (!patch) return;
+  // Late events about an old subscription must not downgrade an org that has
+  // since started a new one.
+  if (row.stripeSubscriptionId && row.stripeSubscriptionId !== sub.id && patch.plan !== "pro") return;
   await db
     .update(orgBilling)
     .set({ ...patch, stripeCustomerId: cust ?? row.stripeCustomerId, trialEndsAt: null, updatedAt: new Date() })
@@ -92,6 +91,8 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<boolean> {
         }
         const sub = await getStripe().subscriptions.retrieve(subId);
         await applySubscription(sub, event.type, orgId);
+        // People may have joined while the customer was on the checkout page.
+        if (orgId) await syncSeats(orgId);
         break;
       }
       case "customer.subscription.created":

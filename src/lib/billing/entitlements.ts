@@ -7,6 +7,7 @@ import {
   billingPeriod,
   entitlementsFor,
   isBillingEnabled,
+  type BillingState,
   type Entitlements,
 } from "@/lib/billing/plans";
 
@@ -54,17 +55,23 @@ export async function countBillableSeats(orgId: string): Promise<number> {
   return Number(row?.seats ?? 0);
 }
 
+type BillingRow = typeof orgBilling.$inferSelect;
+
+export function billingState(row: BillingRow | null | undefined): BillingState | null {
+  if (!row) return null;
+  return {
+    plan: row.plan,
+    status: row.status,
+    trialEndsAt: row.trialEndsAt,
+    pastDueSince: row.pastDueSince,
+    currentPeriodEnd: row.currentPeriodEnd,
+  };
+}
+
 export async function getEntitlements(orgId: string, now = new Date()): Promise<Entitlements> {
   if (!isBillingEnabled()) return UNLIMITED;
   const [billing, seats] = await Promise.all([ensureOrgBilling(orgId, now), countBillableSeats(orgId)]);
-  return entitlementsFor(
-    billing
-      ? { plan: billing.plan, status: billing.status, trialEndsAt: billing.trialEndsAt, pastDueSince: billing.pastDueSince }
-      : null,
-    seats,
-    now,
-    true,
-  );
+  return entitlementsFor(billingState(billing), seats, now, true);
 }
 
 export async function getOrgIdForTeam(teamId: string): Promise<string | null> {
@@ -84,12 +91,16 @@ export async function assertCanAddMembers(orgId: string, newBillable: number): P
   }
 }
 
+export async function countTeams(orgId: string): Promise<number> {
+  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(teams).where(eq(teams.orgId, orgId));
+  return row?.n ?? 0;
+}
+
 export async function assertCanCreateTeam(orgId: string): Promise<void> {
   if (!isBillingEnabled()) return;
   const e = await getEntitlements(orgId);
   if (e.maxTeams == null) return;
-  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(teams).where(eq(teams.orgId, orgId));
-  if ((row?.n ?? 0) >= e.maxTeams) {
+  if ((await countTeams(orgId)) >= e.maxTeams) {
     throw new PlanLimitError(`The Free plan includes ${e.maxTeams} team. Upgrade to Pro for more teams.`);
   }
 }

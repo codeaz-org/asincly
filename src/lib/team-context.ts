@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import type { MarkState } from "@/components/brand/mark";
+import { getEntitlements } from "@/lib/billing/entitlements";
 import { memberStatus } from "@/lib/day-rail";
 import { awayToday, getActiveSchedules, getAwayPeriods, getMyCheckIn } from "@/lib/queries";
 import { getTeamBySlug, requireUser } from "@/lib/session";
@@ -32,4 +33,10 @@ export const getViewerToday = cache(async (orgSlug: string, teamSlug: string) =>
   });
   const markState: MarkState = status;
   return { now, todayISO, schedules, primary, mine, away, myAway, markState };
+});
+
+// What the team's organization may do on its plan (everything when self-hosted).
+export const getTeamPlan = cache(async (orgSlug: string, teamSlug: string) => {
+  const { team } = await getTeamPageContext(orgSlug, teamSlug);
+  return getEntitlements(team.orgId);
 });

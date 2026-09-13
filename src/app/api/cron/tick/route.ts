@@ -11,8 +11,11 @@ import {
   recordings,
   schedules,
   teams,
+  orgBilling,
   users,
 } from "@/db/schema";
+import { billingState } from "@/lib/billing/entitlements";
+import { effectiveRetentionDays, entitlementsFor, freeSince, isBillingEnabled } from "@/lib/billing/plans";
 import { notify } from "@/lib/notifications";
 import { localDate, windowFor, windowStatus } from "@/lib/time";
 
@@ -43,12 +46,22 @@ export async function GET(req: Request) {
   // For each team with a non-zero retention, delete recording rows older
   // than the horizon. Bucket objects orphan on purpose (fast row delete);
   // an S3 lifecycle rule on the bucket cleans them, or a separate sweeper.
+  // On the hosted cloud, Free orgs keep videos for the plan's history window
+  // (after a grace period following the loss of Pro).
+  const billing = isBillingEnabled();
   const teamsWithRetention = await db
-    .select({ id: teams.id, days: teams.recordingRetentionDays })
-    .from(teams);
+    .select({ id: teams.id, days: teams.recordingRetentionDays, billing: orgBilling })
+    .from(teams)
+    .leftJoin(orgBilling, eq(orgBilling.orgId, teams.orgId));
   for (const t of teamsWithRetention) {
-    if (t.days <= 0) continue;
-    const cutoff = new Date(now.getTime() - t.days * 24 * 3600 * 1000);
+    let days = t.days;
+    // Orgs without a billing row yet get their trial on next visit; never purge them early.
+    if (billing && t.billing) {
+      const state = billingState(t.billing);
+      days = effectiveRetentionDays(t.days, entitlementsFor(state, 1, now, true), freeSince(state, now), now);
+    }
+    if (days <= 0) continue;
+    const cutoff = new Date(now.getTime() - days * 24 * 3600 * 1000);
     // Two-step: find recording IDs belonging to this team older than cutoff.
     const candidates = await db
       .select({ id: recordings.id })

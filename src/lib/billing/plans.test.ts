@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { FREE, UNLIMITED, entitlementsFor, historyCutoff, isBillingEnabled, trialDaysLeft, type BillingState } from "./plans";
+import {
+  FREE,
+  UNLIMITED,
+  effectiveRetentionDays,
+  entitlementsFor,
+  freeSince,
+  historyCutoff,
+  isBillingEnabled,
+  trialDaysLeft,
+  type BillingState,
+} from "./plans";
 
 const now = new Date("2026-09-14T12:00:00Z");
 const day = 86_400_000;
@@ -68,5 +78,27 @@ describe("helpers", () => {
     const free = entitlementsFor(null, 1, now, true);
     expect(historyCutoff(free, "2026-09-14")).toBe("2026-09-01");
     expect(historyCutoff(UNLIMITED, "2026-09-14")).toBeNull();
+  });
+
+  it("dates the loss of Pro from the latest ending", () => {
+    const pro = state({ plan: "pro", status: "active" });
+    expect(freeSince(pro, now)).toBeNull();
+    const canceled = state({
+      plan: "pro",
+      status: "canceled",
+      trialEndsAt: new Date(now.getTime() - 60 * day),
+      currentPeriodEnd: new Date(now.getTime() - 5 * day),
+    });
+    expect(freeSince(canceled, now)).toEqual(new Date(now.getTime() - 5 * day));
+  });
+
+  it("only shortens retention for Free orgs past the grace period", () => {
+    const free = entitlementsFor(null, 1, now, true);
+    const longAgo = new Date(now.getTime() - 40 * day);
+    const recently = new Date(now.getTime() - 10 * day);
+    expect(effectiveRetentionDays(0, free, longAgo, now)).toBe(14);
+    expect(effectiveRetentionDays(7, free, longAgo, now)).toBe(7);
+    expect(effectiveRetentionDays(90, free, recently, now)).toBe(90);
+    expect(effectiveRetentionDays(0, UNLIMITED, null, now)).toBe(0);
   });
 });

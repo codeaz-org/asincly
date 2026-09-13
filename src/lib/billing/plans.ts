@@ -11,6 +11,9 @@ export const CURRENCY = "eur";
 export const PRICE_PER_MEMBER = { month: 800, year: 8000 } as const; // minor units (cents)
 export const TRIAL_DAYS = 14;
 export const PAST_DUE_GRACE_DAYS = 7;
+// After losing Pro, videos older than the Free history window are kept this
+// long before the retention job removes them, so an upgrade restores them.
+export const FREE_PURGE_GRACE_DAYS = 30;
 export const STRIPE_LOOKUP_KEYS = { month: "asincly_pro_member_monthly", year: "asincly_pro_member_yearly" } as const;
 
 export type Entitlements = {
@@ -87,6 +90,7 @@ export type BillingState = {
   status: BillingStatus;
   trialEndsAt: Date | null;
   pastDueSince: Date | null;
+  currentPeriodEnd?: Date | null;
 };
 
 // What an organization may do right now.
@@ -115,6 +119,25 @@ export function entitlementsFor(
   const status: BillingStatus =
     state.status === "trialing" && !trialActive ? "canceled" : state.status;
   return { ...base, status, trialEndsAt: state.trialEndsAt };
+}
+
+// When the org last had Pro, or null if it still has it.
+export function freeSince(state: BillingState | null, now: Date): Date | null {
+  if (!state) return new Date(0);
+  if (entitlementsFor(state, 1, now, true).plan === "pro") return null;
+  const ends = [
+    state.trialEndsAt,
+    state.currentPeriodEnd ?? null,
+    state.pastDueSince ? new Date(state.pastDueSince.getTime() + PAST_DUE_GRACE_DAYS * 86_400_000) : null,
+  ].filter((d): d is Date => d != null && d <= now);
+  return ends.length ? new Date(Math.max(...ends.map((d) => d.getTime()))) : new Date(0);
+}
+
+// Days of recordings the retention job keeps for a team (0 = forever).
+export function effectiveRetentionDays(teamDays: number, e: Entitlements, since: Date | null, now: Date): number {
+  if (e.historyDays == null || since == null) return teamDays;
+  if (now.getTime() - since.getTime() < FREE_PURGE_GRACE_DAYS * 86_400_000) return teamDays;
+  return teamDays > 0 ? Math.min(teamDays, e.historyDays) : e.historyDays;
 }
 
 export function trialDaysLeft(e: Entitlements, now: Date): number | null {
