@@ -17,6 +17,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:push": "drizzle-kit push",
+    "emoji:sync": "node scripts/sync-emoji-data.mjs",
     "cron:local": "bash -c 'source .env && curl -sSf -H \"authorization: Bearer $CRON_SECRET\" http://localhost:3000/api/cron/tick && echo'"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
     "drizzle-orm": "^0.45.2",
+    "frimousse": "^0.3.0",
     "lucide-react": "^1.42.0",
     "next": "16.3.4",
     "next-auth": "5.0.0-beta.32",

@@ -2,14 +2,16 @@
 
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
-import { checkIns, members, occurrences, organizations, schedules, teams } from "@/db/schema";
+import { checkIns, members, occurrences, organizations, recordings, schedules, teams } from "@/db/schema";
+import { audit } from "@/lib/audit";
 import { carryOver } from "@/lib/carry-over";
+import { extractMentions } from "@/lib/mentions";
 import { fireMentionEvents } from "@/lib/notifications";
 import { requireUser } from "@/lib/session";
 import { localDate } from "@/lib/time";
+import { VideoSkipSchema } from "@/lib/validation/social";
 
 // Get (or lazily create) today's occurrence for the primary active schedule
 // of `teamId`, computed in the *caller's* tz. Returns the occurrence id +
@@ -122,63 +124,109 @@ export async function saveCheckInDraft(input: unknown) {
 }
 
 export type SubmitResult =
-  | { ok: true; orgSlug: string; teamSlug: string }
+  | { ok: true; orgSlug: string; teamSlug: string; checkInId: string }
   | { ok: false; error: string };
 
-export async function submitCheckIn(
-  _prev: SubmitResult | null,
-  formData: FormData,
-): Promise<SubmitResult> {
-  let landing: { orgSlug: string; teamSlug: string } | null = null;
+const SubmitSchema = z.object({
+  checkInId: z.string().uuid(),
+  yesterday: z.string().max(20000),
+  today: z.string().max(20000),
+  blockers: z.string().max(20000),
+  // Only meaningful when the team requires video and there is no recording.
+  videoSkip: VideoSkipSchema.optional(),
+});
+
+const mentionIds = (...mds: string[]) => new Set(mds.flatMap((md) => extractMentions(md).map((m) => m.userId)));
+
+// Returns instead of redirecting so the flow can play its "sent" moment
+// before navigating.
+export async function submitCheckIn(input: unknown): Promise<SubmitResult> {
   try {
     const user = await requireUser();
-    const checkInId = z.string().uuid().parse(formData.get("checkInId"));
-
-    const yesterday = String(formData.get("yesterday") ?? "");
-    const today = String(formData.get("today") ?? "");
-    const blockers = String(formData.get("blockers") ?? "");
+    const parsed = SubmitSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "That check-in is too long to send." };
+    const { checkInId, yesterday, today, blockers, videoSkip } = parsed.data;
 
     const [ci] = await db.select().from(checkIns).where(eq(checkIns.id, checkInId));
     if (!ci || ci.userId !== user.id) return { ok: false, error: "Not your check-in" };
 
-    await db
-      .update(checkIns)
-      .set({
-        yesterday,
-        today,
-        blockers,
-        status: "submitted",
-        submittedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(checkIns.id, checkInId));
-
     const [ctx] = await db
-      .select({ orgSlug: organizations.slug, teamSlug: teams.slug })
+      .select({
+        orgSlug: organizations.slug,
+        teamSlug: teams.slug,
+        orgId: organizations.id,
+        requireVideo: teams.requireVideo,
+      })
       .from(checkIns)
       .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
       .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
       .innerJoin(teams, eq(teams.id, schedules.teamId))
       .innerJoin(organizations, eq(organizations.id, teams.orgId))
       .where(eq(checkIns.id, checkInId));
-
     if (!ctx) return { ok: false, error: "Team not found" };
 
-    revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}`);
-    landing = { orgSlug: ctx.orgSlug, teamSlug: ctx.teamSlug };
+    // Mandatory video: a recording, or a stated reason for skipping it.
+    const [recording] = await db
+      .select({ id: recordings.id })
+      .from(recordings)
+      .where(eq(recordings.checkInId, checkInId))
+      .limit(1);
+    if (ctx.requireVideo && !recording && !videoSkip && !ci.videoSkipReason) {
+      return { ok: false, error: "Your team asks for a video. Record one, or tell them why you can't today." };
+    }
+    const skip = !recording && videoSkip ? videoSkip : null;
 
-    // Fire mention + blocker events for teammates named in the check-in.
-    void fireMentionEvents(checkInId).catch((e) =>
-      console.error("[fireMentionEvents]", e),
-    );
+    const firstSend = ci.status !== "submitted";
+    const newMentions = firstSend
+      ? null
+      : [...mentionIds(yesterday, today, blockers)].filter((id) => !mentionIds(ci.yesterday, ci.today, ci.blockers).has(id));
+    await db
+      .update(checkIns)
+      .set({
+        yesterday,
+        today,
+        blockers,
+        ...(skip ? { videoSkipReason: skip.reason, videoSkipNote: skip.note } : {}),
+        status: "submitted",
+        // Keep the original send time on edits so the feed order is stable.
+        submittedAt: ci.submittedAt ?? new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(checkIns.id, checkInId));
+
+    await audit({
+      orgId: ctx.orgId,
+      actorUserId: user.id,
+      action: firstSend ? "check_in.submit" : "check_in.update",
+      resourceType: "check_in",
+      resourceId: checkInId,
+    });
+
+    if (skip) {
+      await audit({
+        orgId: ctx.orgId,
+        actorUserId: user.id,
+        action: "check_in.video_skipped",
+        resourceType: "check_in",
+        resourceId: checkInId,
+        meta: { reason: skip.reason },
+      });
+    }
+
+    revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}`, "layout");
+
+    // Notify people named in the check-in: everyone on first send, and only
+    // newly added names when an already-sent check-in is updated.
+    if (firstSend || (newMentions && newMentions.length > 0)) {
+      void fireMentionEvents(checkInId, newMentions ?? undefined).catch((e) =>
+        console.error("[fireMentionEvents]", e instanceof Error ? e.message : "failed"),
+      );
+    }
+    return { ok: true, orgSlug: ctx.orgSlug, teamSlug: ctx.teamSlug, checkInId };
   } catch (e) {
-    console.error("[submitCheckIn]", e);
-    const msg = e instanceof Error ? e.message : "Submit failed";
-    return { ok: false, error: msg };
+    console.error("[submitCheckIn]", e instanceof Error ? e.message : "unknown error");
+    return { ok: false, error: "Couldn't send — your draft is saved. Try again." };
   }
-  // redirect() throws internally, so it must live outside the try/catch or
-  // it looks like an error.
-  redirect(`/${landing!.orgSlug}/${landing!.teamSlug}`);
 }
 
 export async function reopenCheckIn(checkInId: string) {

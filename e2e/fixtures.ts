@@ -1,9 +1,12 @@
 import "dotenv/config";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { BrowserContext } from "@playwright/test";
 import {
+  checkIns,
   members,
+  occurrences,
   organizations,
   schedules,
   sessions,
@@ -59,6 +62,10 @@ export async function addToTeam(teamId: string, userId: string) {
     .values({ teamId, userId, role: "member" });
 }
 
+export async function setUserName(userId: string, name: string) {
+  await testDb.update(users).set({ name }).where(eq(users.id, userId));
+}
+
 // Auth.js v5 dev cookie name — no __Secure- prefix without HTTPS.
 export async function signInAs(context: BrowserContext, sessionToken: string) {
   await context.addCookies([
@@ -76,4 +83,37 @@ export async function signInAs(context: BrowserContext, sessionToken: string) {
 
 export async function cleanup() {
   await client.end();
+}
+
+// A submitted check-in on today's (UTC) occurrence of the team's schedule.
+export async function seedSubmittedCheckIn(
+  teamId: string,
+  userId: string,
+  fields: { yesterday?: string; today?: string; blockers?: string },
+  daysAgo = 0,
+) {
+  const [schedule] = await testDb.select().from(schedules).where(eq(schedules.teamId, teamId));
+  const today = new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10);
+  const [occ] = await testDb
+    .insert(occurrences)
+    .values({ scheduleId: schedule.id, scheduleDate: today })
+    .onConflictDoUpdate({
+      target: [occurrences.scheduleId, occurrences.scheduleDate],
+      set: { scheduleDate: today },
+    })
+    .returning();
+  const [ci] = await testDb
+    .insert(checkIns)
+    .values({
+      occurrenceId: occ.id,
+      userId,
+      localDate: today,
+      status: "submitted",
+      submittedAt: new Date(),
+      yesterday: fields.yesterday ?? "",
+      today: fields.today ?? "",
+      blockers: fields.blockers ?? "",
+    })
+    .returning();
+  return ci;
 }
