@@ -93,7 +93,12 @@ From here on: commit straight to `main`, small conventional commits, keep `main`
       the user (or team) and filtering in JS — a scan that grew for the life of the account, run
       once per member per tick. Both are now point lookups against
       `notification_type_occurrence_idx` on `(type, data->>'occurrenceId')`, confirmed by EXPLAIN.
-- [ ] **Job table — deferred pending a decision.** The original case for a `scheduled_job` table
+- [x] **Minimum window length** (`c9a1a80`). A window shorter than the tick interval can open and
+      close between two ticks, so nobody is reminded — and nothing stopped a team setting
+      09:00–09:05. Shared Zod refinement across onboarding and the schedule editor, with
+      `windowMinutes()` wrapping past midnight the way `windowFor` does; both forms state the
+      minimum, since a failed parse here surfaces as an error page.
+- [x] **Job table — decided against, for now.** The case for a `scheduled_job` table
       drained with `FOR UPDATE SKIP LOCKED` rested on two claims that got weaker once the above
       landed:
       - *Scale*: the tick is now one query for active schedules, then per schedule one members
