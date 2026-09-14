@@ -9,15 +9,16 @@ decisions taken for this release: ship the OSS `v0.1.0` tag and the hosted paid 
 together, complete all of the old Phase 5 security work before real users are let in, **merge
 every open PR and work directly on `main` from here — no new PRs**.
 
-**CI on `main` is red.** The last push to `main` failed at `pnpm/action-setup@v4`:
+**CI on `main` was red** (fixed in Phase 1). The push before this plan failed at
+`pnpm/action-setup@v4`:
 
 > Error: Multiple versions of pnpm specified … ERR_PNPM_BAD_PM_VERSION
 
-`ci.yml` pins `version: 12` while `package.json:76` sets `packageManager: pnpm@12.1.0`, and the
-action refuses both. All four Dependabot PRs fail the `quality` job for this same reason — one
-root cause, not five. PR #5 already fixes it (drops the `version:` input) plus a second fix
+`ci.yml` pinned `version: 12` while `package.json` sets `packageManager: pnpm@12.1.0`, and the
+action refuses both. All four Dependabot PRs failed the `quality` job for this same reason — one
+root cause, not five. PR #5 carried the fix (drops the `version:` input) plus a second one
 (`typecheck` → `next typegen && tsc --noEmit`, so Next's generated route types exist before
-`tsc` runs). That is why #5 is the only green PR, and why it merges first.
+`tsc` runs), which is why #5 was the only green PR and why it merged first.
 
 A three-way audit of `main` turned up four things that shape the rest of the work:
 
@@ -36,8 +37,9 @@ A three-way audit of `main` turned up four things that shape the rest of the wor
    surface (`src/lib/queries.ts`) plus `check-in.ts`, `recording.ts`, `team-admin.ts`,
    `onboarding.ts` and both API routes run as superuser.
 4. **PR #5 (`feat/cloud-billing`, +11,748/−133)** — Stripe plans, entitlements, guests, Slack —
-   is MERGEABLE with both CI checks passing and **no review**. Everything downstream sits on it,
-   including the CI fix.
+   was unreviewed and everything downstream sat on it, including the CI fix. Reviewed and merged
+   in Phase 1; it turned out to be stricter than `main` in several places (`FORCE RLS` on every
+   new table, `timingSafeEqual` on the OAuth state, encrypted Slack bot tokens).
 
 Two audit findings turned out to be false and are *not* in this plan: `.env.example` is in sync
 with the code (26 documented, 21 used, nothing missing), and the codebase has zero `any`, zero
@@ -49,14 +51,14 @@ with the code (26 documented, 21 used, nothing missing), and the codebase has ze
 
 Order matters, because #5 carries the fix the other four need.
 
-- [ ] **Review PR #5** against the project's own rules — RLS on `org_billing`, `stripe_event`,
+- [x] **Review PR #5** against the project's own rules — RLS on `org_billing`, `stripe_event`,
       `ai_usage`, `slack_install`; Zod at each new boundary; webhook signature verification and
       idempotency; audit rows on plan changes. `/code-review 5` covers the sweep; read
       `src/lib/billing/webhook.ts` and `entitlements.ts` by hand regardless. It is the largest
       unreviewed change in the repo and everything downstream sits on it.
-- [ ] **Merge #5 into `main`.** CI should go green on the merge commit — verify that before
+- [x] **Merge #5 into `main`.** CI should go green on the merge commit — verify that before
       going further; the whole point of this phase is to stop flying blind.
-- [ ] **Land the four Dependabot bumps.** All four are red only because of the pnpm conflict #5
+- [x] **Land the four Dependabot bumps.** All four are red only because of the pnpm conflict #5
       just fixed:
       #1 `pnpm/action-setup` 4 → 6, #2 `actions/checkout` 4 → 7, #3 `actions/setup-node` 4 → 7
       (these three also clear the *"Node.js 20 is deprecated"* runner warning), #4 Docker base
@@ -65,9 +67,12 @@ Order matters, because #5 carries the fix the other four need.
       the bumps directly on `main` and close the Dependabot PRs as superseded. #4 is the only
       one with real risk (runtime two majors up): confirm the `docker` job builds *and* that the
       image boots.
-- [ ] **Branch protection on `main`** requiring `quality` and `docker`. With no PR gate, a red
-      `main` is the only signal left — and it just sat red unnoticed.
-- [ ] `pnpm db:migrate` on a scratch database: all 21 migrations apply from empty.
+- [x] ~~Branch protection on `main` requiring `quality` and `docker`.~~ **Doesn't apply.**
+      Required status checks gate *PR merges*; with direct pushes the commit is already on
+      `main` before CI starts, so the setting could never fire. The real mitigation is noticing
+      failure: GitHub emails the commit author on a failed run, which is what was missing when
+      `main` sat red — nobody was pushing. Revisit if the team grows past one person.
+- [x] `pnpm db:migrate` applies all 21 migrations; 130 unit tests pass against the result.
 
 From here on: commit straight to `main`, small conventional commits, keep `main` green.
 
