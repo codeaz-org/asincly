@@ -12,22 +12,24 @@ import { syncSeats } from "@/lib/billing/seats";
 import { isBillingEnabled } from "@/lib/billing/plans";
 import { rateLimit } from "@/lib/rate-limit";
 import { PRESET_RRULES, isValidTimeZone, type PresetKey } from "@/lib/time";
+import { hhmm, withWindowLength } from "@/lib/validation/schedule";
 import { requireUser } from "@/lib/session";
 import { slugify } from "@/lib/slug";
 import { InviteRoleSchema } from "@/lib/validation/billing";
 
-const HHMM = /^\d{2}:\d{2}$/;
 
-const CompleteSchema = z.object({
-  yourName: z.string().min(1).max(80),
-  orgName: z.string().min(1).max(80),
-  teamName: z.string().min(1).max(80),
-  scheduleName: z.string().min(1).max(80),
-  preset: z.enum(["daily", "weekdays", "mwf", "weekly", "custom"]),
-  customRrule: z.string().max(500).optional(),
-  windowOpen: z.string().regex(HHMM),
-  windowClose: z.string().regex(HHMM),
-});
+const CompleteSchema = withWindowLength(
+  z.object({
+    yourName: z.string().min(1).max(80),
+    orgName: z.string().min(1).max(80),
+    teamName: z.string().min(1).max(80),
+    scheduleName: z.string().min(1).max(80),
+    preset: z.enum(["daily", "weekdays", "mwf", "weekly", "custom"]),
+    customRrule: z.string().max(500).optional(),
+    windowOpen: hhmm,
+    windowClose: hhmm,
+  }),
+);
 
 async function uniqueOrgSlug(base: string): Promise<string> {
   let slug = base;

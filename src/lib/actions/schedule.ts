@@ -7,18 +7,20 @@ import { db } from "@/db";
 import { members, organizations, schedules, teams } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { PRESET_RRULES, type PresetKey } from "@/lib/time";
+import { hhmm, withWindowLength } from "@/lib/validation/schedule";
 import { withUser } from "@/db/with-user";
 
-const HHMM = /^\d{2}:\d{2}$/;
-const UpdateSchema = z.object({
-  scheduleId: z.string().uuid(),
-  name: z.string().min(1).max(80),
-  preset: z.enum(["daily", "weekdays", "mwf", "weekly", "custom"]),
-  customRrule: z.string().max(500).optional(),
-  windowOpen: z.string().regex(HHMM),
-  windowClose: z.string().regex(HHMM),
-  active: z.enum(["on", "off"]).default("on"),
-});
+const UpdateSchema = withWindowLength(
+  z.object({
+    scheduleId: z.string().uuid(),
+    name: z.string().min(1).max(80),
+    preset: z.enum(["daily", "weekdays", "mwf", "weekly", "custom"]),
+    customRrule: z.string().max(500).optional(),
+    windowOpen: hhmm,
+    windowClose: hhmm,
+    active: z.enum(["on", "off"]).default("on"),
+  }),
+);
 
 export async function updateSchedule(formData: FormData) {
   const user = await requireUser();

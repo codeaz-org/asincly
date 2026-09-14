@@ -10,6 +10,7 @@ import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { completeOnboarding } from "@/lib/actions/onboarding";
+import { MIN_WINDOW_MINUTES } from "@/lib/time";
 
 const STEPS = [
   { key: "you", question: "What should your team call you?", hint: "Shown on your check-ins." },
@@ -125,6 +126,7 @@ export function OnboardingWizard({ email, tz }: { email: string; tz: string }) {
                 </div>
                 <p className="text-xs text-soft">
                   Your zone: <span className="font-mono text-ink">{tz}</span>. Teammates in Tokyo get the same window in Tokyo time.
+                  At least {MIN_WINDOW_MINUTES} minutes long.
                 </p>
               </div>
             )}

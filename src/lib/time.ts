@@ -45,6 +45,24 @@ export function windowFor(
   return { openAt, closeAt };
 }
 
+// Length of a local window in minutes, wrapping past midnight the same way
+// windowFor does. Equal open and close means a full day, not zero.
+export function windowMinutes(openHM: string, closeHM: string): number {
+  const mins = (hm: string) => {
+    const [h, m] = hm.slice(0, 5).split(":").map(Number);
+    return h * 60 + m;
+  };
+  const open = mins(openHM);
+  const close = mins(closeHM);
+  return close > open ? close - open : close + 24 * 60 - open;
+}
+
+// Reminders fire from a periodic tick, so a window shorter than the gap
+// between ticks can close before any tick sees it open and nobody is
+// reminded at all. GitHub Actions schedules every 5 minutes but drifts, and
+// its own docs warn about longer delays under load — 30 minutes leaves room.
+export const MIN_WINDOW_MINUTES = 30;
+
 export type WindowStatus = "before" | "open" | "closed";
 
 export function windowStatus(at: Date, w: Window): WindowStatus {

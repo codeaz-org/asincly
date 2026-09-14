@@ -21,7 +21,7 @@ import {
 } from "@/lib/actions/team-admin";
 import { teamPath } from "@/lib/paths";
 import { getTeamPageContext, getTeamPlan } from "@/lib/team-context";
-import { PRESET_RRULES } from "@/lib/time";
+import { MIN_WINDOW_MINUTES, PRESET_RRULES } from "@/lib/time";
 
 export const metadata = { title: "Settings" };
 
@@ -175,6 +175,10 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
                           <Input name="windowClose" type="time" defaultValue={sched.windowCloseLocal.slice(0, 5)} required className="h-11 font-mono" />
                         </label>
                       </div>
+                      <p className="text-xs text-soft">
+                        At least {MIN_WINDOW_MINUTES} minutes long — reminders fire on a timer, so a
+                        shorter window can close again before anyone is told.
+                      </p>
                       <label className="flex items-center justify-between gap-4 rounded-xl border border-line px-4 py-3 cursor-pointer">
                         <span className="text-sm">
                           <span className="block font-medium text-ink">Active</span>
@@ -228,6 +232,9 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
           <Button type="submit" size="lg" className="h-11">
             Add
           </Button>
+          <p className="w-full text-xs text-soft">
+            Windows are at least {MIN_WINDOW_MINUTES} minutes long.
+          </p>
         </form>
         )}
       </section>
