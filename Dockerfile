@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Asincly production image: `docker compose -f docker-compose.selfhost.yml up -d`
 
-FROM node:22-alpine AS base
+FROM node:26-alpine AS base
 RUN npm install -g corepack@latest && corepack enable
 WORKDIR /app
 
@@ -25,7 +25,7 @@ ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
 # values come from the environment at runtime.
 RUN DATABASE_URL=postgres://build:build@localhost:5432/build AUTH_SECRET=build-only pnpm build
 
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 RUN addgroup -S app && adduser -S app -G app

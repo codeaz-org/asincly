@@ -29,10 +29,10 @@ jobs:
       AUTH_SECRET: ci-placeholder-secret
       DATA_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Version comes from "packageManager" in package.json.
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -46,6 +46,6 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build the self-host image
         run: docker build --target runtime -t asincly:ci .
