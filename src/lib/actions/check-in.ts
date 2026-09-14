@@ -21,10 +21,11 @@ export async function getOrCreateTodayContext(teamId: string, scheduleId?: strin
 
   // Membership check
   const [membership] = await db
-    .select({ id: members.id })
+    .select({ id: members.id, role: members.role })
     .from(members)
     .where(and(eq(members.teamId, teamId), eq(members.userId, user.id)));
   if (!membership) throw new Error("Not a member of this team");
+  if (membership.role === "guest") throw new Error("Guests read along but don't check in");
 
   const active = await db
     .select()

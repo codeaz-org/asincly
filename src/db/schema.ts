@@ -69,7 +69,9 @@ export const verificationTokens = pgTable(
 
 // ────────── Domain tables ──────────
 
-export const memberRole = pgEnum("member_role", ["owner", "admin", "member"]);
+// `guest`: read-only stakeholder (reads, reacts, replies) — never checks in,
+// never counts as a billable seat.
+export const memberRole = pgEnum("member_role", ["owner", "admin", "member", "guest"]);
 
 export const organizations = pgTable("organization", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -311,6 +313,72 @@ export const memberAway = pgTable("member_away", {
   endsOn: date("ends_on").notNull(),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ────────── Billing (only used when BILLING_ENABLED=true) ──────────
+
+export const billingPlan = pgEnum("billing_plan", ["free", "pro"]);
+export const billingStatus = pgEnum("billing_status", ["trialing", "active", "past_due", "canceled"]);
+
+// One row per organization. Written only by trusted server code (onboarding,
+// Stripe webhook, seat sync); members can read it.
+export const orgBilling = pgTable("org_billing", {
+  orgId: uuid("org_id")
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  plan: billingPlan("plan").notNull().default("free"),
+  status: billingStatus("status").notNull().default("active"),
+  trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+  stripeCustomerId: text("stripe_customer_id").unique(),
+  stripeSubscriptionId: text("stripe_subscription_id").unique(),
+  interval: text("interval"),
+  seats: integer("seats").notNull().default(0),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  pastDueSince: timestamp("past_due_since", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Processed Stripe webhook events, so retries are idempotent.
+export const stripeEvents = pgTable("stripe_event", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Transcribed audio seconds per org per calendar month (UTC), for AI quotas.
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    period: text("period").notNull(),
+    seconds: integer("seconds").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.period] })],
+);
+
+// ────────── Slack (Pro on the hosted cloud; always available self-hosted) ──────────
+
+// One Slack workspace connection per team. The bot token is encrypted with
+// DATA_ENCRYPTION_KEY; only owners/admins of the team can read the row.
+export const slackInstalls = pgTable("slack_install", {
+  teamId: uuid("team_id")
+    .primaryKey()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  slackTeamId: text("slack_team_id").notNull(),
+  slackTeamName: text("slack_team_name").notNull(),
+  botUserId: text("bot_user_id").notNull(),
+  botTokenCipher: text("bot_token_cipher").notNull(),
+  channelId: text("channel_id"),
+  channelName: text("channel_name"),
+  digestEnabled: boolean("digest_enabled").notNull().default(true),
+  remindersEnabled: boolean("reminders_enabled").notNull().default(false),
+  installedByUserId: text("installed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const auditLogs = pgTable("audit_log", {

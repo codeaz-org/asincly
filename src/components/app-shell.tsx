@@ -13,7 +13,9 @@ import { users } from "@/db/schema";
 import { setName } from "@/lib/actions/onboarding";
 import { displayName } from "@/lib/display";
 import { listRecentForUser, unreadCount } from "@/lib/notifications";
+import { trialDaysLeft } from "@/lib/billing/plans";
 import { getMemberships } from "@/lib/session";
+import { getTeamPlan } from "@/lib/team-context";
 import { SOURCE_URL } from "@/lib/source";
 
 type Props = {
@@ -21,7 +23,7 @@ type Props = {
   teamSlug: string;
   teamName: string;
   orgName: string;
-  role: "owner" | "admin" | "member";
+  role: "owner" | "admin" | "member" | "guest";
   userId: string;
   userEmail: string;
   /** The viewer's own state for today — drawn on the mobile check-in button. */
@@ -30,16 +32,34 @@ type Props = {
 };
 
 export async function AppShell(props: Props) {
-  const [inbox, unread, memberships, [me]] = await Promise.all([
+  const [inbox, unread, memberships, [me], plan] = await Promise.all([
     listRecentForUser(props.userId),
     unreadCount(props.userId),
     getMemberships(props.userId),
     db.select({ name: users.name }).from(users).where(eq(users.id, props.userId)),
+    getTeamPlan(props.orgSlug, props.teamSlug),
   ]);
 
   const teamRoot = `/${props.orgSlug}/${props.teamSlug}`;
   const canManage = props.role === "owner" || props.role === "admin";
   const checkInLabel = props.myState === "done" ? "Edit your check-in" : "Check in";
+
+  // Billing nudges go to the owner only: they're the one who can act.
+  const trialLeft = trialDaysLeft(plan, new Date());
+  const billingBanner =
+    props.role !== "owner"
+      ? null
+      : plan.status === "past_due"
+        ? { tone: "danger" as const, text: "Your last payment failed. Update your card to keep Pro." }
+        : trialLeft != null && trialLeft <= 3
+          ? {
+              tone: "amber" as const,
+              text:
+                trialLeft === 0
+                  ? "Your Pro trial ends today."
+                  : `Your Pro trial ends in ${trialLeft} day${trialLeft === 1 ? "" : "s"}.`,
+            }
+          : null;
 
   async function signOutAction() {
     "use server";
@@ -104,12 +124,24 @@ export async function AppShell(props: Props) {
         </div>
       )}
 
+      {billingBanner && (
+        <div className={billingBanner.tone === "danger" ? "border-b border-danger/25 bg-danger/[0.06]" : "border-b border-amber/20 bg-amber/[0.06]"}>
+          <div className="mx-auto max-w-5xl px-4 sm:px-6 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <LogoMark size={16} state={billingBanner.tone === "danger" ? "blocked" : "before"} className="text-ink" />
+            <span className="text-ink">{billingBanner.text}</span>
+            <Link href={`${teamRoot}/settings/billing`} className="text-amber hover:underline underline-offset-4">
+              Plan &amp; billing →
+            </Link>
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 pb-24 md:pb-0">{props.children}</main>
 
       <div className="hidden md:block">
         <Footer />
       </div>
-      <BottomNav teamRoot={teamRoot} myState={props.myState} checkInLabel={checkInLabel} />
+      <BottomNav teamRoot={teamRoot} myState={props.myState} checkInLabel={checkInLabel} canCheckIn={props.role !== "guest"} />
     </div>
   );
 }

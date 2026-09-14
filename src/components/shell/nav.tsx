@@ -56,10 +56,13 @@ export function BottomNav({
   teamRoot,
   myState,
   checkInLabel,
+  canCheckIn = true,
 }: {
   teamRoot: string;
   myState: MarkState;
   checkInLabel: string;
+  /** Guests read along but don't check in. */
+  canCheckIn?: boolean;
 }) {
   const pathname = usePathname();
   const tabs = useTabs(teamRoot, false);
@@ -72,13 +75,17 @@ export function BottomNav({
       <div className="grid grid-cols-3 h-16 items-center">
         <BottomTab tab={today} active={isActive(pathname, today, teamRoot)} />
         <div className="grid place-items-center">
-          <Link
-            href={`${teamRoot}/check-in`}
-            aria-label={checkInLabel}
-            className="-mt-7 grid place-items-center size-16 rounded-full bg-ground border border-line-strong shadow-[0_10px_30px_-10px_oklch(0.78_0.15_60/0.5)] text-ink active:scale-95 transition"
-          >
-            <LogoMark size={36} state={myState} />
-          </Link>
+          {canCheckIn ? (
+            <Link
+              href={`${teamRoot}/check-in`}
+              aria-label={checkInLabel}
+              className="-mt-7 grid place-items-center size-16 rounded-full bg-ground border border-line-strong shadow-[0_10px_30px_-10px_oklch(0.78_0.15_60/0.5)] text-ink active:scale-95 transition"
+            >
+              <LogoMark size={36} state={myState} />
+            </Link>
+          ) : (
+            <LogoMark size={28} state="idle" className="text-faint" />
+          )}
         </div>
         <BottomTab tab={people} active={isActive(pathname, people, teamRoot)} />
       </div>

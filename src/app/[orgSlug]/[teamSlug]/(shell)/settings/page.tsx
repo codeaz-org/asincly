@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { ChevronDown, Download } from "lucide-react";
+import Link from "next/link";
+import { PlanGate } from "@/components/billing/plan-gate";
 import { LogoMark } from "@/components/brand/mark";
 import { RulesCard } from "@/components/settings/rules-card";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -17,7 +19,8 @@ import {
   renameTeam,
   setRecordingRetention,
 } from "@/lib/actions/team-admin";
-import { getTeamPageContext } from "@/lib/team-context";
+import { teamPath } from "@/lib/paths";
+import { getTeamPageContext, getTeamPlan } from "@/lib/team-context";
 import { PRESET_RRULES } from "@/lib/time";
 
 export const metadata = { title: "Settings" };
@@ -33,13 +36,15 @@ const PRESETS = [
 export default async function TeamSettingsPage({ params }: { params: Promise<{ orgSlug: string; teamSlug: string }> }) {
   const { orgSlug, teamSlug } = await params;
   const { team } = await getTeamPageContext(orgSlug, teamSlug);
-  if (team.role === "member") notFound();
+  if (team.role !== "owner" && team.role !== "admin") notFound();
   const isOwner = team.role === "owner";
 
-  const [[t], teamSchedules] = await Promise.all([
+  const [[t], teamSchedules, plan] = await Promise.all([
     db.select().from(teams).where(eq(teams.id, team.teamId)),
     db.select().from(schedules).where(eq(schedules.teamId, team.teamId)),
+    getTeamPlan(orgSlug, teamSlug),
   ]);
+  const billingHref = plan.plan === "unlimited" ? null : `${teamPath(orgSlug, teamSlug)}/settings/billing`;
 
   return (
     <div className="mx-auto max-w-2xl px-4 sm:px-6 pt-8 md:pt-12 pb-16 space-y-12">
@@ -50,6 +55,37 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
         <h1 className="display text-4xl sm:text-5xl text-ink">Settings</h1>
         <p className="text-soft">How {team.teamName} checks in, and what happens to its data.</p>
       </header>
+
+      {billingHref && (
+        <section className="space-y-3">
+          <SectionTitle>Plan</SectionTitle>
+          <Link
+            href={billingHref}
+            className="flex items-center gap-4 rounded-2xl border border-line bg-ground-raised/70 px-4 sm:px-5 py-4 hover:border-line-strong transition"
+          >
+            <LogoMark size={20} state={plan.plan === "pro" ? "done" : "before"} className="text-ink" />
+            <span className="flex-1 text-[15px] text-ink">
+              {plan.status === "trialing" ? "Pro trial" : plan.plan === "pro" ? "Pro" : "Free"}
+              <span className="block text-sm text-soft">Plan, members and billing for {team.orgName}</span>
+            </span>
+            <span className="text-sm text-soft">Manage →</span>
+          </Link>
+        </section>
+      )}
+
+      <section className="space-y-3">
+        <SectionTitle>Integrations</SectionTitle>
+        <Link
+          href={`${teamPath(orgSlug, teamSlug)}/settings/integrations`}
+          className="flex items-center gap-4 rounded-2xl border border-line bg-ground-raised/70 px-4 sm:px-5 py-4 hover:border-line-strong transition"
+        >
+          <span className="flex-1 text-[15px] text-ink">
+            Slack
+            <span className="block text-sm text-soft">Digest in a channel, reminders by DM</span>
+          </span>
+          <span className="text-sm text-soft">Set up →</span>
+        </Link>
+      </section>
 
       <section className="space-y-3">
         <SectionTitle>Team</SectionTitle>
@@ -67,7 +103,12 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
       <section className="space-y-3">
         <SectionTitle>Check-in rules</SectionTitle>
         <Card>
-          <RulesCard teamId={team.teamId} requireVideo={t.requireVideo} />
+          <RulesCard
+            teamId={team.teamId}
+            requireVideo={t.requireVideo && plan.requireVideoRule}
+            locked={!plan.requireVideoRule}
+            billingHref={isOwner ? billingHref : null}
+          />
         </Card>
       </section>
 
@@ -159,6 +200,15 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
           })}
         </div>
 
+        {!plan.multipleSchedules && teamSchedules.length > 0 && billingHref ? (
+          <PlanGate
+            compact
+            title="Multiple schedules are part of Pro."
+            hint="Run separate check-ins, like an EU and a US sync, in one team."
+            href={billingHref}
+            canUpgrade={isOwner}
+          />
+        ) : (
         <form
           action={createSchedule.bind(null, team.teamId)}
           className="rounded-2xl border border-dashed border-line-strong p-4 flex flex-wrap items-end gap-2"
@@ -179,6 +229,7 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
             Add
           </Button>
         </form>
+        )}
       </section>
 
       {isOwner && (
@@ -194,7 +245,10 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
           >
             <div className="flex-1 min-w-[12rem]">
               <p className="text-[15px] font-medium text-ink">Recording retention</p>
-              <p className="text-sm text-soft">Videos older than this are deleted. 0 keeps them forever.</p>
+              <p className="text-sm text-soft">
+                Videos older than this are deleted. 0 keeps them forever.
+                {plan.historyDays != null && ` On the Free plan, videos are kept for ${plan.historyDays} days.`}
+              </p>
             </div>
             <label className="flex items-center gap-2">
               <span className="sr-only">Days</span>

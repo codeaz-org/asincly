@@ -7,6 +7,7 @@ import {
   checkIns,
   members,
   occurrences,
+  orgBilling,
   organizations,
   schedules,
   sessions,
@@ -116,4 +117,19 @@ export async function seedSubmittedCheckIn(
     })
     .returning();
   return ci;
+}
+
+export async function addToTeamAs(teamId: string, userId: string, role: "member" | "guest") {
+  await testDb.insert(members).values({ teamId, userId, role });
+}
+
+// Hosted-cloud billing state for an org (only meaningful with BILLING_ENABLED=true).
+export async function setOrgBilling(
+  orgId: string,
+  state: { plan: "free" | "pro"; status: "trialing" | "active" | "past_due" | "canceled"; trialEndsAt?: Date | null },
+) {
+  await testDb
+    .insert(orgBilling)
+    .values({ orgId, ...state })
+    .onConflictDoUpdate({ target: orgBilling.orgId, set: { ...state, updatedAt: new Date() } });
 }

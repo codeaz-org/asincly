@@ -20,6 +20,9 @@ import {
   users,
 } from "@/db/schema";
 import { audit } from "@/lib/audit";
+import { assertCanCreateTeam, assertFeature, limitResult } from "@/lib/billing/entitlements";
+import { cancelSubscriptionForDeletedOrg, syncSeats } from "@/lib/billing/seats";
+import { revokeSlackFor } from "@/lib/slack/notify";
 import { TeamRulesSchema } from "@/lib/validation/social";
 import { decrypt } from "@/lib/crypto";
 import { requireUser } from "@/lib/session";
@@ -75,6 +78,7 @@ export async function removeMember(memberId: string) {
     resourceId: memberId,
     meta: { teamId: target.teamId, removedUserId: target.userId },
   });
+  await syncSeats(ctx.orgId);
   if (self) redirect("/");
   revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}/team`);
 }
@@ -95,6 +99,7 @@ export async function createTeam(orgId: string, formData: FormData) {
     .innerJoin(teams, eq(teams.id, members.teamId))
     .where(and(eq(teams.orgId, orgId), eq(members.userId, user.id)));
   if (!callerRow) throw new Error("Not a member of this organization");
+  await assertCanCreateTeam(orgId);
 
   const { slugify } = await import("@/lib/slug");
   const base = slugify(name);
@@ -168,7 +173,9 @@ export async function deleteTeam(teamId: string) {
     resourceType: "team",
     resourceId: teamId,
   });
+  await revokeSlackFor({ teamId });
   await db.delete(teams).where(eq(teams.id, teamId));
+  await syncSeats(ctx.orgId);
   redirect("/");
 }
 
@@ -179,6 +186,8 @@ const HHMM = /^\d{2}:\d{2}$/;
 export async function createSchedule(teamId: string, formData: FormData) {
   const user = await requireUser();
   const ctx = await requireAdmin(teamId, user.id);
+  const existing = await db.select({ id: schedules.id }).from(schedules).where(eq(schedules.teamId, teamId));
+  if (existing.length > 0) await assertFeature(ctx.orgId, "multipleSchedules");
   const parsed = z
     .object({
       name: z.string().min(1).max(80),
@@ -263,6 +272,15 @@ export async function setTeamRules(input: unknown): Promise<{ ok: true } | { ok:
   const parsed = TeamRulesSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid settings" };
   const row = await requireAdmin(parsed.data.teamId, user.id);
+  if (parsed.data.requireVideo) {
+    try {
+      await assertFeature(row.orgId, "requireVideoRule");
+    } catch (e) {
+      const limited = limitResult(e);
+      if (limited && !limited.ok) return { ok: false, error: limited.error };
+      throw e;
+    }
+  }
   await db.update(teams).set({ requireVideo: parsed.data.requireVideo }).where(eq(teams.id, parsed.data.teamId));
   await audit({
     orgId: row.orgId,
@@ -392,6 +410,8 @@ export async function deleteOrg(orgId: string) {
     resourceType: "organization",
     resourceId: orgId,
   });
+  await cancelSubscriptionForDeletedOrg(orgId);
+  await revokeSlackFor({ orgId });
   await db.delete(organizations).where(eq(organizations.id, orgId));
   redirect("/");
 }

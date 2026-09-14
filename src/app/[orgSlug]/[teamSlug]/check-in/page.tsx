@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { MarkLoader } from "@/components/brand/loader";
 import { CheckInFlow } from "@/components/check-in/flow";
@@ -11,7 +12,7 @@ import { displayName } from "@/lib/display";
 import { dayLabel } from "@/lib/feed-view";
 import { checkInFlowPath, teamPath } from "@/lib/paths";
 import { getActiveSchedules, getTeamRoster } from "@/lib/queries";
-import { getTeamPageContext } from "@/lib/team-context";
+import { getTeamPageContext, getTeamPlan } from "@/lib/team-context";
 import { VIDEO_SKIP_REASONS } from "@/lib/validation/social";
 
 export const metadata = { title: "Check in" };
@@ -27,11 +28,13 @@ export default async function CheckInPage({
   const { orgSlug, teamSlug } = await params;
   const { schedule } = await searchParams;
   const { user, team } = await getTeamPageContext(orgSlug, teamSlug);
+  if (team.role === "guest") redirect(teamPath(orgSlug, teamSlug));
 
-  const [ctx, roster, activeSchedules] = await Promise.all([
+  const [ctx, roster, activeSchedules, plan] = await Promise.all([
     getOrCreateTodayContext(team.teamId, schedule),
     getTeamRoster(team.teamId),
     getActiveSchedules(team.teamId),
+    getTeamPlan(orgSlug, teamSlug),
   ]);
   const [existing, previous] = await Promise.all([
     db
@@ -73,7 +76,10 @@ export default async function CheckInPage({
           mentionCandidates={candidates}
           existingRecordings={existing.length}
           edited={ctx.checkIn.updatedAt.getTime() - ctx.checkIn.createdAt.getTime() > 1000}
-          requireVideo={team.requireVideo}
+          // A downgraded org keeps the setting but stops enforcing it.
+          requireVideo={team.requireVideo && plan.requireVideoRule}
+          maxVideoSeconds={plan.maxVideoSeconds}
+          billingHref={plan.plan === "unlimited" ? null : `${teamPath(orgSlug, teamSlug)}/settings/billing`}
           videoSkip={skipReason ? { reason: skipReason, note: ctx.checkIn.videoSkipNote } : null}
           context={{
             lastDate: previous.lastDate,

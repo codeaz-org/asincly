@@ -1,16 +1,20 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
 import { members, organizations, schedules, teams, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
+import { assertCanAddMembers, assertFeature, ensureOrgBilling, limitResult } from "@/lib/billing/entitlements";
+import { syncSeats } from "@/lib/billing/seats";
+import { isBillingEnabled } from "@/lib/billing/plans";
 import { rateLimit } from "@/lib/rate-limit";
 import { PRESET_RRULES, isValidTimeZone, type PresetKey } from "@/lib/time";
 import { requireUser } from "@/lib/session";
 import { slugify } from "@/lib/slug";
+import { InviteRoleSchema } from "@/lib/validation/billing";
 
 const HHMM = /^\d{2}:\d{2}$/;
 
@@ -92,6 +96,8 @@ export async function completeOnboarding(formData: FormData) {
     resourceId: created.orgId,
     meta: { name: parsed.orgName, teamName: parsed.teamName },
   });
+  // Hosted cloud: every new organization starts on a 14-day Pro trial.
+  if (isBillingEnabled()) await ensureOrgBilling(created.orgId);
 
   redirect(`/${created.orgSlug}/${created.teamSlug}`);
 }
@@ -100,11 +106,12 @@ export async function completeOnboarding(formData: FormData) {
 
 export type InviteResult =
   | { ok: true; added: string[]; alreadyIn: string[]; invalid: string[] }
-  | { ok: false; error: string };
+  | { ok: false; error: string; upgrade?: boolean };
 
 const InviteSchema = z.object({
   teamId: z.string().uuid(),
   raw: z.string().min(1).max(2000),
+  role: InviteRoleSchema,
 });
 
 export async function inviteMembers(
@@ -118,6 +125,7 @@ export async function inviteMembers(
     const parsed = InviteSchema.parse({
       teamId: formData.get("teamId"),
       raw: formData.get("emails"),
+      role: formData.get("role") || undefined,
     });
 
     const tokens = parsed.raw
@@ -134,13 +142,44 @@ export async function inviteMembers(
     }
 
     const [caller] = await db
-      .select({ role: members.role, orgSlug: organizations.slug, teamSlug: teams.slug })
+      .select({ role: members.role, orgId: teams.orgId, orgSlug: organizations.slug, teamSlug: teams.slug })
       .from(members)
       .innerJoin(teams, eq(teams.id, members.teamId))
       .innerJoin(organizations, eq(organizations.id, teams.orgId))
       .where(and(eq(members.teamId, parsed.teamId), eq(members.userId, user.id)));
     if (!caller || (caller.role !== "owner" && caller.role !== "admin")) {
       return { ok: false, error: "You don't have permission to invite here." };
+    }
+
+    // Plan limits (hosted cloud only): guests are a Pro feature; members count
+    // as seats unless they already hold one elsewhere in the organization.
+    try {
+      if (parsed.role === "guest") {
+        await assertFeature(caller.orgId, "guests");
+      } else {
+        const known = await db.select({ id: users.id }).from(users).where(inArray(users.email, emails));
+        const seated = known.length
+          ? await db
+              .selectDistinct({ userId: members.userId })
+              .from(members)
+              .innerJoin(teams, eq(teams.id, members.teamId))
+              .where(
+                and(
+                  eq(teams.orgId, caller.orgId),
+                  ne(members.role, "guest"),
+                  inArray(
+                    members.userId,
+                    known.map((k) => k.id),
+                  ),
+                ),
+              )
+          : [];
+        await assertCanAddMembers(caller.orgId, emails.length - seated.length);
+      }
+    } catch (e) {
+      const limited = limitResult(e);
+      if (limited && !limited.ok) return { ok: false, error: limited.error, upgrade: true };
+      throw e;
     }
 
     const added: string[] = [];
@@ -162,7 +201,7 @@ export async function inviteMembers(
 
       await db
         .insert(members)
-        .values({ teamId: parsed.teamId, userId: invitee.id, role: "member" });
+        .values({ teamId: parsed.teamId, userId: invitee.id, role: parsed.role });
       added.push(email);
       if (process.env.NODE_ENV !== "production") {
         console.log(`[invite] added ${email} to team ${parsed.teamId}`);
@@ -182,9 +221,10 @@ export async function inviteMembers(
           action: "member.invite",
           resourceType: "team",
           resourceId: parsed.teamId,
-          meta: { added, alreadyIn, invalid },
+          meta: { added, alreadyIn, invalid, role: parsed.role },
         });
       }
+      await syncSeats(caller.orgId);
     }
 
     revalidatePath(`/${caller.orgSlug}/${caller.teamSlug}`);

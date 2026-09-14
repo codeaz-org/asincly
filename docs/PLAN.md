@@ -46,7 +46,8 @@ is green. Tick boxes as work lands.
       (Uses `/api/cron/tick` guarded by CRON_SECRET; same handlers move to Inngest steps unchanged.)
 - [x] Event-driven: mentioned, blocker_on_your_item
 - [x] Email via Resend (plain-text; branded HTML templates deferred)
-- [ ] Slack app: OAuth install per team, channel digest, DM reminders, `/standup` text check-in
+- [x] Slack app: OAuth install per team, channel digest, DM reminders (`docs/SLACK.md`)
+- [ ] Slack `/standup` text check-in
 - [ ] Google Calendar: add standup window to member's calendar (optional)
 - [ ] Web push (PWA) for mobile
 
@@ -96,6 +97,17 @@ is green. Tick boxes as work lands.
 - [x] Auto-tag teammates heard in the video or typed by name, removable before sending; new mentions on update notify
 - [x] Team rule "Require a video" (owners + admins) with "Can't record today" reasons visible to admins, enforced server-side
 - [x] Slack-style emoji: any-emoji reactions on check-ins and replies (frimousse, self-hosted emojibase data), `:shortcode:` autocomplete, Noto Color Emoji fallback
+
+## Hosted cloud (Asincly Cloud)
+- [x] License wording: AGPL allows commercial use; deploy tables talk about hosting providers' terms
+- [x] Plans as data (`lib/billing/plans.ts`): Free ≤3 members, Pro €8/member/month (€80/year), 14-day trial, self-host unlimited
+- [x] `org_billing`, `stripe_event`, `ai_usage`, `guest` role, RLS (`is_team_contributor`)
+- [x] Stripe Checkout (per seat), Customer Portal, signed idempotent webhook, seat sync with prorations, `scripts/stripe-setup.mjs`
+- [x] Limits enforced: seats, teams, schedules, require-video rule, video length, AI minutes, history lock, plan-aware retention
+- [x] Plan & billing page, pricing page, trial and past-due banners, PlanGate
+- [x] Guests: read, react, reply; no check-in; off the rail and reminders; free seats
+- [ ] Stripe Tax on once registrations exist (`STRIPE_TAX_ENABLED`)
+- [ ] Deploy the cloud with `BILLING_ENABLED=true` and live Stripe keys
 
 ## Deliberately out of scope for v1
 Live/synchronous video, chat/threads beyond comments on a check-in, Gmail API integration,

@@ -1,18 +1,62 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import Link from "next/link";
+import { cn } from "cn";
 import { useFormStatus } from "react-dom";
 import { MarkLoader } from "@/components/brand/loader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { inviteMembers, type InviteResult } from "@/lib/actions/onboarding";
 
-export function InviteForm({ teamId }: { teamId: string }) {
+export function InviteForm({
+  teamId,
+  guestsAllowed = true,
+  billingHref = null,
+  seatNote,
+}: {
+  teamId: string;
+  /** Guests are a Pro feature on the hosted cloud. */
+  guestsAllowed?: boolean;
+  billingHref?: string | null;
+  /** e.g. "2 of 3 members on the Free plan". */
+  seatNote?: string;
+}) {
   const [state, formAction] = useActionState<InviteResult | null, FormData>(inviteMembers, null);
+  const [role, setRole] = useState<"member" | "guest">("member");
 
   return (
     <form action={formAction} className="space-y-3">
       <input type="hidden" name="teamId" value={teamId} />
+      <input type="hidden" name="role" value={role} />
+      <div role="radiogroup" aria-label="Invite as" className="inline-flex rounded-xl border border-line p-0.5 text-sm">
+        {(
+          [
+            ["member", "Member"],
+            ["guest", "Guest · read-only"],
+          ] as const
+        ).map(([value, label]) => {
+          const disabled = value === "guest" && !guestsAllowed;
+          return (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={role === value}
+              disabled={disabled}
+              onClick={() => setRole(value)}
+              title={disabled ? "Guests are part of Pro" : undefined}
+              className={cn(
+                "h-8 rounded-[10px] px-3 transition disabled:opacity-45",
+                role === value ? "bg-ink/[0.08] text-ink" : "text-soft hover:text-ink",
+              )}
+            >
+              {label}
+              {disabled && <span className="ml-1.5 text-[11px] text-amber">Pro</span>}
+            </button>
+          );
+        })}
+      </div>
       <div className="flex flex-col sm:flex-row gap-2">
         <label htmlFor="invite-emails" className="sr-only">
           Email addresses
@@ -28,9 +72,12 @@ export function InviteForm({ teamId }: { teamId: string }) {
         <SubmitButton />
       </div>
       <p className="text-xs text-soft">
-        Separate with commas or spaces. They sign in with that email and land straight in this team.
+        {role === "guest"
+          ? "Guests can read check-ins, react and reply. They don't check in and don't count as members."
+          : "Separate with commas or spaces. They sign in with that email and land straight in this team."}
+        {seatNote && <span className="text-faint"> · {seatNote}</span>}
       </p>
-      {state && <Result state={state} />}
+      {state && <Result state={state} billingHref={billingHref} />}
     </form>
   );
 }
@@ -44,11 +91,19 @@ function SubmitButton() {
   );
 }
 
-function Result({ state }: { state: InviteResult }) {
+function Result({ state, billingHref }: { state: InviteResult; billingHref: string | null }) {
   if (!state.ok) {
     return (
-      <p className="text-sm text-danger" role="alert">
+      <p className={cn("text-sm", state.upgrade ? "text-ink" : "text-danger")} role="alert">
         {state.error}
+        {state.upgrade && billingHref && (
+          <>
+            {" "}
+            <Link href={billingHref} className="text-amber hover:underline underline-offset-4">
+              See Pro →
+            </Link>
+          </>
+        )}
       </p>
     );
   }

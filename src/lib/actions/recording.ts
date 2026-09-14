@@ -11,7 +11,8 @@ import { CheckInDraftSchema, type PrevItem } from "@/lib/ai/draft-schema";
 import { decrypt } from "@/lib/crypto";
 import { displayName } from "@/lib/display";
 import { composeDraft, type ComposedDraft } from "@/lib/draft";
-import { processRecording } from "@/lib/process-recording";
+import { getEntitlements } from "@/lib/billing/entitlements";
+import { QUOTA_EXCEEDED, processRecording } from "@/lib/process-recording";
 import { rateLimit } from "@/lib/rate-limit";
 import { requireUser } from "@/lib/session";
 import { presignedPutUrl } from "@/lib/s3";
@@ -102,6 +103,23 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
     const [ci] = await db.select().from(checkIns).where(eq(checkIns.id, parsed.checkInId));
     if (!ci || ci.userId !== user.id) return { ok: false, error: "Not your check-in" };
 
+    const [ctx] = await db
+      .select({ orgId: teams.orgId, orgSlug: organizations.slug, teamSlug: teams.slug })
+      .from(checkIns)
+      .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
+      .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
+      .innerJoin(teams, eq(teams.id, schedules.teamId))
+      .innerJoin(organizations, eq(organizations.id, teams.orgId))
+      .where(eq(checkIns.id, parsed.checkInId));
+    if (!ctx) return { ok: false, error: "Not your check-in" };
+
+    // The recorder stops at the plan's limit; allow a little slack for
+    // encoder timing before refusing.
+    const { maxVideoSeconds } = await getEntitlements(ctx.orgId);
+    if (parsed.durationMs != null && parsed.durationMs > (maxVideoSeconds + 10) * 1000) {
+      return { ok: false, error: `Videos can be up to ${Math.round(maxVideoSeconds / 60)} minutes on your plan.` };
+    }
+
     // One video note per check-in: a new recording replaces the old one.
     // Orphaned bucket objects are swept by the retention job / S3 lifecycle.
     await db.delete(recordings).where(eq(recordings.checkInId, parsed.checkInId));
@@ -127,19 +145,10 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
       .set({ videoSkipReason: null, videoSkipNote: null })
       .where(eq(checkIns.id, parsed.checkInId));
 
-    const [ctx] = await db
-      .select({ orgSlug: organizations.slug, teamSlug: teams.slug })
-      .from(checkIns)
-      .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
-      .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
-      .innerJoin(teams, eq(teams.id, schedules.teamId))
-      .innerJoin(organizations, eq(organizations.id, teams.orgId))
-      .where(eq(checkIns.id, parsed.checkInId));
-
     // Transcribe + draft after the response; the client polls getRecordingDraft.
     after(async () => {
       await processRecording(rec.id, parsed.hints ?? {}, parsed.notes ?? "");
-      if (ctx) revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}`);
+      revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}`);
     });
 
     return { ok: true, recordingId: rec.id };
@@ -152,7 +161,7 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
 export type DraftStatus =
   | { ok: true; status: "uploaded" | "transcribing" | "drafting" | "processing" }
   | { ok: true; status: "ready"; aiConfigured: boolean; draft: ComposedDraft | null }
-  | { ok: true; status: "failed"; aiConfigured: boolean }
+  | { ok: true; status: "failed"; aiConfigured: boolean; reason?: "quota_exceeded" }
   | { ok: false; error: string };
 
 const DraftRequestSchema = z.object({
@@ -172,12 +181,24 @@ export async function getRecordingDraft(input: unknown): Promise<DraftStatus> {
   if (!parsed.success) return { ok: false, error: "Invalid request" };
 
   const [rec] = await db
-    .select({ status: recordings.status, draftCipher: recordings.draftCipher, checkInId: recordings.checkInId })
+    .select({
+      status: recordings.status,
+      draftCipher: recordings.draftCipher,
+      checkInId: recordings.checkInId,
+      processingError: recordings.processingError,
+    })
     .from(recordings)
     .where(and(eq(recordings.id, parsed.data.recordingId), eq(recordings.userId, user.id)));
   if (!rec) return { ok: false, error: "Recording not found" };
 
-  if (rec.status === "failed") return { ok: true, status: "failed", aiConfigured: aiConfigured() };
+  if (rec.status === "failed") {
+    return {
+      ok: true,
+      status: "failed",
+      aiConfigured: aiConfigured(),
+      ...(rec.processingError === QUOTA_EXCEEDED ? { reason: "quota_exceeded" as const } : {}),
+    };
+  }
   if (rec.status !== "ready") return { ok: true, status: rec.status };
   if (!rec.draftCipher || !aiConfigured()) return { ok: true, status: "ready", aiConfigured: aiConfigured(), draft: null };
 

@@ -130,14 +130,19 @@ your LAN IP to `DEV_ALLOWED_ORIGINS`.
 
 ## Deploy
 
-**Can it run for free? Yes.** Two ways, with different trade-offs:
+**Don't want to run it?** Use [Asincly Cloud](#hosted-version) (free for up to 3 people).
+**Want to host it yourself for free? Yes, two ways:**
 
-| Option | Cost | Commercial use | Guide |
+| Option | Cost | Hosting provider allows business use¹ | Guide |
 |---|---|---|---|
 | Vercel Hobby + Neon + Backblaze B2 / Cloudflare R2 + Resend + Groq + GitHub Actions | **$0** | ❌ Vercel Hobby is personal use only | [Path A](./docs/DEPLOYMENT.md#a-free-managed-stack-0) |
 | Oracle Cloud Always Free VM + Docker Compose | **$0** | ✅ | [Path B](./docs/DEPLOYMENT.md#b-free-vm-with-docker-0) |
 | Hetzner CX23 (or any 2 GB VPS) + Docker Compose | **~€5.50/mo** | ✅ | [Path C](./docs/DEPLOYMENT.md#c-cheapest-vps-with-docker-5month) |
 | Vercel Pro + Neon + R2 | **~$20+/mo** | ✅ | [Path D](./docs/DEPLOYMENT.md#d-managed-for-companies-20month) |
+
+¹ This column is about the *hosting provider's* terms (Vercel's free Hobby plan is for
+personal use). **Asincly's own license allows commercial use in every option** — see
+[License](#license).
 
 One-machine self-host with automatic HTTPS:
 
@@ -165,6 +170,8 @@ The essentials. Everything is documented in [`.env.example`](./.env.example).
 | `GROQ_API_KEY` | Optional | Video transcription and AI drafts |
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Optional | Google sign-in |
 | `NEXT_PUBLIC_SOURCE_URL` | If you modify the code | Link to your fork's source (AGPL §13) |
+| `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` | Optional | Slack digest and DM reminders ([docs/SLACK.md](./docs/SLACK.md)) |
+| `BILLING_ENABLED`, `STRIPE_*` | Hosted cloud only | Plans and Stripe billing. Leave unset when self-hosting |
 
 ## Tech stack
 
@@ -195,11 +202,35 @@ The essentials. Everything is documented in [`.env.example`](./.env.example).
 ## Roadmap
 
 See **[docs/PLAN.md](./docs/PLAN.md)**. Next up:
-- Slack app (digest to a channel, DM reminders, `/standup`)
+- Slack `/standup` text check-in
 - Branded HTML emails
 - Web push / PWA
 - Admin 2FA
 - More AI providers (OpenAI, Anthropic, local Whisper)
+
+## Hosted version
+
+**Asincly Cloud** is the same open-source code, run by the maintainers so you don't have
+to. Revenue from it funds development.
+
+| | Free | Pro |
+|---|---|---|
+| Price | €0 | **€8 per member / month** (€80 / year) |
+| Members | Up to 3 | Unlimited (billed per member) |
+| Teams | 1 | Unlimited |
+| AI video minutes | 30 / month | 600 per member / month |
+| Video length | 3 min | 10 min |
+| History | 14 days | Your retention setting |
+| Guests (read-only, free seats) | — | ✓ |
+| Slack digest & reminders | — | ✓ |
+| "Require a video" rule, multiple schedules | — | ✓ |
+| Data export | ✓ | ✓ |
+
+Every new organization gets a **14-day Pro trial, no card required**.
+
+**Self-hosting is not limited:** plans and limits only exist when `BILLING_ENABLED=true`,
+which is how the cloud runs. Your own install has every feature, free, with no license key.
+Running your own paid service on Asincly? See [Billing](./docs/DEPLOYMENT.md#billing-hosted-cloud).
 
 ## Contributing
 
@@ -214,13 +245,28 @@ Copyright © 2026 the Asincly contributors.
 Asincly is free software: you can redistribute it and/or modify it under the terms of the
 **GNU Affero General Public License v3.0 or later**. See [LICENSE](./LICENSE).
 
-In plain terms:
-- **You can:** use it, self-host it for your company, and modify it.
-- **If you modify it and offer it to others over a network** (for example as a hosted
-  service), you must make your modified source available to those users under the same
-  license. Set `NEXT_PUBLIC_SOURCE_URL` to your fork so the in-app "Source code" link
-  points to it.
-- **Unmodified self-hosting** for your own team has no extra obligations.
+### License FAQ
+
+**Can my company use Asincly commercially?** Yes. Use it at work, self-host it for your
+company or your clients, charge for it. The AGPL doesn't restrict commercial use.
+
+**Can I sell hosting or services around it?** Yes, including a competing hosted service.
+The condition: if you run a *modified* version for users over a network, you must offer
+those users the source of your modifications under the AGPL. Set `NEXT_PUBLIC_SOURCE_URL`
+to your fork so the in-app "Source code" link points to it.
+
+**Do I have to publish anything if I just self-host it unmodified?** No.
+
+**Can I modify it privately for internal use?** Yes. Obligations only apply when you
+give the software to others or let people outside your organization use a modified
+version over the network.
+
+**Can I embed it in a closed-source product?** Not under the AGPL. Anything you combine it
+with and distribute or offer over a network must be AGPL-compatible. Open an issue if you
+need something else.
+
+This FAQ is a plain-language summary, not legal advice; the [LICENSE](./LICENSE) is what
+counts.
 
 Third-party components and their licenses are listed in
 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).

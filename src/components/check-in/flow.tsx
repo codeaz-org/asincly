@@ -51,6 +51,10 @@ type Props = {
   edited: boolean;
   schedules: Array<{ id: string; name: string; href: string; active: boolean }>;
   requireVideo: boolean;
+  /** Longest video the plan allows. */
+  maxVideoSeconds: number;
+  /** Plan & billing page on the hosted cloud; null when self-hosted. */
+  billingHref: string | null;
   videoSkip: VideoSkip | null;
   context: RecorderContext;
   /** A recording still being transcribed/drafted when the page loaded. */
@@ -92,6 +96,7 @@ export function CheckInFlow(props: Props) {
   const [aiInfo, setAiInfo] = useState<AiInfo | null>(null);
   const [tagged, setTagged] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [quotaHit, setQuotaHit] = useState(false);
   const [skip, setSkip] = useState<VideoSkip | null>(props.videoSkip);
   const [skipOpen, setSkipOpen] = useState(false);
   // People the author un-tagged: never auto-tag them again in this session.
@@ -179,7 +184,12 @@ export function CheckInFlow(props: Props) {
       }
       if (res.status === "failed") {
         setProcessing(null);
-        setNotice("Couldn't draft from the video — it's attached. Write your check-in instead.");
+        setQuotaHit(res.reason === "quota_exceeded");
+        setNotice(
+          res.reason === "quota_exceeded"
+            ? "Your team has used this month's AI minutes. Your video is attached — write a few lines below, or upgrade for more."
+            : "Couldn't draft from the video — it's attached. Write your check-in instead.",
+        );
         go("yesterday");
         return;
       }
@@ -350,6 +360,14 @@ export function CheckInFlow(props: Props) {
           {notice && step !== "video" && step !== "review" && (
             <p role="status" className="mb-6 rounded-xl border border-line bg-ink/[0.04] px-4 py-3 text-sm text-ink">
               {notice}
+              {quotaHit && props.billingHref && (
+                <>
+                  {" "}
+                  <Link href={props.billingHref} className="text-amber hover:underline underline-offset-4">
+                    See plans →
+                  </Link>
+                </>
+              )}
             </p>
           )}
 
@@ -390,6 +408,7 @@ export function CheckInFlow(props: Props) {
                 <Recorder
                   checkInId={props.checkInId}
                   existingCount={hasRecording ? 1 : 0}
+                  maxSeconds={props.maxVideoSeconds}
                   context={props.context}
                   onUploaded={(id) => {
                     setHasRecording(true);
