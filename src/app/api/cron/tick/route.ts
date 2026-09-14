@@ -19,7 +19,7 @@ import { effectiveRetentionDays, entitlementsFor, freeSince, isBillingEnabled } 
 import { dayLabel } from "@/lib/feed-view";
 import { notify } from "@/lib/notifications";
 import { postDigestToSlack, sendSlackReminder } from "@/lib/slack/notify";
-import { localDate, windowFor, windowStatus } from "@/lib/time";
+import { localDate, occursOn, windowFor, windowStatus } from "@/lib/time";
 
 // One-shot tick called on a cron (Vercel Cron, GitHub Actions, cron on a
 // self-host box, whatever). Fires window_open reminders and digest_ready
@@ -95,6 +95,7 @@ export async function GET(req: Request) {
       teamSlug: teams.slug,
       orgId: teams.orgId,
       orgSlug: organizations.slug,
+      rrule: schedules.rrule,
       windowOpenLocal: schedules.windowOpenLocal,
       windowCloseLocal: schedules.windowCloseLocal,
     })
@@ -118,6 +119,10 @@ export async function GET(req: Request) {
     // ── window_open ──
     for (const m of teamMembers) {
       const today = localDate(now, m.tz);
+      // The schedule's RRULE decides which local dates are standup days. Two
+      // members can be on different dates at the same instant, so this is per
+      // member, not per schedule.
+      if (!occursOn(s.rrule, today)) continue;
       if (awayToday(away, m.userId, m.tz, now)) continue;
       const w = windowFor(
         today,

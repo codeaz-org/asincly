@@ -169,6 +169,8 @@ export default async function TodayPage({
               away={today.myAway}
               checkInHref={checkInFlowPath(orgSlug, teamSlug)}
               viewerTz={user.tz}
+              offToday={today.offToday}
+              nextDate={today.nextDate}
             />
           )}
         </>

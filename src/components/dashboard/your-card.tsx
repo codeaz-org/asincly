@@ -13,6 +13,8 @@ export function YourCard({
   away,
   checkInHref,
   viewerTz,
+  offToday = false,
+  nextDate = null,
 }: {
   mine: MyCheckIn;
   state: MarkState;
@@ -20,8 +22,11 @@ export function YourCard({
   away: AwayPeriod | null;
   checkInHref: string;
   viewerTz: string;
+  /** Today isn't a standup day on this schedule. */
+  offToday?: boolean;
+  nextDate?: string | null;
 }) {
-  const copy = describe(mine, state, schedule, away, viewerTz);
+  const copy = offToday ? describeOffDay(nextDate) : describe(mine, state, schedule, away, viewerTz);
   return (
     <section
       aria-label="Your check-in"
@@ -49,6 +54,16 @@ export function YourCard({
       </div>
     </section>
   );
+}
+
+// No button: the check-in page would only tell them the same thing.
+function describeOffDay(nextDate: string | null) {
+  return {
+    headline: "Nothing due today.",
+    hint: nextDate ? `Your team's next check-in is ${dayLabel(nextDate)}.` : "This schedule has no upcoming check-ins.",
+    button: null,
+    primary: false,
+  };
 }
 
 function describe(

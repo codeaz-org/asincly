@@ -82,9 +82,12 @@ export async function signInAs(context: BrowserContext, sessionToken: string) {
   ]);
 }
 
-export async function cleanup() {
-  await client.end();
-}
+// Every spec calls this in afterAll, but Playwright runs several spec files
+// per worker and they share this module — so closing the pool here tore the
+// connection out from under whichever file was still running
+// (write CONNECTION_ENDED). The worker process closes its own sockets on exit,
+// so there is nothing to do here.
+export async function cleanup() {}
 
 // A submitted check-in on today's (UTC) occurrence of the team's schedule.
 export async function seedSubmittedCheckIn(

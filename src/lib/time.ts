@@ -83,6 +83,17 @@ export function nextOccurrenceDate(
   return null;
 }
 
+// Does `dateISO` (a local calendar date in the member's tz) satisfy the
+// RRULE? Same normalization as nextOccurrenceDate: local-date strings, never
+// UTC instants, so a member in UTC+13 and one in UTC-8 agree on whether
+// "2026-09-16" is a standup day.
+export function occursOn(rrule: string, dateISO: string): boolean {
+  const opts = RRule.parseString(rrule);
+  const rule = new RRule({ ...opts, dtstart: ANCHOR });
+  const at = new Date(`${dateISO}T00:00:00Z`);
+  return rule.after(at, true)?.toISOString().slice(0, 10) === dateISO;
+}
+
 // ────────── Convenience presets ──────────
 
 export const PRESET_RRULES = {

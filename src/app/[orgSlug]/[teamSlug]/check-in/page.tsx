@@ -1,8 +1,11 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { MarkLoader } from "@/components/brand/loader";
+import { LogoMark } from "@/components/brand/mark";
 import { CheckInFlow } from "@/components/check-in/flow";
+import { buttonVariants } from "@/components/ui/button";
 import { TzDetector } from "@/components/tz-detector";
 import { db } from "@/db";
 import { recordings } from "@/db/schema";
@@ -36,6 +39,35 @@ export default async function CheckInPage({
     getActiveSchedules(team.teamId),
     getTeamPlan(orgSlug, teamSlug),
   ]);
+  // Not a standup day for this schedule — nothing was created, so there is no
+  // draft to show.
+  if (ctx.offDay) {
+    return (
+      <div className="flex min-h-dvh flex-col">
+        <main className="flex-1 grid place-items-center px-6">
+          <div className="max-w-md text-center flex flex-col items-center gap-6">
+            <LogoMark size={56} state="asleep" className="text-ink" />
+            <div className="space-y-3">
+              <p className="kicker">{team.teamName}</p>
+              <h1 className="display text-4xl text-ink">No check-in today.</h1>
+              <p className="text-soft">
+                {ctx.nextDate
+                  ? `${team.teamName} checks in on a schedule. The next one is ${dayLabel(ctx.nextDate)}.`
+                  : `${team.teamName} has no upcoming check-ins on this schedule.`}
+              </p>
+            </div>
+            <Link
+              href={teamPath(orgSlug, teamSlug)}
+              className={buttonVariants({ variant: "primary", size: "lg" })}
+            >
+              Back to your team
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   const [existing, previous] = await Promise.all([
     db
       .select({ id: recordings.id, status: recordings.status })

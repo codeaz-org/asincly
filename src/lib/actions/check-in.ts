@@ -10,12 +10,16 @@ import { carryOver } from "@/lib/carry-over";
 import { extractMentions } from "@/lib/mentions";
 import { fireMentionEvents } from "@/lib/notifications";
 import { requireUser } from "@/lib/session";
-import { localDate } from "@/lib/time";
+import { localDate, nextOccurrenceDate, occursOn } from "@/lib/time";
 import { VideoSkipSchema } from "@/lib/validation/social";
 
 // Get (or lazily create) today's occurrence for the primary active schedule
 // of `teamId`, computed in the *caller's* tz. Returns the occurrence id +
 // their existing check-in row if any (also lazily created as a draft).
+//
+// On a day the schedule's RRULE doesn't cover, creates nothing and reports
+// `offDay`. Creating an occurrence there would put a day nobody was asked
+// about into the feed and make the digest chase absent check-ins.
 export async function getOrCreateTodayContext(teamId: string, scheduleId?: string) {
   const user = await requireUser();
 
@@ -35,7 +39,17 @@ export async function getOrCreateTodayContext(teamId: string, scheduleId?: strin
     (scheduleId && active.find((s) => s.id === scheduleId)) || active[0];
   if (!primary) throw new Error("No active schedule for this team");
 
-  const today = localDate(new Date(), user.tz);
+  const now = new Date();
+  const today = localDate(now, user.tz);
+
+  if (!occursOn(primary.rrule, today)) {
+    return {
+      offDay: true as const,
+      scheduleId: primary.id,
+      localDate: today,
+      nextDate: nextOccurrenceDate(primary.rrule, now, user.tz),
+    };
+  }
 
   // Upsert occurrence for (scheduleId, today).
   const [occ] = await db
@@ -72,7 +86,7 @@ export async function getOrCreateTodayContext(teamId: string, scheduleId?: strin
     )[0];
   }
 
-  return { occurrenceId: occ.id, checkIn: ci, scheduleId: primary.id, localDate: today };
+  return { offDay: false as const, occurrenceId: occ.id, checkIn: ci, scheduleId: primary.id, localDate: today };
 }
 
 async function computeCarryOverSeed(userId: string, teamId: string, notOccId: string) {

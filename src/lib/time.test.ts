@@ -5,6 +5,7 @@ import {
   localDate,
   localToUtc,
   nextOccurrenceDate,
+  occursOn,
   windowFor,
   windowStatus,
 } from "./time";
@@ -93,6 +94,60 @@ describe("nextOccurrenceDate", () => {
     // 2026-05-12 is a Tuesday.
     const from = new Date("2026-05-12T00:00:00Z");
     expect(nextOccurrenceDate(PRESET_RRULES.mwf, from, "UTC")).toBe("2026-05-13");
+  });
+});
+
+describe("occursOn", () => {
+  // 2026-05-11 Mon · 12 Tue · 13 Wed · 14 Thu · 15 Fri · 16 Sat · 17 Sun
+  it("daily matches every date, including weekends", () => {
+    for (const d of ["2026-05-11", "2026-05-14", "2026-05-16", "2026-05-17"]) {
+      expect(occursOn(PRESET_RRULES.daily, d)).toBe(true);
+    }
+  });
+
+  it("MWF matches Mon/Wed/Fri and nothing else — the bug that made presets decorative", () => {
+    expect(occursOn(PRESET_RRULES.mwf, "2026-05-11")).toBe(true); // Mon
+    expect(occursOn(PRESET_RRULES.mwf, "2026-05-12")).toBe(false); // Tue
+    expect(occursOn(PRESET_RRULES.mwf, "2026-05-13")).toBe(true); // Wed
+    expect(occursOn(PRESET_RRULES.mwf, "2026-05-14")).toBe(false); // Thu
+    expect(occursOn(PRESET_RRULES.mwf, "2026-05-15")).toBe(true); // Fri
+    expect(occursOn(PRESET_RRULES.mwf, "2026-05-16")).toBe(false); // Sat
+  });
+
+  it("weekdays skips the weekend", () => {
+    expect(occursOn(PRESET_RRULES.weekdays, "2026-05-15")).toBe(true); // Fri
+    expect(occursOn(PRESET_RRULES.weekdays, "2026-05-16")).toBe(false); // Sat
+    expect(occursOn(PRESET_RRULES.weekdays, "2026-05-17")).toBe(false); // Sun
+    expect(occursOn(PRESET_RRULES.weekdays, "2026-05-18")).toBe(true); // Mon
+  });
+
+  it("weekly matches only its weekday", () => {
+    expect(occursOn(PRESET_RRULES.weekly, "2026-05-11")).toBe(true); // Mon
+    expect(occursOn(PRESET_RRULES.weekly, "2026-05-13")).toBe(false); // Wed
+    expect(occursOn(PRESET_RRULES.weekly, "2026-05-18")).toBe(true); // next Mon
+  });
+
+  // The date string is the contract: two members on opposite sides of the
+  // date line must agree on whether a given local date is a standup day.
+  it("agrees with nextOccurrenceDate across far-apart zones", () => {
+    const from = new Date("2026-05-12T23:00:00Z"); // Tue 23:00 UTC
+    for (const tz of ["Pacific/Auckland", "America/Los_Angeles", "UTC"]) {
+      const next = nextOccurrenceDate(PRESET_RRULES.mwf, from, tz);
+      expect(next && occursOn(PRESET_RRULES.mwf, next)).toBe(true);
+    }
+  });
+
+  // DST changes the UTC offset but never which calendar date it is.
+  it("is unaffected by a DST boundary", () => {
+    // Europe/Berlin springs forward on 2026-03-29 (a Sunday).
+    expect(occursOn(PRESET_RRULES.weekdays, "2026-03-27")).toBe(true); // Fri before
+    expect(occursOn(PRESET_RRULES.weekdays, "2026-03-29")).toBe(false); // Sun
+    expect(occursOn(PRESET_RRULES.weekdays, "2026-03-30")).toBe(true); // Mon after
+  });
+
+  it("handles a custom rule", () => {
+    expect(occursOn("FREQ=WEEKLY;BYDAY=TU,TH", "2026-05-12")).toBe(true);
+    expect(occursOn("FREQ=WEEKLY;BYDAY=TU,TH", "2026-05-13")).toBe(false);
   });
 });
 
