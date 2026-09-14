@@ -82,39 +82,33 @@ From here on: commit straight to `main`, small conventional commits, keep `main`
 
 ### 2.1 Make schedules actually recur, on a due-work scheduler
 
-This subsumes the "can we stop querying every 5 minutes?" question, because both problems have
-the same fix.
+- [x] **The RRULE bug is fixed** (`fceadb2`). `occursOn(rrule, dateISO)` in `lib/time`, checked
+      per member in the tick (two members can be on different local dates at one instant) and in
+      `getOrCreateTodayContext`, which now creates nothing on an off day and reports it. The
+      check-in page shows when the next one is; Today's card says "Nothing due today" with no
+      button. Covered by unit tests, a DB-backed tick spec (verified red without the guard) and
+      an e2e that derives its rule from today's weekday so it holds any day it runs.
+- [x] **The two unbounded scans are gone** (`0c58598`). "Did this occurrence already fire
+      window_open / digest_ready?" was answered by loading every notification of that type for
+      the user (or team) and filtering in JS — a scan that grew for the life of the account, run
+      once per member per tick. Both are now point lookups against
+      `notification_type_occurrence_idx` on `(type, data->>'occurrenceId')`, confirmed by EXPLAIN.
+- [ ] **Job table — deferred pending a decision.** The original case for a `scheduled_job` table
+      drained with `FOR UPDATE SKIP LOCKED` rested on two claims that got weaker once the above
+      landed:
+      - *Scale*: the tick is now one query for active schedules, then per schedule one members
+        query, one away query, and a few indexed point lookups per member. There is no unbounded
+        work left in it, and the product has no deployed users.
+      - *Missed ticks*: the default window is 09:00–11:00, which is 24 tick opportunities at a
+        5-minute cadence. A reminder is only silently skipped if every one of them is missed, or
+        if someone sets a window shorter than the tick interval — nothing validates a minimum
+        window length today, which is the cheaper thing to fix.
 
-**Why the current tick can't just be patched:** it is O(all teams × all members) per run, and
-`route.ts:139` and `:201` load *every* `window_open` / `digest_ready` notification row with no
-date or occurrence filter, then filter in JS — on a 5-minute loop, against a 5-minute Actions
-timeout and a serverless function ceiling.
-
-**The shape to move to:** a `scheduled_job` table (`run_at timestamptz`, `kind`, `team_id`,
-`member_id`, `occurrence_id`, unique on the natural key) with an index on `run_at`. The tick
-becomes `SELECT … WHERE run_at <= now() FOR UPDATE SKIP LOCKED LIMIT n` — O(due work), not
-O(everything), safe to run concurrently, and it retries by simply not clearing the row.
-
-Jobs get enqueued when the schedule is created or edited, and each run enqueues its own
-successor from the member's *local* time — which is exactly what keeps it DST-safe, and exactly
-where `nextOccurrenceDate` finally gets its production caller. Recurrence stops being
-decorative as a side effect: an off day enqueues nothing.
-
-A heartbeat still triggers the drain, and that's fine — keep `cron.yml` (or Vercel Cron) as a
-dumb "drain the queue" call. What changes is that the work is scheduled rather than discovered
-by scanning.
-
-**Recommended over the alternatives:** Inngest is named in `CLAUDE.md`'s stack and would give
-durable steps and retries for free, but it is another service self-hosters must run, against
-the "self-hostable via one Docker Compose" goal. Postgres is already on every request path and
-`FOR UPDATE SKIP LOCKED` is the boring, correct primitive. If the job volume ever justifies
-Inngest, this table is what you'd port.
-
-Also fix, while here:
-- [ ] `check-in.ts:39` — guard the occurrence upsert on the RRULE too, so opening the app on an
-      off day says "no check-in scheduled today" instead of creating a draft.
-- [ ] Tests: MWF schedule producing nothing on Tue/Thu, across a DST boundary and in a zone
-      ahead of UTC, using the existing fixtures in `src/lib/time.test.ts`.
+      What a job table would still buy: work scheduled rather than discovered, a natural home for
+      retries, and headroom well before it's needed. What it costs: a migration plus RLS, enqueue
+      paths on schedule create/edit/activate and member join/leave/tz-change, a backfill for
+      existing schedules, the drain, and tests for each. Revisit when there is load to point at,
+      or build it now if the scheduling model itself is what you want to own.
 
 ### 2.2 Delete-flow bugs that make documented promises false
 
