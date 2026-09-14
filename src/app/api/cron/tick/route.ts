@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { awayToday, getAwayPeriods } from "@/lib/queries";
@@ -159,19 +159,20 @@ export async function GET(req: Request) {
         .where(and(eq(checkIns.occurrenceId, occurrenceId), eq(checkIns.userId, m.userId)));
       if (mine?.status === "submitted") continue;
 
-      // Already notified this occurrence?
-      const hits = await db
-        .select({ data: notifications.data })
+      // Already notified this occurrence? Matched in Postgres against
+      // notification_type_occurrence_idx — loading the user's whole
+      // window_open history to filter in JS grew with the account.
+      const [alreadyForThis] = await db
+        .select({ id: notifications.id })
         .from(notifications)
         .where(
           and(
             eq(notifications.userId, m.userId),
             eq(notifications.type, "window_open"),
+            sql`${notifications.data} ->> 'occurrenceId' = ${occurrenceId}`,
           ),
-        );
-      const alreadyForThis = hits.some(
-        (h) => (h.data as { occurrenceId?: string } | null)?.occurrenceId === occurrenceId,
-      );
+        )
+        .limit(1);
       if (alreadyForThis) continue;
 
       await notify({
@@ -235,18 +236,17 @@ export async function GET(req: Request) {
 
       // Idempotent: skip if any teammate already received digest_ready for
       // this occurrence.
-      const digestHits = await db
-        .select({ data: notifications.data })
+      const [alreadySent] = await db
+        .select({ id: notifications.id })
         .from(notifications)
         .where(
           and(
             eq(notifications.teamId, s.teamId),
             eq(notifications.type, "digest_ready"),
+            sql`${notifications.data} ->> 'occurrenceId' = ${o.id}`,
           ),
-        );
-      const alreadySent = digestHits.some(
-        (h) => (h.data as { occurrenceId?: string } | null)?.occurrenceId === o.id,
-      );
+        )
+        .limit(1);
       if (alreadySent) continue;
 
       const linkPath = `/${s.orgSlug}/${s.teamSlug}`;
