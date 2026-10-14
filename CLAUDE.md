@@ -13,11 +13,13 @@ with a hosted cloud version.
 - Next.js (App Router, TypeScript strict), deployed on Vercel
 - Tailwind + shadcn/ui as the component base (restyled, see Design)
 - Postgres (Supabase locally via Docker, Neon/Supabase in prod), Drizzle ORM, SQL migrations checked in
-- Auth: Auth.js — Google + Microsoft SSO, magic link; optional TOTP 2FA for admins
+- Auth: Auth.js — Google, magic link; TOTP 2FA (orgs can require it for admins); Google SSO
+  enforcement per domain. Microsoft deferred: its email claim isn't verified across tenants
 - Storage: S3-compatible (Cloudflare R2 in cloud, MinIO in self-host) via pre-signed URLs
-- Background jobs: Inngest (transcription, summaries, scheduled reminders, digests)
-- AI: pluggable provider interface (`lib/ai/`). Default: Anthropic for summaries, Deepgram for
-  transcription. Must be swappable to OpenAI / local Whisper for self-hosters.
+- Background jobs: `/api/cron/tick` (every 5 min: reminders, digests) and `/api/cron/daily`
+  (retention, storage cleanup); recording processing runs in `after()`. Inngest if load needs it.
+- AI: pluggable provider interface (`lib/ai/`). Default: Groq (Whisper transcription, Llama
+  drafts). Must be swappable to OpenAI / Anthropic / local Whisper for self-hosters.
 - Email: Resend. Slack: official Slack app (OAuth, `chat:write`, slash command, interactive).
 - Tests: Vitest (unit), Playwright (e2e). Lint: ESLint + Prettier. `pnpm` only.
 
