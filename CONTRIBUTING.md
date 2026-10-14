@@ -8,11 +8,12 @@ that your contributions are licensed under the same terms.
 - **Report bugs:** open an issue with steps to reproduce, what you expected and what
   happened (screenshots help).
 - **Suggest features:** open an issue describing the problem first; check
-  [docs/PLAN.md](./docs/PLAN.md) to see if it's planned.
+  [ROADMAP.md](./ROADMAP.md) to see if it's planned.
 - **Docs and deployment guides:** especially for hosting providers we don't cover yet.
 - **Code:** issues labelled `good first issue` are a great start.
 
-Security problems go to [SECURITY.md](./SECURITY.md), never public issues.
+Security problems go to [SECURITY.md](./SECURITY.md), never public issues. Everyone taking
+part follows the [Code of Conduct](./CODE_OF_CONDUCT.md).
 
 ## Development setup
 
@@ -58,10 +59,12 @@ UI changes: refresh the README images with `node scripts/screenshots.mjs <token>
   - Zod validation at every boundary;
   - never log transcripts, summaries or drafts;
   - media only through pre-signed URLs;
-  - write to `audit_log` from mutations.
+  - write to `audit_log` from mutations;
+  - read and write through `withUser()` so row-level security applies; importing the owner
+    client `db` outside the allowlist in `eslint.config.mjs` fails lint.
 - **Types:** no `any`, no `eslint-disable` without a comment explaining why.
 - **Tests:** every feature ships with Vitest tests for its pure logic, and a Playwright test
-  for user flows.
+  for user flows. CI runs both, Playwright with billing off and on.
 - **Dependencies:** explain why in the PR and check the bundle size impact. Licenses must be
   AGPL-compatible (MIT, Apache-2.0, BSD, ISC, …).
 - **Time zones:** use the helpers in `src/lib/time.ts`; never hand-roll UTC offsets.

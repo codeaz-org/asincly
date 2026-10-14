@@ -53,8 +53,8 @@ mentioned and flags blockers. The team reads a calm, one-screen digest instead o
 - **Auto-tagging:** teammates you mention are tagged automatically; remove a tag with one
   tap before sending.
 - **Your words win:** anything you already typed is kept, with a "use AI version" option.
-- **Pluggable AI:** Groq by default (free tier). Without a key, videos still upload and
-  people write the check-in themselves.
+- **Pluggable AI:** Groq by default. Without a key, or with AI turned off for a team or a
+  person, videos still upload and people write the check-in themselves.
 
 ### A dashboard that respects time zones
 
@@ -94,8 +94,10 @@ mentioned and flags blockers. The team reads a calm, one-screen digest instead o
 
 ### Private by design
 
-- **Tenant isolation in the database:** Postgres **row-level security** on every table.
-- **Encryption at rest:** transcripts, summaries and AI drafts are **encrypted**.
+- **Tenant isolation in the database:** every request runs under Postgres **row-level
+  security** as the signed-in person.
+- **Encryption at rest:** transcripts, summaries and AI drafts are **encrypted** (with a
+  rotatable key); 2FA, SSO enforcement and session management for admins.
 - **Media never passes through the app server:** browsers upload with pre-signed URLs and
   play back via short-lived signed links.
 - **Hardening:** audit log, rate limits, strict CSP, Zod validation on every input.
@@ -201,11 +203,10 @@ The essentials. Everything is documented in [`.env.example`](./.env.example).
 
 ## Roadmap
 
-See **[docs/PLAN.md](./docs/PLAN.md)**. Next up:
+See **[ROADMAP.md](./ROADMAP.md)** and **[CHANGELOG.md](./CHANGELOG.md)**. Next up:
 - Slack `/standup` text check-in
 - Branded HTML emails
 - Web push / PWA
-- Admin 2FA
 - More AI providers (OpenAI, Anthropic, local Whisper)
 
 ## Hosted version
