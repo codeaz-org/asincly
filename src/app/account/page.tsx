@@ -98,6 +98,25 @@ export default async function AccountPage() {
           </section>
 
           <section className="space-y-3">
+            <SectionTitle>AI</SectionTitle>
+            <Card className="p-4 sm:p-5">
+              <form action={updateAiPref} className="space-y-4">
+                <label className="flex items-start gap-3">
+                  <input type="checkbox" name="optOut" defaultChecked={u.aiOptOut} className="mt-1 size-4 accent-[oklch(0.78_0.15_60)]" />
+                  <span>
+                    <span className="block text-sm text-ink">Don&rsquo;t send my recordings to AI</span>
+                    <span className="block text-xs text-soft">
+                      Your videos are kept for your team as they are; nothing is transcribed or drafted, and you write your
+                      check-ins yourself.
+                    </span>
+                  </span>
+                </label>
+                <Button type="submit">Save</Button>
+              </form>
+            </Card>
+          </section>
+
+          <section className="space-y-3">
             <SectionTitle count={memberships.length}>Teams</SectionTitle>
             {memberships.length === 0 ? (
               <p className="text-sm text-soft">
@@ -206,6 +225,15 @@ async function updateEmailPrefs(formData: FormData) {
       .update(users)
       .set({ emailReminders: formData.get("reminders") === "on", emailActivity: formData.get("activity") === "on" })
       .where(eq(users.id, user.id)),
+  );
+  revalidatePath("/account");
+}
+
+async function updateAiPref(formData: FormData) {
+  "use server";
+  const user = await requireUser();
+  await withUser(user.id, (tx) =>
+    tx.update(users).set({ aiOptOut: formData.get("optOut") === "on" }).where(eq(users.id, user.id)),
   );
   revalidatePath("/account");
 }

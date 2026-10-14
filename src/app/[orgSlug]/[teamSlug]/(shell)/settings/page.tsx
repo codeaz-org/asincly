@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { AiCard } from "@/components/settings/ai-card";
 import { OrgSecurity } from "@/components/settings/org-security";
 import { TransferOrg } from "@/components/settings/transfer-org";
 import { eq } from "drizzle-orm";
@@ -116,13 +117,14 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
 
       <section className="space-y-3">
         <SectionTitle>Check-in rules</SectionTitle>
-        <Card>
+        <Card className="divide-y divide-line">
           <RulesCard
             teamId={team.teamId}
             requireVideo={t.requireVideo && plan.requireVideoRule}
             locked={!plan.requireVideoRule}
             billingHref={team.isOrgOwner ? billingHref : null}
           />
+          <AiCard teamId={team.teamId} on={t.aiEnabled} />
         </Card>
       </section>
 

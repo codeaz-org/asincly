@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { checkIns, members, recordings, schedules, occurrences, teams, users } from "@/db/schema";
 import { getAI, type Summary } from "@/lib/ai";
@@ -33,6 +33,7 @@ export async function processRecording(recordingId: string, hints: DraftHints = 
         teamId: schedules.teamId,
         orgId: teams.orgId,
         authorTz: users.tz,
+        aiAllowed: sql<boolean>`${teams.aiEnabled} and not ${users.aiOptOut}`,
       })
       .from(checkIns)
       .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
@@ -41,6 +42,13 @@ export async function processRecording(recordingId: string, hints: DraftHints = 
       .innerJoin(users, eq(users.id, checkIns.userId))
       .where(eq(checkIns.id, rec.checkInId));
     if (!ctx) throw new Error("Parent check-in vanished");
+
+    // The team turned AI off, or the author opted out: the video stays,
+    // nothing goes to the provider, and the author writes the check-in.
+    if (!ctx.aiAllowed) {
+      await db.update(recordings).set({ status: "ready", processedAt: new Date() }).where(eq(recordings.id, recordingId));
+      return;
+    }
 
     // Hosted plans meter transcription. Over quota, the video stays attached
     // and the author writes the check-in by hand.

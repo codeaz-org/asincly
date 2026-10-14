@@ -24,6 +24,8 @@ type Props = {
   existingCount?: number;
   /** The author's previous plan and open blockers, shown while talking. */
   context?: RecorderContext;
+  /** Where the audio goes once recording stops (GDPR Art. 13 notice). */
+  aiNotice?: string | null;
 };
 
 type Phase = "idle" | "requesting" | "ready" | "recording" | "preview" | "uploading";
@@ -50,7 +52,7 @@ function readNotes(key: string): string {
   }
 }
 
-export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCount = 0, context }: Props) {
+export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCount = 0, context, aiNotice }: Props) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [mode, setMode] = useState<Mode>("camera");
   const canShareScreen = useSyncExternalStore(noopSubscribe, () => !!navigator.mediaDevices?.getDisplayMedia, () => false);
@@ -394,6 +396,7 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
                   Up to {Math.round(maxSeconds / 60)} min{existingCount > 0 ? " · replaces your current video" : ""}
                 </span>
               </button>
+              {aiNotice && <p className="text-xs leading-relaxed text-soft">{aiNotice}</p>}
               {/* Phones: prepare below the camera button before starting. */}
               <div className="lg:hidden">{panel}</div>
             </div>
@@ -614,7 +617,7 @@ function WhileYouTalk({
           className="w-full resize-y rounded-xl bg-ink/[0.04] border border-line px-3 py-2 text-sm leading-relaxed text-ink placeholder:text-faint focus:outline-none focus:border-amber/50"
         />
         <p className="text-[11px] text-faint">
-          Only you see these. They help the AI catch anything you meant to say.
+          Only you see these. They go to the AI with your recording to help it catch anything you meant to say.
         </p>
       </div>
     </div>

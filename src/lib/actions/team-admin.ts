@@ -426,6 +426,26 @@ export async function setTeamRules(input: unknown): Promise<{ ok: true } | { ok:
   return { ok: true };
 }
 
+// Owners and admins decide whether this team's recordings go to the AI
+// provider at all. Off: videos are kept, check-ins are written by hand.
+export async function setTeamAi(input: unknown): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireUser();
+  const parsed = z.object({ teamId: z.string().uuid(), on: z.boolean() }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid settings" };
+  const row = await requireAdmin(parsed.data.teamId, user.id);
+  await db.update(teams).set({ aiEnabled: parsed.data.on }).where(eq(teams.id, parsed.data.teamId));
+  await audit({
+    orgId: row.orgId,
+    actorUserId: user.id,
+    action: "team.set_ai",
+    resourceType: "team",
+    resourceId: parsed.data.teamId,
+    meta: { on: parsed.data.on },
+  });
+  revalidatePath(`/${row.orgSlug}/${row.teamSlug}`, "layout");
+  return { ok: true };
+}
+
 // Hard delete: cascades to teams → members → schedules → occurrences →
 // check-ins → recordings via FK ON DELETE CASCADE. Object storage cleanup
 // happens on the next retention sweep (orphaned recordings can't be

@@ -53,6 +53,8 @@ type Props = {
   requireVideo: boolean;
   /** Longest video the plan allows. */
   maxVideoSeconds: number;
+  /** Where the recording's audio goes, shown before recording. */
+  aiNotice: string | null;
   /** Plan & billing page on the hosted cloud; null when self-hosted. */
   billingHref: string | null;
   videoSkip: VideoSkip | null;
@@ -410,6 +412,7 @@ export function CheckInFlow(props: Props) {
                   existingCount={hasRecording ? 1 : 0}
                   maxSeconds={props.maxVideoSeconds}
                   context={props.context}
+                  aiNotice={props.aiNotice}
                   onUploaded={(id) => {
                     setHasRecording(true);
                     setSkip(null);
@@ -806,6 +809,8 @@ function ReviewStep({
     blockerItems: blockerItems(fields.blockers).map((b) => ({ ...b, helperIds: [], resolved: false })),
     videoSkipReason: skip?.reason ?? null,
     videoSkipNote: skip?.note ?? null,
+    // Readers will see the same marker once it's sent.
+    aiAssisted: !!aiInfo,
   };
   const sections: Array<[Step, string, boolean]> = [
     ["yesterday", "Yesterday", hasContent(fields.yesterday)],

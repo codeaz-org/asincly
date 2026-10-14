@@ -204,6 +204,13 @@
       "when": 1791962768021,
       "tag": "0028_billing_event_order",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791962938021,
+      "tag": "0029_ai_controls",
+      "breakpoints": true
     }
   ]
 }

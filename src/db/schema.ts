@@ -30,6 +30,9 @@ export const users = pgTable("user", {
   // help offered, nudges). In-app notifications are unaffected.
   emailReminders: boolean("email_reminders").notNull().default(true),
   emailActivity: boolean("email_activity").notNull().default(true),
+  // The member's own objection: their recordings are never sent to the AI
+  // provider; they write their check-ins themselves.
+  aiOptOut: boolean("ai_opt_out").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -129,6 +132,8 @@ export const teams = pgTable(
     recordingRetentionDays: integer("recording_retention_days").notNull().default(90),
     // Owners/admins can make a video mandatory; members may still skip with a reason.
     requireVideo: boolean("require_video").notNull().default(false),
+    // Off: no recording from this team goes to the AI provider.
+    aiEnabled: boolean("ai_enabled").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("team_org_slug_uq").on(t.orgId, t.slug)],
@@ -262,6 +267,8 @@ export const checkIns = pgTable(
     // Set when the team requires video and the author couldn't record.
     videoSkipReason: text("video_skip_reason"),
     videoSkipNote: text("video_skip_note"),
+    // Sent from an AI draft (reviewed by the author), shown as such.
+    aiAssisted: boolean("ai_assisted").notNull().default(false),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

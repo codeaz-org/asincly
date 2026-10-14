@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { resetMemberTotp, setRequire2fa, setSsoPolicy } from "@/lib/actions/account-security";
 
-function Toggle({
+export function SettingToggle({
   title,
   hint,
   checked,
@@ -74,13 +74,13 @@ export function OrgSecurity({
   const [pending, startTransition] = useTransition();
   return (
     <>
-      <Toggle
+      <SettingToggle
         title="Require two-factor for owners and admins"
         hint="They set up an authenticator app before they can manage anything. Members aren't affected."
         checked={require2fa}
         onChange={(on) => setRequire2fa({ orgId, on })}
       />
-      <Toggle
+      <SettingToggle
         title={requireSso && ssoDomain ? `Require Google sign-in for @${ssoDomain}` : "Require Google sign-in for your domain"}
         hint="People at your email domain sign in with your Google Workspace; magic links stop working for them."
         checked={requireSso}

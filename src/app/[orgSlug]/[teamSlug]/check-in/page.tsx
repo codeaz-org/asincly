@@ -8,7 +8,8 @@ import { LogoMark } from "@/components/brand/mark";
 import { CheckInFlow } from "@/components/check-in/flow";
 import { buttonVariants } from "@/components/ui/button";
 import { TzDetector } from "@/components/tz-detector";
-import { recordings } from "@/db/schema";
+import { recordings, teams, users } from "@/db/schema";
+import { aiProcessorLabel } from "@/lib/ai";
 import { getOrCreateTodayContext } from "@/lib/actions/check-in";
 import { getPreviousContext } from "@/lib/check-in-context";
 import { displayName } from "@/lib/display";
@@ -37,11 +38,30 @@ export default async function CheckInPage({
   const { user, team } = await getTeamPageContext(orgSlug, teamSlug);
   if (team.role === "guest") redirect(teamPath(orgSlug, teamSlug));
 
-  const [ctx, [roster, activeSchedules], plan] = await Promise.all([
+  const [ctx, [roster, activeSchedules, [ai]], plan] = await Promise.all([
     getOrCreateTodayContext(team.teamId, schedule),
-    withUser(user.id, (tx) => Promise.all([getTeamRoster(tx, team.teamId), getActiveSchedules(tx, team.teamId)])),
+    withUser(user.id, (tx) =>
+      Promise.all([
+        getTeamRoster(tx, team.teamId),
+        getActiveSchedules(tx, team.teamId),
+        tx
+          .select({ teamOn: teams.aiEnabled, optedOut: users.aiOptOut })
+          .from(teams)
+          .innerJoin(users, eq(users.id, user.id))
+          .where(eq(teams.id, team.teamId)),
+      ]),
+    ),
     getTeamPlan(orgSlug, teamSlug),
   ]);
+  // Said before anyone records: where the audio goes, or that it goes nowhere.
+  const processor = aiProcessorLabel();
+  const aiNotice = !processor
+    ? null
+    : !ai.teamOn
+      ? "AI drafting is off for this team: your video is kept as is, and you write the check-in."
+      : ai.optedOut
+        ? "You've turned off AI drafting: your video is kept as is, and you write the check-in."
+        : `When you stop, the audio goes to ${processor} to transcribe it and draft your check-in. You review the draft before anyone sees it. Turn this off under your account.`;
   // Not a standup day for this schedule — nothing was created, so there is no
   // draft to show.
   if (ctx.offDay) {
@@ -116,6 +136,7 @@ export default async function CheckInPage({
           // A downgraded org keeps the setting but stops enforcing it.
           requireVideo={team.requireVideo && plan.requireVideoRule}
           maxVideoSeconds={plan.maxVideoSeconds}
+          aiNotice={aiNotice}
           billingHref={plan.plan === "unlimited" ? null : `${teamPath(orgSlug, teamSlug)}/settings/billing`}
           videoSkip={skipReason ? { reason: skipReason, note: ctx.checkIn.videoSkipNote } : null}
           context={{

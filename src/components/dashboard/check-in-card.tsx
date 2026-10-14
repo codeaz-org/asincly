@@ -66,6 +66,11 @@ export function CheckInCard({
         </div>
         <div className="flex flex-wrap justify-end gap-1.5">
           {mentionsMe && <Pill tone="amber">mentions you</Pill>}
+          {entry.aiAssisted && (
+            <Pill tone="neutral" title="Drafted by AI from the author's video, then reviewed and sent by them">
+              ai-assisted
+            </Pill>
+          )}
           {entry.videoSkipReason && (viewerCanManage || isMe) && (
             <Pill tone="cold" title={entry.videoSkipNote ?? undefined}>
               no video · {VIDEO_SKIP_LABEL[entry.videoSkipReason as VideoSkipReason]?.toLowerCase() ?? "skipped"}

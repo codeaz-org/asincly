@@ -1,6 +1,6 @@
 "use server";
 
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { withUser, type Q } from "@/db/with-user";
@@ -171,7 +171,7 @@ export async function submitCheckIn(input: unknown): Promise<SubmitResult> {
     // Mandatory video: a recording, or a stated reason for skipping it.
     const [recording] = await withUser(user.id, (tx) =>
       tx
-        .select({ id: recordings.id })
+        .select({ id: recordings.id, drafted: sql<boolean>`${recordings.draftCipher} <> ''` })
         .from(recordings)
         .where(eq(recordings.checkInId, checkInId))
         .limit(1),
@@ -193,6 +193,8 @@ export async function submitCheckIn(input: unknown): Promise<SubmitResult> {
           today,
           blockers,
           ...(skip ? { videoSkipReason: skip.reason, videoSkipNote: skip.note } : {}),
+        // Started from an AI draft of the recording; shown to readers.
+        aiAssisted: !!recording?.drafted,
           status: "submitted",
           // Keep the original send time on edits so the feed order is stable.
           submittedAt: ci.submittedAt ?? new Date(),

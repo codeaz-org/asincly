@@ -21,6 +21,14 @@ export async function getAI(): Promise<AI> {
   return { transcriber: noopTranscriber, summarizer: noopSummarizer, drafter: noopDrafter };
 }
 
+// Who processes recordings, for the notice shown before recording; null when
+// nothing leaves the server.
+export function aiProcessorLabel(): string | null {
+  if (fakeEnabled()) return "a test AI (development only)";
+  if (process.env.GROQ_API_KEY) return "Groq, an AI provider in the United States,";
+  return null;
+}
+
 export function aiConfigured(): boolean {
   return fakeEnabled() || !!process.env.GROQ_API_KEY;
 }

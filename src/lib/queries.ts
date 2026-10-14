@@ -58,6 +58,7 @@ export type FeedEntry = {
   blockerItems: FeedBlocker[];
   videoSkipReason: string | null;
   videoSkipNote: string | null;
+  aiAssisted: boolean;
 };
 
 export type Schedule = {
@@ -246,6 +247,7 @@ const entryColumns = {
   status: checkIns.status,
   videoSkipReason: checkIns.videoSkipReason,
   videoSkipNote: checkIns.videoSkipNote,
+  aiAssisted: checkIns.aiAssisted,
 };
 
 type EntryRow = {
@@ -261,6 +263,7 @@ type EntryRow = {
   status: "draft" | "submitted";
   videoSkipReason: string | null;
   videoSkipNote: string | null;
+  aiAssisted: boolean;
 };
 
 async function hydrateEntries(q: Q, rows: EntryRow[], viewerId: string): Promise<FeedEntry[]> {
