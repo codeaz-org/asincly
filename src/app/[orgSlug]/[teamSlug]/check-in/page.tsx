@@ -18,6 +18,10 @@ import { getActiveSchedules, getTeamRoster } from "@/lib/queries";
 import { getTeamPageContext, getTeamPlan } from "@/lib/team-context";
 import { VIDEO_SKIP_REASONS } from "@/lib/validation/social";
 
+// registerRecording runs transcription + drafting in after(), inside this
+// route's function; a long take can outlast the platform's default limit.
+export const maxDuration = 300;
+
 export const metadata = { title: "Check in" };
 
 // Focus mode: no app shell, one question per screen.

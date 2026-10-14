@@ -1,7 +1,9 @@
 import {
   CreateBucketCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -92,4 +94,30 @@ export async function presignedGetUrl(
     new GetObjectCommand({ Bucket: bucketName(), Key: key }),
     { expiresIn: expiresSec },
   );
+}
+
+// Batch delete (S3 caps one request at 1000 keys). Missing keys are not an
+// error, so retrying a half-finished delete is safe.
+export async function deleteObjects(keys: string[]): Promise<void> {
+  for (let i = 0; i < keys.length; i += 1000) {
+    const batch = keys.slice(i, i + 1000);
+    const res = await client().send(
+      new DeleteObjectsCommand({
+        Bucket: bucketName(),
+        Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
+      }),
+    );
+    if (res.Errors?.length) throw new Error(`Failed to delete ${res.Errors.length} object(s)`);
+  }
+}
+
+export async function* listObjects(prefix: string): AsyncGenerator<{ key: string; lastModified: Date | undefined }> {
+  let ContinuationToken: string | undefined;
+  do {
+    const page = await client().send(
+      new ListObjectsV2Command({ Bucket: bucketName(), Prefix: prefix, ContinuationToken }),
+    );
+    for (const o of page.Contents ?? []) if (o.Key) yield { key: o.Key, lastModified: o.LastModified };
+    ContinuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (ContinuationToken);
 }

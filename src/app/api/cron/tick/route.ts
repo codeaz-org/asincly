@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { awayToday, getAwayPeriods } from "@/lib/queries";
@@ -8,15 +8,12 @@ import {
   notifications,
   occurrences,
   organizations,
-  recordings,
   schedules,
   teams,
-  orgBilling,
   users,
 } from "@/db/schema";
-import { billingState } from "@/lib/billing/entitlements";
-import { effectiveRetentionDays, entitlementsFor, freeSince, isBillingEnabled } from "@/lib/billing/plans";
 import { dayLabel } from "@/lib/feed-view";
+import { cronAuthorized } from "@/lib/cron-auth";
 import { notify } from "@/lib/notifications";
 import { postDigestToSlack, sendSlackReminder } from "@/lib/slack/notify";
 import { localDate, occursOn, windowFor, windowStatus } from "@/lib/time";
@@ -24,20 +21,15 @@ import { localDate, occursOn, windowFor, windowStatus } from "@/lib/time";
 // One-shot tick called on a cron (Vercel Cron, GitHub Actions, cron on a
 // self-host box, whatever). Fires window_open reminders and digest_ready
 // events. Idempotent per (user, occurrence, type) — safe to run every
-// 5 minutes.
+// 5 minutes. Retention and storage cleanup run once a day in ../daily.
 //
-// Auth: CRON_SECRET must match ?secret= or the Authorization header.
+// Auth: Authorization: Bearer $CRON_SECRET.
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const secret = process.env.CRON_SECRET;
-  const passed =
-    url.searchParams.get("secret") ??
-    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
-    "";
-  if (!secret || passed !== secret) {
+  if (!cronAuthorized(req)) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
@@ -45,53 +37,11 @@ export async function GET(req: Request) {
   const stats: Stats = {
     windowOpens: 0,
     digests: 0,
-    purgedRecordings: 0,
     slackReminders: 0,
     slackDigests: 0,
     failedSchedules: 0,
   };
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
-
-  // ── recording retention purge ──
-  // For each team with a non-zero retention, delete recording rows older
-  // than the horizon. Bucket objects orphan on purpose (fast row delete);
-  // an S3 lifecycle rule on the bucket cleans them, or a separate sweeper.
-  // On the hosted cloud, Free orgs keep videos for the plan's history window
-  // (after a grace period following the loss of Pro).
-  const billing = isBillingEnabled();
-  const teamsWithRetention = await db
-    .select({ id: teams.id, days: teams.recordingRetentionDays, billing: orgBilling })
-    .from(teams)
-    .leftJoin(orgBilling, eq(orgBilling.orgId, teams.orgId));
-  for (const t of teamsWithRetention) {
-    let days = t.days;
-    // Orgs without a billing row yet get their trial on next visit; never purge them early.
-    if (billing && t.billing) {
-      const state = billingState(t.billing);
-      days = effectiveRetentionDays(t.days, entitlementsFor(state, 1, now, true), freeSince(state, now), now);
-    }
-    if (days <= 0) continue;
-    const cutoff = new Date(now.getTime() - days * 24 * 3600 * 1000);
-    // Two-step: find recording IDs belonging to this team older than cutoff.
-    const candidates = await db
-      .select({ id: recordings.id })
-      .from(recordings)
-      .innerJoin(checkIns, eq(checkIns.id, recordings.checkInId))
-      .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
-      .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
-      .where(and(eq(schedules.teamId, t.id), lt(recordings.createdAt, cutoff)));
-    if (candidates.length > 0) {
-      await db
-        .delete(recordings)
-        .where(
-          inArray(
-            recordings.id,
-            candidates.map((c) => c.id),
-          ),
-        );
-      stats.purgedRecordings += candidates.length;
-    }
-  }
 
   // Every active schedule for every team.
   const scheds = await db
@@ -128,7 +78,6 @@ export async function GET(req: Request) {
 type Stats = {
   windowOpens: number;
   digests: number;
-  purgedRecordings: number;
   slackReminders: number;
   slackDigests: number;
   failedSchedules: number;

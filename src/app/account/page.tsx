@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { z } from "zod";
@@ -10,7 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Card, Pill, SectionTitle } from "@/components/ui/card";
 import { FieldLabel, Input } from "@/components/ui/field";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { members, organizations, recordings, teams, users } from "@/db/schema";
+import { audit } from "@/lib/audit";
+import { rateLimit } from "@/lib/rate-limit";
+import { deleteRecordingObjects, recordingKeys } from "@/lib/recording-objects";
 import { cityFromTz } from "@/lib/day-rail";
 import { getMemberships, requireUser } from "@/lib/session";
 import { isValidTimeZone } from "@/lib/time";
@@ -171,6 +174,40 @@ async function deleteAccount(formData: FormData) {
   const [u] = await db.select().from(users).where(eq(users.id, session.user.id));
   const confirm = String(formData.get("confirm") ?? "");
   if (!u || confirm !== u.email) throw new Error("Confirmation did not match.");
+  if (!(await rateLimit(`account-delete:${u.id}`, 3, 60 * 60 * 1000)).allowed) {
+    throw new Error("Too many attempts — try again later.");
+  }
+
+  // Deleting would leave an org, or a team with people in it, nobody can run.
+  const ownedOrgs = await db
+    .select({ name: organizations.name })
+    .from(organizations)
+    .where(eq(organizations.ownerUserId, u.id));
+  if (ownedOrgs.length) {
+    throw new Error(
+      `You own ${ownedOrgs.map((o) => o.name).join(", ")}. Transfer or delete the organization first.`,
+    );
+  }
+  const mine = await db
+    .select({ teamId: members.teamId, role: members.role, orgId: teams.orgId, teamName: teams.name })
+    .from(members)
+    .innerJoin(teams, eq(teams.id, members.teamId))
+    .where(eq(members.userId, u.id));
+  for (const m of mine.filter((r) => r.role === "owner")) {
+    const others = await db
+      .select({ role: members.role })
+      .from(members)
+      .where(and(eq(members.teamId, m.teamId), ne(members.userId, u.id)));
+    if (others.length && !others.some((o) => o.role === "owner")) {
+      throw new Error(`You're the only owner of ${m.teamName}. Make someone else its owner first.`);
+    }
+  }
+
+  for (const orgId of new Set(mine.map((m) => m.orgId))) {
+    await audit({ orgId, actorUserId: u.id, action: "user.delete", resourceType: "user", resourceId: u.id });
+  }
+  const keys = await recordingKeys(eq(recordings.userId, u.id));
   await db.delete(users).where(eq(users.id, u.id));
+  await deleteRecordingObjects(keys);
   await signOut({ redirectTo: "/sign-in" });
 }

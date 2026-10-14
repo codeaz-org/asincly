@@ -80,16 +80,22 @@ services:
       minio:
         condition: service_healthy
 
-  # Reminders, digests and retention purges: hit the tick endpoint every 5 min.
+  # Reminders and digests every 5 minutes (/api/cron/tick); retention purges
+  # and storage cleanup once per UTC day (/api/cron/daily).
   scheduler:
     image: curlimages/curl:8.10.1
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
+        last_daily=""
         while true; do
           sleep 300
           curl -fsS -H "authorization: Bearer $$CRON_SECRET" http://app:3000/api/cron/tick > /dev/null || echo "tick failed"
+          today=$$(date -u +%F)
+          if [ "$$today" != "$$last_daily" ]; then
+            curl -fsS -H "authorization: Bearer $$CRON_SECRET" http://app:3000/api/cron/daily > /dev/null && last_daily=$$today || echo "daily failed"
+          fi
         done
     environment:
       CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in .env}

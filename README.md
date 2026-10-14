@@ -165,7 +165,7 @@ The essentials. Everything is documented in [`.env.example`](./.env.example).
 | `AUTH_SECRET` | ✅ | Session signing |
 | `DATA_ENCRYPTION_KEY` | ✅ | 32-byte base64 key for encrypted transcripts and drafts |
 | `S3_*` | ✅ | Any S3-compatible bucket (MinIO, R2, B2, S3) |
-| `CRON_SECRET` | ✅ | Protects `/api/cron/tick` (reminders, digests, retention) |
+| `CRON_SECRET` | ✅ | Protects `/api/cron/tick` (reminders, digests) and `/api/cron/daily` (retention, cleanup) |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Production | Magic-link sign-in and notification emails |
 | `GROQ_API_KEY` | Optional | Video transcription and AI drafts |
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Optional | Google sign-in |

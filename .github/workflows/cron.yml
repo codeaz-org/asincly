@@ -1,39 +1,47 @@
-name: Cron tick
+name: Cron
 
-# GitHub Actions schedules the tick every 5 minutes (the minimum for
-# public repos; private repos may drift up to 15 min under load). All the
-# scheduled work — window_open reminders, digest generation, recording
-# retention purges — runs behind /api/cron/tick.
+# A fallback scheduler for deployments without one. GitHub runs scheduled
+# workflows late and irregularly under load (hours apart has been observed),
+# so don't rely on it for the 5-minute tick in production: use Vercel Cron
+# (vercel.json), the Docker `scheduler` service, or any external pinger.
 #
 # Setup: add two repository secrets under Settings → Secrets and variables:
-#   APP_URL       e.g. https://asincly.vercel.app
+#   APP_URL       e.g. https://app.example.com
 #   CRON_SECRET   the same value as CRON_SECRET in the deployed app's env
+# and set the repository variable CRON_ENABLED=true. Until then the job is
+# skipped (shown as skipped); once enabled, missing secrets fail it loudly —
+# a green check over a no-op hid this before.
 
 on:
   schedule:
     - cron: "*/5 * * * *"
+    - cron: "0 3 * * *"
   workflow_dispatch: # manual trigger from the Actions tab
 
 concurrency:
-  group: cron-tick
+  group: cron-${{ github.event.schedule }}
   cancel-in-progress: false
 
+permissions: {}
+
 jobs:
-  tick:
+  call:
+    if: vars.CRON_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - name: Hit /api/cron/tick
+      - name: Hit the cron endpoint
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          JOB: ${{ github.event.schedule == '0 3 * * *' && 'daily' || 'tick' }}
         run: |
           set -eo pipefail
-          if [ -z "${{ secrets.APP_URL }}" ] || [ -z "${{ secrets.CRON_SECRET }}" ]; then
-            echo "APP_URL or CRON_SECRET secret missing — skipping."
-            exit 0
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::error::APP_URL or CRON_SECRET repository secret is missing."
+            exit 1
           fi
-          curl \
-            --silent --show-error --fail \
-            --max-time 240 \
-            -H "authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "${{ secrets.APP_URL }}/api/cron/tick" \
-            | tee /tmp/tick.json
+          curl --silent --show-error --fail --max-time 300 \
+            -H "authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/$JOB"
           echo

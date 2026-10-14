@@ -15,6 +15,7 @@ import { getEntitlements } from "@/lib/billing/entitlements";
 import { QUOTA_EXCEEDED, processRecording } from "@/lib/process-recording";
 import { rateLimit } from "@/lib/rate-limit";
 import { requireUser } from "@/lib/session";
+import { deleteRecordingObjects, recordingKeys } from "@/lib/recording-objects";
 import { presignedPutUrl } from "@/lib/s3";
 
 // Only what the recorder produces: webm (Chrome/Firefox), mp4 (Safari), the
@@ -120,9 +121,11 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
       return { ok: false, error: `Videos can be up to ${Math.round(maxVideoSeconds / 60)} minutes on your plan.` };
     }
 
-    // One video note per check-in: a new recording replaces the old one.
-    // Orphaned bucket objects are swept by the retention job / S3 lifecycle.
+    // One video note per check-in: a new recording replaces the old one,
+    // and the old take's objects go with it.
+    const replacedKeys = await recordingKeys(eq(recordings.checkInId, parsed.checkInId));
     await db.delete(recordings).where(eq(recordings.checkInId, parsed.checkInId));
+    await deleteRecordingObjects(replacedKeys);
 
     const [rec] = await db
       .insert(recordings)
@@ -230,11 +233,12 @@ export async function getRecordingDraft(input: unknown): Promise<DraftStatus> {
 
 export async function deleteRecording(recordingId: string) {
   const user = await requireUser();
+  const id = z.string().uuid().parse(recordingId);
   const [rec] = await db
     .select()
     .from(recordings)
-    .where(and(eq(recordings.id, recordingId), eq(recordings.userId, user.id)));
+    .where(and(eq(recordings.id, id), eq(recordings.userId, user.id)));
   if (!rec) throw new Error("Recording not found");
-  await db.delete(recordings).where(eq(recordings.id, recordingId));
-  // Object stays in the bucket; a scheduled cleanup job removes orphans later.
+  await db.delete(recordings).where(eq(recordings.id, id));
+  await deleteRecordingObjects([rec.objectKey, rec.posterKey, rec.audioKey].filter((k): k is string => !!k));
 }

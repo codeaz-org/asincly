@@ -53,12 +53,12 @@ B, C or D.
 
 | Piece | Free allowance (Sept 2026) | Notes |
 |---|---|---|
-| [Vercel Hobby](https://vercel.com/docs/plans/hobby) | 1M function invocations, 4 CPU-hrs, 300s max duration | Cron jobs limited to **once per day**, so use GitHub Actions for the 5-minute tick |
+| [Vercel Hobby](https://vercel.com/docs/plans/hobby) | 1M function invocations, 4 CPU-hrs, 300s max duration | Cron jobs limited to **once per day**: keep the daily cron in `vercel.json`, remove the `*/5` tick entry, and run the tick from an external pinger |
 | [Neon Free](https://neon.com/pricing) | 0.5 GB storage, 100 CU-hours/project, scale-to-zero after 5 min | No credit card. First request after idle is slower (cold start) |
 | [Backblaze B2](https://www.backblaze.com/cloud-storage/pricing) | 10 GB storage, free egress up to 3× stored data | No credit card. Alternative: [Cloudflare R2](https://developers.cloudflare.com/r2/pricing/) with 10 GB and free egress, but R2 needs a payment method on file |
 | [Resend Free](https://resend.com/pricing) | 3,000 emails/month, 100/day | Verify a sending domain |
 | [Groq Free](https://console.groq.com) | See above | Optional |
-| GitHub Actions | Free for public repos | [`cron.yml`](../.github/workflows/cron.yml) runs every 5 minutes |
+| [cron-job.org](https://cron-job.org) or GitHub Actions | Free | Calls the 5-minute tick. GitHub runs scheduled jobs late under load (hours, at times), so prefer a dedicated pinger |
 
 A recording is about 10–20 MB per 5 minutes at 720p. The default 90-day retention keeps
 10 GB comfortable for a small team. Adjust it in **Settings → Data**.
@@ -102,10 +102,16 @@ A recording is about 10–20 MB per 5 minutes at 720p. The default 90-day retent
    S3_BUCKET_RECORDINGS=asincly-recordings  S3_FORCE_PATH_STYLE=false
    GROQ_API_KEY=…   # optional
    ```
-5. **Scheduler: GitHub Actions.** In the fork, go to **Settings → Secrets and variables →
-   Actions** and add `APP_URL` (your Vercel URL) and `CRON_SECRET`. The workflow calls the
-   tick every 5 minutes. GitHub may delay scheduled runs, and it pauses scheduled
-   workflows in repositories with no activity for 60 days. Any push re-enables them.
+5. **Scheduler.** Two endpoints, both called with `Authorization: Bearer $CRON_SECRET`:
+   `/api/cron/tick` every 5 minutes (reminders, digests) and `/api/cron/daily` once a day
+   (recording retention, storage cleanup, old notifications and sessions).
+   - On Hobby, delete the `/api/cron/tick` line from `vercel.json` (Hobby crons run at most
+     daily and the deploy is refused otherwise); Vercel then runs the daily job for you.
+   - Call the tick from [cron-job.org](https://cron-job.org) with the header above, or use
+     the bundled GitHub workflow: in the fork, **Settings → Secrets and variables →
+     Actions**, add the secrets `APP_URL` and `CRON_SECRET` and the variable
+     `CRON_ENABLED=true`. GitHub delays scheduled runs under load, sometimes by hours, and
+     pauses them in repositories with no activity for 60 days.
 6. Open your URL, sign in and create your team.
 
 ---
@@ -148,12 +154,10 @@ Resend + Groq.**
 
 Same steps as path A, with two differences:
 - Vercel Pro's terms allow business use.
-- You can replace GitHub Actions with Vercel Cron. Add this to `vercel.json`:
-  ```json
-  { "crons": [{ "path": "/api/cron/tick", "schedule": "*/5 * * * *" }] }
-  ```
-  Vercel sends `Authorization: Bearer $CRON_SECRET` automatically when `CRON_SECRET` is
-  set in the project.
+- Vercel Cron runs both jobs from the bundled `vercel.json` (tick every 5 minutes, daily
+  at 03:00 UTC); no external scheduler needed. Vercel sends
+  `Authorization: Bearer $CRON_SECRET` automatically when `CRON_SECRET` is set in the
+  project.
 
 ---
 
@@ -199,7 +203,7 @@ What runs:
 | `minio` | S3-compatible storage for recordings |
 | `migrate` | Applies migrations and sets the `asincly_app` password, then exits |
 | `app` | The Next.js server (non-root, standalone build) |
-| `scheduler` | Calls `/api/cron/tick` every 5 minutes |
+| `scheduler` | Calls `/api/cron/tick` every 5 minutes and `/api/cron/daily` once per UTC day |
 | `caddy` | HTTPS for `APP_DOMAIN` → app and `S3_DOMAIN` → MinIO (only with `--profile https`) |
 
 To try it locally without a domain, leave out `--profile https` and keep
@@ -315,5 +319,6 @@ How it behaves:
 | Pages load but data is empty after migrating a hosted DB | `DATABASE_URL` must use a role that can bypass RLS (owner/admin); `pnpm db:migrate` warns if not |
 | `password authentication failed for user "asincly_app"` | Run `pnpm db:migrate` with `APP_DB_PASSWORD` set, and use the same password in `DATABASE_URL_APP` |
 | Video uploads but no draft appears | Set `GROQ_API_KEY`; check server logs for `groq transcribe`/`groq draft` errors and your Groq rate limits |
-| Reminders/digests never happen | The scheduler isn't calling `/api/cron/tick` with the right `CRON_SECRET` |
+| Reminders/digests never happen | The scheduler isn't calling `/api/cron/tick` with `Authorization: Bearer $CRON_SECRET` (the `?secret=` query form is no longer accepted) |
+| Old recordings stay in the bucket | `/api/cron/daily` isn't being called once a day |
 | Paid in Stripe but the plan still shows Free | The webhook isn't reaching `/api/stripe/webhook` or `STRIPE_WEBHOOK_SECRET` is wrong; check the endpoint's delivery log in Stripe |

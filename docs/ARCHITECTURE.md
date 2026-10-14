@@ -96,12 +96,22 @@ review, edit, untag, send ────────▶  submitCheckIn (video rule
 
 ## Scheduling
 
-`/api/cron/tick` (Bearer `CRON_SECRET`) does three jobs:
-- sends window-open reminders (in-app, email, Slack DM), skipping away members and guests;
-- generates digests (in-app, Slack channel);
-- purges recordings past team retention (plan-aware on the hosted cloud).
+Two endpoints, both `Authorization: Bearer $CRON_SECRET` only:
 
-It is called by GitHub Actions, the Docker `scheduler` service or Vercel Cron.
+`/api/cron/tick`, every 5 minutes:
+- sends window-open reminders (in-app, email, Slack DM), skipping away members and guests;
+- generates digests (in-app, Slack channel).
+
+`/api/cron/daily`, once a day:
+- purges recordings past team retention (plan-aware on the hosted cloud), rows and objects;
+- sweeps bucket objects no recording references (abandoned uploads, failed deletes);
+- drops notifications older than 90 days and expired sessions.
+
+Every user-initiated delete (recording, re-record, schedule, team, org, account) removes
+the bucket objects immediately; the daily sweep is the backstop.
+
+They are called by Vercel Cron (`vercel.json`), the Docker `scheduler` service, or the
+GitHub workflow.
 
 ## Code map
 

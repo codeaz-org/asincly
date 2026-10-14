@@ -1,14 +1,15 @@
 "use server";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, type SQL } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
-import { members, organizations, schedules, teams } from "@/db/schema";
+import { checkIns, members, occurrences, organizations, recordings, schedules, teams } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { assertCanCreateTeam, assertFeature, limitResult } from "@/lib/billing/entitlements";
 import { cancelSubscriptionForDeletedOrg, syncSeats } from "@/lib/billing/seats";
+import { deleteRecordingObjects, recordingKeys } from "@/lib/recording-objects";
 import { revokeSlackFor } from "@/lib/slack/notify";
 import { TeamRulesSchema } from "@/lib/validation/social";
 import { requireUser } from "@/lib/session";
@@ -35,6 +36,18 @@ async function requireAdmin(teamId: string, userId: string) {
     throw new Error("Admins only");
   }
   return row;
+}
+
+// Check-in ids under a team / schedule / org, for collecting bucket keys
+// before a cascading delete removes the rows that point at them.
+function checkInsWhere(where: SQL) {
+  return db
+    .select({ id: checkIns.id })
+    .from(checkIns)
+    .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
+    .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
+    .innerJoin(teams, eq(teams.id, schedules.teamId))
+    .where(where);
 }
 
 // ────────── Members ──────────
@@ -163,7 +176,9 @@ export async function deleteTeam(teamId: string) {
     resourceId: teamId,
   });
   await revokeSlackFor({ teamId });
+  const keys = await recordingKeys(inArray(recordings.checkInId, checkInsWhere(eq(schedules.teamId, teamId))));
   await db.delete(teams).where(eq(teams.id, teamId));
+  await deleteRecordingObjects(keys);
   await syncSeats(ctx.orgId);
   redirect("/");
 }
@@ -224,7 +239,9 @@ export async function deleteSchedule(scheduleId: string) {
     resourceType: "schedule",
     resourceId: scheduleId,
   });
+  const keys = await recordingKeys(inArray(recordings.checkInId, checkInsWhere(eq(schedules.id, scheduleId))));
   await db.delete(schedules).where(eq(schedules.id, scheduleId));
+  await deleteRecordingObjects(keys);
   revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}/settings`);
 }
 
@@ -305,6 +322,8 @@ export async function deleteOrg(orgId: string) {
   });
   await cancelSubscriptionForDeletedOrg(orgId);
   await revokeSlackFor({ orgId });
+  const keys = await recordingKeys(inArray(recordings.checkInId, checkInsWhere(eq(teams.orgId, orgId))));
   await db.delete(organizations).where(eq(organizations.id, orgId));
+  await deleteRecordingObjects(keys);
   redirect("/");
 }
