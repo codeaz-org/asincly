@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { MailCheck } from "lucide-react";
 import { auth, signIn } from "@/auth";
@@ -6,6 +7,7 @@ import { LogoMark } from "@/components/brand/mark";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const metadata = { title: "Sign in" };
 
@@ -13,6 +15,8 @@ const ERRORS: Record<string, string> = {
   Verification: "That link expired or was already used. Send a new one.",
   Configuration: "Sign-in is misconfigured on this server.",
   AccessDenied: "That account can't sign in here.",
+  RateLimited: "Too many sign-in attempts. Wait a few minutes and try again.",
+  EmailSignin: "Couldn't send a link to that address right now. Wait a few minutes and try again.",
 };
 
 export default async function SignInPage({
@@ -99,6 +103,11 @@ export default async function SignInPage({
                 <form
                   action={async (formData) => {
                     "use server";
+                    // Per client address, on top of the per-inbox cap in auth.ts.
+                    const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+                    if (!(await rateLimit(`sign-in:${ip}`, 20, 60 * 60 * 1000)).allowed) {
+                      redirect("/sign-in?error=RateLimited");
+                    }
                     await signIn("resend", { email: formData.get("email"), redirectTo: "/" });
                   }}
                   className="space-y-3"

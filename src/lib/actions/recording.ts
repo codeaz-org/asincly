@@ -52,7 +52,7 @@ export async function getUploadUrl(input: {
 }): Promise<PresignResult> {
   try {
     const user = await requireUser();
-    const rl = rateLimit(`upload-url:${user.id}`, 15, 5 * 60 * 1000);
+    const rl = await rateLimit(`upload-url:${user.id}`, 15, 5 * 60 * 1000);
     if (!rl.allowed) return { ok: false, error: "Too many upload attempts — slow down." };
     const result = PresignSchema.safeParse(input);
     if (!result.success) return { ok: false, error: "Unsupported recording format" };
@@ -97,7 +97,7 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
     const result = RegisterSchema.safeParse(input);
     if (!result.success) return { ok: false, error: "Unknown upload" };
     const parsed = result.data;
-    if (!rateLimit(`recording:${user.id}`, 12, 60 * 60 * 1000).allowed) {
+    if (!(await rateLimit(`recording:${user.id}`, 12, 60 * 60 * 1000)).allowed) {
       return { ok: false, error: "That's a lot of recordings — try again later." };
     }
 
@@ -178,6 +178,11 @@ const DraftRequestSchema = z.object({
 // with whatever the author has typed in the meantime.
 export async function getRecordingDraft(input: unknown): Promise<DraftStatus> {
   const user = await requireUser();
+  // Polled every few seconds while a take processes; each ready response
+  // decrypts the draft.
+  if (!(await rateLimit(`draft-poll:${user.id}`, 120, 5 * 60 * 1000)).allowed) {
+    return { ok: false, error: "Slow down" };
+  }
   const parsed = DraftRequestSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid request" };
 

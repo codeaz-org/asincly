@@ -46,7 +46,7 @@ export async function startCheckout(input: unknown): Promise<BillingRedirect> {
   const parsed = StartCheckoutSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid request." };
   const user = await requireUser();
-  if (!rateLimit(`checkout:${user.id}`, 10, 60 * 60 * 1000).allowed) {
+  if (!(await rateLimit(`checkout:${user.id}`, 10, 60 * 60 * 1000)).allowed) {
     return { ok: false, error: "Too many attempts. Try again later." };
   }
   const ctx = await requireBillingOwner(parsed.data.teamId, user.id);
@@ -114,7 +114,7 @@ export async function openBillingPortal(input: unknown): Promise<BillingRedirect
   const parsed = BillingTeamSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid request." };
   const user = await requireUser();
-  if (!rateLimit(`portal:${user.id}`, 20, 60 * 60 * 1000).allowed) {
+  if (!(await rateLimit(`portal:${user.id}`, 20, 60 * 60 * 1000)).allowed) {
     return { ok: false, error: "Too many attempts. Try again later." };
   }
   const ctx = await requireBillingOwner(parsed.data.teamId, user.id);

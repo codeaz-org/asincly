@@ -39,7 +39,7 @@ export default function SecurityPage() {
         <li>Postgres row-level security is FORCE-enabled on every domain table.</li>
         <li>Transcripts and summaries are AES-256-GCM encrypted at rest.</li>
         <li>Uploads go browser → pre-signed PUT → bucket, never through the API.</li>
-        <li>Rate limiting on onboarding, invite, and upload-URL endpoints.</li>
+        <li>Rate limiting on sign-in, onboarding, invites, uploads, AI processing and exports, shared across instances.</li>
         <li>Audit log on every mutation.</li>
         <li>Strict CSP + HSTS + <code>X-Frame-Options: DENY</code>.</li>
       </ul>

@@ -59,7 +59,9 @@ review, edit, untag, send ────────▶  submitCheckIn (video rule
   URLs, only for object keys minted for that check-in and allowlisted MIME types, and play
   back through short-lived signed GET URLs.
 - **Validation and limits:** every server action and route validates input with Zod.
-  Uploads, AI processing, comments, reactions and nudges are rate-limited.
+  Sign-in (per inbox and per client address), uploads, AI processing, exports, comments,
+  reactions and nudges are rate-limited. Counters live in Postgres (`rate_limit`), so the
+  limits hold across instances.
 - **Audit:** mutations write to `audit_log`.
 - **Headers:** a strict CSP and security headers are set in `next.config.ts`.
 

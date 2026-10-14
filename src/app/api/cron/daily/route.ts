@@ -15,6 +15,7 @@ import {
 import { billingState } from "@/lib/billing/entitlements";
 import { effectiveRetentionDays, entitlementsFor, freeSince, isBillingEnabled } from "@/lib/billing/plans";
 import { cronAuthorized } from "@/lib/cron-auth";
+import { purgeRateLimits } from "@/lib/rate-limit";
 import { deleteRecordingObjects, sweepOrphanObjects } from "@/lib/recording-objects";
 
 // Once a day: everything that deletes data on a schedule. Each job is
@@ -59,6 +60,8 @@ export async function GET(req: Request) {
     await db.delete(verificationTokens).where(lt(verificationTokens.expires, now));
     return gone.length;
   });
+
+  await run("purgedRateLimits", () => purgeRateLimits(now));
 
   const ok = !Object.values(stats).includes("failed");
   return NextResponse.json({ ok, ...stats }, { status: ok ? 200 : 500 });

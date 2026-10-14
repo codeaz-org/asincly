@@ -397,3 +397,16 @@ export const auditLogs = pgTable("audit_log", {
   meta: jsonb("meta").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Fixed-window counters behind lib/rate-limit. Shared by every instance
+// (an in-memory map gave each serverless function its own budget). Old
+// windows are dropped by the daily cron.
+export const rateLimits = pgTable(
+  "rate_limit",
+  {
+    key: text("key").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    hits: integer("hits").notNull().default(1),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.windowStart] })],
+);

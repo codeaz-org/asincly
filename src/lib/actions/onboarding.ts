@@ -46,7 +46,7 @@ async function uniqueOrgSlug(base: string): Promise<string> {
 
 export async function completeOnboarding(formData: FormData) {
   const user = await requireUser();
-  const rl = rateLimit(`onboarding:${user.id}`, 5, 60 * 60 * 1000);
+  const rl = await rateLimit(`onboarding:${user.id}`, 5, 60 * 60 * 1000);
   if (!rl.allowed) throw new Error("Too many onboarding attempts — try again later.");
   const parsed = CompleteSchema.parse({
     yourName: formData.get("yourName"),
@@ -122,7 +122,7 @@ export async function inviteMembers(
 ): Promise<InviteResult> {
   try {
     const user = await requireUser();
-    const rl = rateLimit(`invite:${user.id}`, 20, 60 * 60 * 1000);
+    const rl = await rateLimit(`invite:${user.id}`, 20, 60 * 60 * 1000);
     if (!rl.allowed) return { ok: false, error: "Slow down — too many invite bursts." };
     const parsed = InviteSchema.parse({
       teamId: formData.get("teamId"),

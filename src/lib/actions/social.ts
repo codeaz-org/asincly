@@ -96,7 +96,7 @@ export async function toggleReaction(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return fail(firstIssue(parsed.error));
   const { checkInId, commentId, emoji } = parsed.data;
 
-  if (!rateLimit(`reaction:${user.id}`, 60, 60_000).allowed) return fail("Slow down a little");
+  if (!(await rateLimit(`reaction:${user.id}`, 60, 60_000)).allowed) return fail("Slow down a little");
   const ctx = await checkInContext(checkInId, user.id);
   if (!ctx) return fail("Check-in not found");
   if (commentId) {
@@ -156,7 +156,7 @@ export async function addComment(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return fail(firstIssue(parsed.error));
   const { checkInId, body } = parsed.data;
 
-  if (!rateLimit(`comment:${user.id}`, 20, 60_000).allowed) {
+  if (!(await rateLimit(`comment:${user.id}`, 20, 60_000)).allowed) {
     return fail("That's a lot of comments — try again in a minute");
   }
   const ctx = await checkInContext(checkInId, user.id);
@@ -245,7 +245,7 @@ export async function toggleHelp(input: unknown): Promise<ActionResult> {
   if ("error" in b) return fail(b.error ?? "Invalid input");
   const { ctx, item, itemKey } = b;
   if (ctx.authorId === user.id) return fail("That's your own blocker");
-  if (!rateLimit(`help:${user.id}`, 30, 60_000).allowed) return fail("Slow down a little");
+  if (!(await rateLimit(`help:${user.id}`, 30, 60_000)).allowed) return fail("Slow down a little");
 
   const added = await withUser(user.id, async (tx) => {
     const removed = await tx
@@ -442,7 +442,7 @@ export async function nudge(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return fail(firstIssue(parsed.error));
   const { teamId, userId: targetId } = parsed.data;
   if (targetId === user.id) return fail("You can't nudge yourself");
-  if (!rateLimit(`nudge:${user.id}`, 10, 60 * 60_000).allowed) return fail("Too many nudges — try later");
+  if (!(await rateLimit(`nudge:${user.id}`, 10, 60 * 60_000)).allowed) return fail("Too many nudges — try later");
 
   const ctx = await teamContext(teamId, user.id);
   if (!ctx) return fail("Team not found");

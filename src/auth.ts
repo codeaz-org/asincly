@@ -4,6 +4,7 @@ import Google from "next-auth/providers/google";
 import Resend from "next-auth/providers/resend";
 import { db } from "@/db";
 import { accounts, sessions, users, verificationTokens } from "@/db/schema";
+import { rateLimit } from "@/lib/rate-limit";
 
 const providers = [];
 
@@ -14,9 +15,15 @@ if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
 providers.push(
   Resend({
     from: process.env.EMAIL_FROM ?? "Asincly <no-reply@asincly.local>",
-    // ponytail: in dev without RESEND_API_KEY, log the magic link to the
-    // server console instead of sending mail. Never do this in prod.
     async sendVerificationRequest({ identifier, url, provider }) {
+      // Every magic link passes through here, including requests made to
+      // /api/auth directly rather than through the sign-in form. Caps mail
+      // to one inbox (and the Resend bill).
+      if (!(await rateLimit(`magic-link:${identifier.toLowerCase()}`, 5, 60 * 60 * 1000)).allowed) {
+        throw new Error("Too many sign-in links requested for this address");
+      }
+      // ponytail: in dev without RESEND_API_KEY, log the magic link to the
+      // server console instead of sending mail. Never do this in prod.
       if (process.env.NODE_ENV !== "production" && !process.env.RESEND_API_KEY) {
         console.log(`\n[auth] magic link for ${identifier}:\n${url}\n`);
         return;

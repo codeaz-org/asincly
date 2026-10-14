@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   if (!slackConfigured() || !process.env.AUTH_SECRET) {
     return NextResponse.json({ ok: false, error: "Slack isn't configured on this server" }, { status: 404 });
   }
-  if (!rateLimit(`slack-install:${userId}`, 10, 60 * 60 * 1000).allowed) {
+  if (!(await rateLimit(`slack-install:${userId}`, 10, 60 * 60 * 1000)).allowed) {
     return NextResponse.json({ ok: false, error: "rate limited" }, { status: 429 });
   }
 

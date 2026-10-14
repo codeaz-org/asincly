@@ -1,12 +1,12 @@
-// In-memory sliding-window rate limiter. Per-process — good enough for a
-// single Vercel region or single container. Swap to Redis (Upstash) when
-// scaling out. Fires from server actions and route handlers.
+import { lt, sql } from "drizzle-orm";
+import { db } from "@/db";
+import { rateLimits } from "@/db/schema";
 
-type Bucket = { hits: number[]; };
-const buckets = new Map<string, Bucket>();
-
-// Housekeeping: cap the map so a burst of unique keys doesn't leak memory.
-const MAX_KEYS = 50_000;
+// Fixed-window limiter in Postgres, so every instance shares one budget per
+// key (a per-process map gave each serverless function its own). One upsert
+// per hit; the daily cron drops windows that have ended.
+// ponytail: a fixed window lets up to 2× `limit` through across a window
+// boundary; move to a sliding log if that ever matters for a key.
 
 export type RateLimitResult = {
   allowed: boolean;
@@ -14,31 +14,29 @@ export type RateLimitResult = {
   resetMs: number;
 };
 
-export function rateLimit(
-  key: string,
-  limit: number,
-  windowMs: number,
-): RateLimitResult {
+export async function rateLimit(key: string, limit: number, windowMs: number): Promise<RateLimitResult> {
   const now = Date.now();
-  const cutoff = now - windowMs;
+  const start = new Date(Math.floor(now / windowMs) * windowMs);
+  const [row] = await db
+    .insert(rateLimits)
+    .values({ key, windowStart: start, hits: 1 })
+    .onConflictDoUpdate({
+      target: [rateLimits.key, rateLimits.windowStart],
+      set: { hits: sql`${rateLimits.hits} + 1` },
+    })
+    .returning({ hits: rateLimits.hits });
+  return {
+    allowed: row.hits <= limit,
+    remaining: Math.max(0, limit - row.hits),
+    resetMs: start.getTime() + windowMs - now,
+  };
+}
 
-  if (buckets.size > MAX_KEYS) {
-    // Evict any key older than the window.
-    for (const [k, b] of buckets) {
-      const last = b.hits[b.hits.length - 1] ?? 0;
-      if (last < cutoff) buckets.delete(k);
-      if (buckets.size <= MAX_KEYS / 2) break;
-    }
-  }
-
-  const b = buckets.get(key) ?? { hits: [] };
-  b.hits = b.hits.filter((t) => t >= cutoff);
-  const allowed = b.hits.length < limit;
-  if (allowed) b.hits.push(now);
-  buckets.set(key, b);
-
-  const remaining = Math.max(0, limit - b.hits.length);
-  const oldest = b.hits[0] ?? now;
-  const resetMs = oldest + windowMs - now;
-  return { allowed, remaining, resetMs };
+// The longest window any caller uses is a day; anything older is dead.
+export async function purgeRateLimits(now: Date): Promise<number> {
+  const gone = await db
+    .delete(rateLimits)
+    .where(lt(rateLimits.windowStart, new Date(now.getTime() - 2 * 24 * 3600 * 1000)))
+    .returning({ key: rateLimits.key });
+  return gone.length;
 }

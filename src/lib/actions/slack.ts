@@ -36,7 +36,7 @@ export async function getSlackChannels(input: unknown): Promise<Result<{ channel
   const user = await requireUser();
   const ctx = await adminContext(parsed.data.teamId, user.id);
   if (!ctx) return { ok: false, error: "Admins only" };
-  if (!rateLimit(`slack-channels:${user.id}`, 30, 60_000).allowed) return { ok: false, error: "Slow down" };
+  if (!(await rateLimit(`slack-channels:${user.id}`, 30, 60_000)).allowed) return { ok: false, error: "Slow down" };
   const [install] = await db.select().from(slackInstalls).where(eq(slackInstalls.teamId, parsed.data.teamId));
   if (!install) return { ok: false, error: "Slack isn't connected" };
   try {
@@ -100,7 +100,7 @@ export async function sendSlackTest(input: unknown): Promise<Result> {
   const user = await requireUser();
   const ctx = await adminContext(parsed.data.teamId, user.id);
   if (!ctx) return { ok: false, error: "Admins only" };
-  if (!rateLimit(`slack-test:${user.id}`, 5, 60 * 60_000).allowed) return { ok: false, error: "Slow down" };
+  if (!(await rateLimit(`slack-test:${user.id}`, 5, 60 * 60_000)).allowed) return { ok: false, error: "Slow down" };
   const [install] = await db.select().from(slackInstalls).where(eq(slackInstalls.teamId, parsed.data.teamId));
   if (!install?.channelId) return { ok: false, error: "Pick a channel first" };
   try {
