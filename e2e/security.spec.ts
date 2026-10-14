@@ -77,3 +77,17 @@ test("a magic link is refused for a domain whose org requires SSO", async ({ pag
 
   await setOrgSecurity(org.id, { requireSso: false, ssoDomain: null });
 });
+
+test("a sixth magic link for one inbox within an hour is refused with a clear message", async ({ page, request }) => {
+  const email = `ml-limit-${Date.now()}@e2e.local`;
+  for (let i = 0; i < 5; i++) {
+    const { csrfToken } = await (await request.get("/api/auth/csrf")).json();
+    const r = await request.post("/api/auth/signin/resend", { form: { email, csrfToken, callbackUrl: "/" }, maxRedirects: 0 });
+    expect(r.headers()["location"]).not.toContain("error");
+  }
+
+  await page.goto("/sign-in");
+  await page.getByPlaceholder("you@company.com").fill(email);
+  await page.getByRole("button", { name: /email me a link/i }).click();
+  await expect(page.getByText(/too many sign-in attempts/i)).toBeVisible();
+});

@@ -26,12 +26,6 @@ providers.push(
     // A sign-in link is a bearer credential sitting in an inbox: one hour.
     maxAge: 60 * 60,
     async sendVerificationRequest({ identifier, url }) {
-      // Every magic link passes through here, including requests made to
-      // /api/auth directly rather than through the sign-in form. Caps mail
-      // to one inbox (and the Resend bill).
-      if (!(await rateLimit(`magic-link:${identifier.toLowerCase()}`, 5, 60 * 60 * 1000)).allowed) {
-        throw new Error("Too many sign-in links requested for this address");
-      }
       // ponytail: in dev without RESEND_API_KEY, log the magic link to the
       // server console instead of sending mail. Never do this in prod.
       if (process.env.NODE_ENV !== "production" && !process.env.RESEND_API_KEY) {
@@ -64,8 +58,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // Auth.js's unstyled default error screen.
   pages: { signIn: "/sign-in", error: "/sign-in", verifyRequest: "/sign-in?sent=1" },
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account, profile, email: emailFlow }) {
       const email = (user.email ?? "").toLowerCase();
+      // Every magic-link request passes through here before the link is sent,
+      // including requests made to /api/auth directly rather than through the
+      // sign-in form. Caps mail to one inbox (and the Resend bill). Checked
+      // here, not in sendVerificationRequest: Auth.js reports anything thrown
+      // there as "Configuration".
+      if (emailFlow?.verificationRequest && !(await rateLimit(`magic-link:${email}`, 5, 60 * 60 * 1000)).allowed) {
+        return "/sign-in?error=RateLimited";
+      }
       if (account?.provider === "google" && profile?.email_verified !== true) return "/sign-in?error=AccessDenied";
       // An org that requires SSO for its domain: no magic links, and only a
       // Google account managed by that domain's Workspace.
