@@ -31,7 +31,7 @@ const daily = () =>
   GET(new Request("http://localhost/api/cron/daily", { headers: { authorization: `Bearer ${SECRET}` } }));
 
 async function put(key: string) {
-  const res = await fetch(await presignedPutUrl(key, "video/webm"), {
+  const res = await fetch(await presignedPutUrl(key, "video/webm", 1), {
     method: "PUT",
     headers: { "content-type": "video/webm" },
     body: "x",

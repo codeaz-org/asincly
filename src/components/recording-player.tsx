@@ -1,23 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Play } from "lucide-react";
 import { MarkLoader } from "@/components/brand/loader";
+import { getPlaybackUrl } from "@/lib/actions/recording";
 import type { FeedRecording } from "@/lib/queries";
 
 // Poster that swaps into a playing <video> on tap. Summaries are the default
-// view; video is always opt-in.
+// view; video is always opt-in, and its signed URL is fetched only then.
 export function RecordingPlayer({ rec, className = "" }: { rec: FeedRecording; className?: string }) {
-  const [playing, setPlaying] = useState(false);
+  const [src, setSrc] = useState<string | null>(null);
+  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
+  const video = useRef<HTMLVideoElement>(null);
+  const resumeAt = useRef(0);
 
-  if (playing) {
+  async function load() {
+    setState("loading");
+    const res = await getPlaybackUrl(rec.id);
+    if (!res.ok) return setState("error");
+    setSrc(res.url);
+    setState("idle");
+  }
+
+  if (src) {
     return (
       <video
+        ref={video}
         controls
         autoPlay
         playsInline
-        src={rec.playbackUrl}
+        src={src}
         poster={rec.posterUrl ?? undefined}
+        onLoadedMetadata={() => {
+          if (video.current && resumeAt.current) video.current.currentTime = resumeAt.current;
+        }}
+        // The URL expired mid-watch (a seek after the window): get a new one
+        // and carry on from the same spot.
+        onError={() => {
+          resumeAt.current = video.current?.currentTime ?? 0;
+          void load();
+        }}
         className={`w-full aspect-video rounded-xl bg-black border border-line ${className}`}
       />
     );
@@ -30,7 +52,8 @@ export function RecordingPlayer({ rec, className = "" }: { rec: FeedRecording; c
   return (
     <button
       type="button"
-      onClick={() => setPlaying(true)}
+      onClick={() => void load()}
+      disabled={state === "loading"}
       aria-label={`Play video note${duration ? `, ${duration}` : ""}`}
       className={`group relative flex items-center gap-3 w-full sm:w-auto sm:min-w-64 rounded-xl border border-line bg-ink/[0.03] p-1.5 pr-4 text-left hover:border-line-strong hover:bg-ink/[0.05] transition ${className}`}
     >
@@ -50,7 +73,11 @@ export function RecordingPlayer({ rec, className = "" }: { rec: FeedRecording; c
       <span className="min-w-0">
         <span className="block text-sm text-ink">Video note</span>
         <span className="block text-xs text-soft">
-          {rec.status !== "ready" && rec.status !== "failed" ? (
+          {state === "error" ? (
+            "couldn't load the video"
+          ) : state === "loading" ? (
+            <MarkLoader size="xs" label="loading" />
+          ) : rec.status !== "ready" && rec.status !== "failed" ? (
             <MarkLoader size="xs" label="summarizing" />
           ) : rec.status === "failed" ? (
             "couldn't summarize"

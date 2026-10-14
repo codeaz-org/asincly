@@ -26,7 +26,8 @@ export type FeedRecording = {
   mimeType: string;
   durationMs: number | null;
   status: (typeof recordings.$inferSelect)["status"];
-  playbackUrl: string;
+  // The video URL itself is minted on play (getPlaybackUrl); the poster is
+  // loaded right away, so a short-lived URL is enough.
   posterUrl: string | null;
   summary: Summary | null;
 };
@@ -127,7 +128,6 @@ async function loadRecordings(checkInIds: string[]): Promise<Map<string, FeedRec
     .select({
       id: recordings.id,
       checkInId: recordings.checkInId,
-      objectKey: recordings.objectKey,
       posterKey: recordings.posterKey,
       mimeType: recordings.mimeType,
       durationMs: recordings.durationMs,
@@ -140,10 +140,7 @@ async function loadRecordings(checkInIds: string[]): Promise<Map<string, FeedRec
 
   const resolved = await Promise.all(
     rows.map(async (r) => {
-      const [playbackUrl, posterUrl] = await Promise.all([
-        presignedGetUrl(r.objectKey),
-        r.posterKey ? presignedGetUrl(r.posterKey) : Promise.resolve(null),
-      ]);
+      const posterUrl = r.posterKey ? await presignedGetUrl(r.posterKey) : null;
       let summary: Summary | null = null;
       if (r.summaryCipher) {
         try {
@@ -154,7 +151,7 @@ async function loadRecordings(checkInIds: string[]): Promise<Map<string, FeedRec
       }
       return {
         checkInId: r.checkInId,
-        rec: { id: r.id, mimeType: r.mimeType, durationMs: r.durationMs, status: r.status, playbackUrl, posterUrl, summary },
+        rec: { id: r.id, mimeType: r.mimeType, durationMs: r.durationMs, status: r.status, posterUrl, summary },
       };
     }),
   );

@@ -58,7 +58,8 @@ export async function processRecording(recordingId: string, hints: DraftHints = 
     const ai = await getAI();
 
     const audioKey = rec.audioKey ?? rec.objectKey;
-    const audioUrl = await presignedGetUrl(audioKey);
+    // The transcriber fetches it once, right away.
+    const audioUrl = await presignedGetUrl(audioKey, 15 * 60);
     const { text: transcript } = await ai.transcriber.transcribe({
       audioUrl,
       mimeType: rec.audioKey ? audioMime(rec.audioKey) : rec.mimeType,

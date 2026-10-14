@@ -46,7 +46,8 @@ let bucketChecked = false;
 
 // Idempotent — first caller creates the bucket on MinIO if it doesn't exist.
 // ponytail: safe on R2/S3 because CreateBucket errors on existing buckets,
-// which we swallow. For prod, provision the bucket via terraform instead.
+// which we swallow. Creates a private bucket with provider defaults; set
+// encryption at rest on the provider (docs/DEPLOYMENT.md, "Storage privacy").
 export async function ensureBucket(): Promise<void> {
   if (bucketChecked) return;
   const c = client();
@@ -68,9 +69,12 @@ export async function ensureBucket(): Promise<void> {
   bucketChecked = true;
 }
 
+// Content-Length is signed, so the bucket rejects a body of any other size:
+// the size checked in getUploadUrl is the size that lands.
 export async function presignedPutUrl(
   key: string,
   contentType: string,
+  contentLength: number,
   expiresSec = 60 * 10,
 ): Promise<string> {
   await ensureBucket();
@@ -80,14 +84,16 @@ export async function presignedPutUrl(
       Bucket: bucketName(),
       Key: key,
       ContentType: contentType,
+      ContentLength: contentLength,
     }),
-    { expiresIn: expiresSec },
+    { expiresIn: expiresSec, signableHeaders: new Set(["content-type", "content-length"]) },
   );
 }
 
+// Short by default: these end up in rendered pages.
 export async function presignedGetUrl(
   key: string,
-  expiresSec = 60 * 60,
+  expiresSec = 5 * 60,
 ): Promise<string> {
   return getSignedUrl(
     client(),

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { checkIns, members, occurrences, recordings, schedules, users } from "@/db/schema";
+import { checkIns, members, occurrences, recordings, schedules, teams, users } from "@/db/schema";
 import { aiConfigured } from "@/lib/ai";
 import { audit } from "@/lib/audit";
 import { authorCheckIn } from "@/lib/check-in-access";
@@ -18,7 +18,9 @@ import { QUOTA_EXCEEDED, processRecording } from "@/lib/process-recording";
 import { rateLimit } from "@/lib/rate-limit";
 import { requireUser } from "@/lib/session";
 import { deleteRecordingObjects, recordingKeys } from "@/lib/recording-objects";
-import { presignedPutUrl } from "@/lib/s3";
+import { historyCutoff } from "@/lib/billing/plans";
+import { localDate } from "@/lib/time";
+import { presignedGetUrl, presignedPutUrl } from "@/lib/s3";
 
 // Only what the recorder produces: webm (Chrome/Firefox), mp4 (Safari), the
 // audio-only track for transcription and the jpeg poster frame. Anything else
@@ -28,10 +30,13 @@ const MimeType = z
   .max(80)
   .regex(/^((video|audio)\/(webm|mp4)(;\s*codecs="?[\w.,\s]+"?)?|image\/jpeg)$/i, "Unsupported file type");
 
+const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
+
 const PresignSchema = z.object({
   checkInId: z.string().uuid(),
   mimeType: MimeType,
-  sizeBytes: z.number().int().nonnegative().max(500 * 1024 * 1024), // 500 MB ceiling
+  // Signed into the upload URL, so the bucket refuses any other size.
+  sizeBytes: z.number().int().positive().max(MAX_UPLOAD_BYTES),
 });
 
 export type PresignResult =
@@ -61,7 +66,7 @@ export async function getUploadUrl(input: {
     if (!(await authorCheckIn(parsed.checkInId, user.id))) return { ok: false, error: "Not your check-in" };
 
     const objectKey = `check-ins/${parsed.checkInId}/${crypto.randomUUID()}.${extensionFor(parsed.mimeType)}`;
-    const uploadUrl = await presignedPutUrl(objectKey, parsed.mimeType);
+    const uploadUrl = await presignedPutUrl(objectKey, parsed.mimeType, parsed.sizeBytes);
     return { ok: true, uploadUrl, objectKey };
   } catch (e) {
     console.error("[getUploadUrl]", e instanceof Error ? e.message : "unknown error");
@@ -78,7 +83,7 @@ const RegisterSchema = z
     posterKey: z.string().min(1).max(200).nullable().optional(),
     audioKey: z.string().min(1).max(200).nullable().optional(),
     mimeType: MimeType,
-    sizeBytes: z.number().int().nonnegative(),
+    sizeBytes: z.number().int().nonnegative().max(MAX_UPLOAD_BYTES),
     durationMs: z.number().int().nonnegative().nullable(),
     // Previous-plan items the author tapped while talking.
     hints: z.record(z.string().regex(/^[0-9a-f]{8}$/), z.enum(["done", "not_done"])).optional(),
@@ -254,3 +259,34 @@ export async function deleteRecording(recordingId: string) {
   });
   await deleteRecordingObjects([rec.objectKey, rec.posterKey, rec.audioKey].filter((k): k is string => !!k));
 }
+
+export type PlaybackResult = { ok: true; url: string } | { ok: false; error: string };
+
+// A video URL is minted only when someone presses play, for anyone who can
+// see the check-in (members and guests, within the plan's history window).
+// Rendering the feed no longer hands out a URL for every video on the page.
+export async function getPlaybackUrl(recordingId: unknown): Promise<PlaybackResult> {
+  const user = await requireUser();
+  const id = z.string().uuid().safeParse(recordingId);
+  if (!id.success) return { ok: false, error: "Video not found" };
+  if (!(await rateLimit(`playback:${user.id}`, 60, 60_000)).allowed) return { ok: false, error: "Slow down" };
+
+  const [rec] = await db
+    .select({ objectKey: recordings.objectKey, date: occurrences.scheduleDate, orgId: teams.orgId })
+    .from(recordings)
+    .innerJoin(checkIns, eq(checkIns.id, recordings.checkInId))
+    .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
+    .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
+    .innerJoin(teams, eq(teams.id, schedules.teamId))
+    .innerJoin(members, and(eq(members.teamId, teams.id), eq(members.userId, user.id)))
+    .where(eq(recordings.id, id.data));
+  if (!rec) return { ok: false, error: "Video not found" };
+  const cutoff = historyCutoff(await getEntitlements(rec.orgId), localDate(new Date(), user.tz));
+  if (cutoff && rec.date < cutoff) return { ok: false, error: "Video not found" };
+
+  return { ok: true, url: await presignedGetUrl(rec.objectKey, PLAYBACK_URL_SECONDS) };
+}
+
+// Long enough for the browser's range requests through a full-length take;
+// the player asks again if it does expire mid-watch.
+const PLAYBACK_URL_SECONDS = 15 * 60;

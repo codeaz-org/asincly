@@ -243,7 +243,24 @@ this by default. For R2, B2 or AWS S3:
 ]
 ```
 
-Keep the bucket **private**. Asincly only hands out short-lived signed URLs.
+## Storage privacy and encryption
+
+Keep the bucket **private**. Asincly only hands out short-lived signed URLs: a video's URL
+is minted when someone presses play and lasts 15 minutes, poster frames last 5. Uploads are
+signed for one exact size, so the bucket refuses anything larger than what was checked.
+
+Encrypt recordings at rest. Asincly can't set this portably when it creates a bucket, so set
+it on the provider:
+
+| Provider | Private by default | Encryption at rest |
+|---|---|---|
+| Cloudflare R2 | Yes, unless you enable a public bucket URL or custom domain | Always on (AES-256) |
+| Backblaze B2 | Choose **Private** when creating the bucket | Turn on **Default Encryption (SSE-B2)** in the bucket settings |
+| AWS S3 | Yes (Block Public Access on by default) | SSE-S3 is the default for new buckets; use SSE-KMS for your own key |
+| MinIO (Docker) | Yes | Needs a KMS: configure one per the [MinIO encryption docs](https://min.io/docs/minio/linux/operations/server-side-encryption.html), then enable SSE-S3 on the bucket. Otherwise rely on full-disk encryption on the host |
+
+Deleting a recording, a team, an organization or an account removes its objects right away.
+`/api/cron/daily` also removes any object no recording points at, as a backstop.
 
 ---
 
