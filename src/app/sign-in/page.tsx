@@ -60,7 +60,7 @@ export default async function SignInPage({
               Two minutes in your own morning. The team reads it in theirs.
             </p>
           </div>
-          <p className="text-xs text-faint">open source (AGPL-3.0) · self-hostable · encrypted at rest</p>
+          <p className="text-xs text-faint">open source (AGPL-3.0) · self-hostable · transcripts encrypted at rest</p>
         </div>
       </aside>
 

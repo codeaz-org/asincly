@@ -2,7 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 import { db } from "@/db";
-import { members, notifications, occurrences, organizations, schedules, teams, users } from "@/db/schema";
+import { checkIns, members, notifications, occurrences, organizations, schedules, teams, users } from "@/db/schema";
 import { PRESET_RRULES } from "@/lib/time";
 
 // Requires local Postgres up (pnpm db:up) with migrations applied.
@@ -144,4 +144,37 @@ describe("cron tick", () => {
     await tick();
     expect(await occurrenceFor("2026-05-19")).toHaveLength(0);
   });
+
+  it("sends the digest to everyone on the team, guests included, once the window has closed — once", async () => {
+    const [guest] = await db.insert(users).values({ email: `${uniq("guest")}@t.local`, tz: "UTC" }).returning();
+    await db.insert(members).values({ teamId, userId: guest.id, role: "guest" });
+    const [occ] = await occurrenceFor("2026-05-13");
+    await db
+      .insert(checkIns)
+      .values({ occurrenceId: occ.id, userId, localDate: "2026-05-13", status: "submitted", submittedAt: new Date("2026-05-13T09:10:00Z") })
+      .onConflictDoUpdate({
+        target: [checkIns.occurrenceId, checkIns.userId],
+        set: { status: "submitted", submittedAt: new Date("2026-05-13T09:10:00Z") },
+      });
+
+    const digestsFor = (who: string) =>
+      db
+        .select({ id: notifications.id })
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.userId, who),
+            eq(notifications.type, "digest_ready"),
+            sql`${notifications.data}->>'occurrenceId' = ${occ.id}`,
+          ),
+        );
+
+    at("2026-05-14T09:00:00Z"); // the 13th's 08:00–18:00 window has closed
+    await tick();
+    await tick();
+    expect(await digestsFor(userId)).toHaveLength(1);
+    expect(await digestsFor(guest.id)).toHaveLength(1);
+    await db.delete(users).where(eq(users.id, guest.id));
+    // Two full ticks over every schedule in the local database.
+  }, 30_000);
 });
