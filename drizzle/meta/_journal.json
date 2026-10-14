@@ -176,6 +176,13 @@
       "when": 1791961098525,
       "tag": "0024_rls_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791961449701,
+      "tag": "0025_rls_writes",
+      "breakpoints": true
     }
   ]
 }

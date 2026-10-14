@@ -1,9 +1,9 @@
 "use server";
 
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { db } from "@/db";
+import { withUser, type Q } from "@/db/with-user";
 import { checkIns, members, occurrences, recordings, schedules } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { carryOver } from "@/lib/carry-over";
@@ -23,77 +23,82 @@ import { VideoSkipSchema } from "@/lib/validation/social";
 // about into the feed and make the digest chase absent check-ins.
 export async function getOrCreateTodayContext(teamId: string, scheduleId?: string) {
   const user = await requireUser();
+  return withUser(user.id, async (tx) => {
+    const [membership] = await tx
+      .select({ id: members.id, role: members.role })
+      .from(members)
+      .where(and(eq(members.teamId, teamId), eq(members.userId, user.id)));
+    if (!membership) throw new Error("Not a member of this team");
+    if (membership.role === "guest") throw new Error("Guests read along but don't check in");
 
-  // Membership check
-  const [membership] = await db
-    .select({ id: members.id, role: members.role })
-    .from(members)
-    .where(and(eq(members.teamId, teamId), eq(members.userId, user.id)));
-  if (!membership) throw new Error("Not a member of this team");
-  if (membership.role === "guest") throw new Error("Guests read along but don't check in");
+    const active = await tx
+      .select()
+      .from(schedules)
+      .where(and(eq(schedules.teamId, teamId), eq(schedules.active, true)));
+    const primary = (scheduleId && active.find((s) => s.id === scheduleId)) || active[0];
+    if (!primary) throw new Error("No active schedule for this team");
 
-  const active = await db
-    .select()
-    .from(schedules)
-    .where(and(eq(schedules.teamId, teamId), eq(schedules.active, true)));
-  const primary =
-    (scheduleId && active.find((s) => s.id === scheduleId)) || active[0];
-  if (!primary) throw new Error("No active schedule for this team");
+    const now = new Date();
+    const today = localDate(now, user.tz);
 
-  const now = new Date();
-  const today = localDate(now, user.tz);
+    if (!occursOn(primary.rrule, today)) {
+      return {
+        offDay: true as const,
+        scheduleId: primary.id,
+        localDate: today,
+        nextDate: nextOccurrenceDate(primary.rrule, now, user.tz),
+      };
+    }
 
-  if (!occursOn(primary.rrule, today)) {
-    return {
-      offDay: true as const,
-      scheduleId: primary.id,
-      localDate: today,
-      nextDate: nextOccurrenceDate(primary.rrule, now, user.tz),
-    };
-  }
+    // Occurrence for (scheduleId, today): insert, or read the one a teammate
+    // (or the cron) already made.
+    const [inserted] = await tx
+      .insert(occurrences)
+      .values({ scheduleId: primary.id, scheduleDate: today })
+      .onConflictDoNothing({ target: [occurrences.scheduleId, occurrences.scheduleDate] })
+      .returning();
+    const occ =
+      inserted ??
+      (
+        await tx
+          .select()
+          .from(occurrences)
+          .where(and(eq(occurrences.scheduleId, primary.id), eq(occurrences.scheduleDate, today)))
+      )[0];
 
-  // Upsert occurrence for (scheduleId, today).
-  const [occ] = await db
-    .insert(occurrences)
-    .values({ scheduleId: primary.id, scheduleDate: today })
-    .onConflictDoUpdate({
-      target: [occurrences.scheduleId, occurrences.scheduleDate],
-      set: { scheduleId: sql`${occurrences.scheduleId}` }, // no-op just to force return
-    })
-    .returning();
+    // Get or create the caller's draft check-in for this occurrence.
+    const [existing] = await tx
+      .select()
+      .from(checkIns)
+      .where(and(eq(checkIns.occurrenceId, occ.id), eq(checkIns.userId, user.id)));
 
-  // Get or create the caller's draft check-in for this occurrence.
-  const [existing] = await db
-    .select()
-    .from(checkIns)
-    .where(and(eq(checkIns.occurrenceId, occ.id), eq(checkIns.userId, user.id)));
+    let ci = existing;
+    if (!ci) {
+      // Fresh draft: carry unchecked items forward from the caller's most
+      // recent submitted check-in on this team.
+      const seed = await computeCarryOverSeed(tx, user.id, teamId, occ.id);
+      ci = (
+        await tx
+          .insert(checkIns)
+          .values({
+            occurrenceId: occ.id,
+            userId: user.id,
+            localDate: today,
+            yesterday: seed.yesterday,
+            today: seed.today,
+          })
+          .returning()
+      )[0];
+    }
 
-  let ci = existing;
-  if (!ci) {
-    // Fresh draft: carry unchecked items forward from the caller's most
-    // recent submitted check-in on this team.
-    const seed = await computeCarryOverSeed(user.id, teamId, occ.id);
-    ci = (
-      await db
-        .insert(checkIns)
-        .values({
-          occurrenceId: occ.id,
-          userId: user.id,
-          localDate: today,
-          yesterday: seed.yesterday,
-          today: seed.today,
-        })
-        .returning()
-    )[0];
-  }
-
-  return { offDay: false as const, occurrenceId: occ.id, checkIn: ci, scheduleId: primary.id, localDate: today };
+    return { offDay: false as const, occurrenceId: occ.id, checkIn: ci, scheduleId: primary.id, localDate: today };
+  });
 }
 
-async function computeCarryOverSeed(userId: string, teamId: string, notOccId: string) {
+async function computeCarryOverSeed(q: Q, userId: string, teamId: string, notOccId: string) {
   // Find the caller's most recent submitted check-in in this team,
   // excluding the current occurrence.
-  const [prev] = await db
+  const [prev] = await q
     .select({ today: checkIns.today })
     .from(checkIns)
     .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
@@ -131,7 +136,7 @@ export async function saveCheckInDraft(input: unknown) {
   if (parsed.today !== undefined) patch.today = parsed.today;
   if (parsed.blockers !== undefined) patch.blockers = parsed.blockers;
 
-  await db.update(checkIns).set(patch).where(eq(checkIns.id, parsed.checkInId));
+  await withUser(user.id, (tx) => tx.update(checkIns).set(patch).where(eq(checkIns.id, parsed.checkInId)));
   return { savedAt: new Date().toISOString() };
 }
 
@@ -164,11 +169,13 @@ export async function submitCheckIn(input: unknown): Promise<SubmitResult> {
     const ci = ctx.ci;
 
     // Mandatory video: a recording, or a stated reason for skipping it.
-    const [recording] = await db
-      .select({ id: recordings.id })
-      .from(recordings)
-      .where(eq(recordings.checkInId, checkInId))
-      .limit(1);
+    const [recording] = await withUser(user.id, (tx) =>
+      tx
+        .select({ id: recordings.id })
+        .from(recordings)
+        .where(eq(recordings.checkInId, checkInId))
+        .limit(1),
+    );
     if (ctx.requireVideo && !recording && !videoSkip && !ci.videoSkipReason) {
       return { ok: false, error: "Your team asks for a video. Record one, or tell them why you can't today." };
     }
@@ -178,19 +185,21 @@ export async function submitCheckIn(input: unknown): Promise<SubmitResult> {
     const newMentions = firstSend
       ? null
       : [...mentionIds(yesterday, today, blockers)].filter((id) => !mentionIds(ci.yesterday, ci.today, ci.blockers).has(id));
-    await db
-      .update(checkIns)
-      .set({
-        yesterday,
-        today,
-        blockers,
-        ...(skip ? { videoSkipReason: skip.reason, videoSkipNote: skip.note } : {}),
-        status: "submitted",
-        // Keep the original send time on edits so the feed order is stable.
-        submittedAt: ci.submittedAt ?? new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(checkIns.id, checkInId));
+    await withUser(user.id, (tx) =>
+      tx
+        .update(checkIns)
+        .set({
+          yesterday,
+          today,
+          blockers,
+          ...(skip ? { videoSkipReason: skip.reason, videoSkipNote: skip.note } : {}),
+          status: "submitted",
+          // Keep the original send time on edits so the feed order is stable.
+          submittedAt: ci.submittedAt ?? new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(checkIns.id, checkInId)),
+    );
 
     await audit({
       orgId: ctx.orgId,
@@ -233,10 +242,12 @@ export async function reopenCheckIn(checkInId: string) {
   const id = z.string().uuid().parse(checkInId);
   const ctx = await authorCheckIn(id, user.id);
   if (!ctx) throw new Error("Not your check-in");
-  await db
-    .update(checkIns)
-    .set({ status: "draft", submittedAt: null, updatedAt: new Date() })
-    .where(eq(checkIns.id, id));
+  await withUser(user.id, (tx) =>
+    tx
+      .update(checkIns)
+      .set({ status: "draft", submittedAt: null, updatedAt: new Date() })
+      .where(eq(checkIns.id, id)),
+  );
   await audit({
     orgId: ctx.orgId,
     actorUserId: user.id,

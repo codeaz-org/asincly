@@ -8,7 +8,7 @@ import { RulesCard } from "@/components/settings/rules-card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, Pill, SectionTitle } from "@/components/ui/card";
 import { FieldLabel, Input } from "@/components/ui/field";
-import { db } from "@/db";
+import { withUser } from "@/db/with-user";
 import { schedules, teams } from "@/db/schema";
 import { updateSchedule } from "@/lib/actions/schedule";
 import {
@@ -35,13 +35,17 @@ const PRESETS = [
 
 export default async function TeamSettingsPage({ params }: { params: Promise<{ orgSlug: string; teamSlug: string }> }) {
   const { orgSlug, teamSlug } = await params;
-  const { team } = await getTeamPageContext(orgSlug, teamSlug);
+  const { user, team } = await getTeamPageContext(orgSlug, teamSlug);
   if (team.role !== "owner" && team.role !== "admin") notFound();
   const isOwner = team.role === "owner";
 
-  const [[t], teamSchedules, plan] = await Promise.all([
-    db.select().from(teams).where(eq(teams.id, team.teamId)),
-    db.select().from(schedules).where(eq(schedules.teamId, team.teamId)),
+  const [[[t], teamSchedules], plan] = await Promise.all([
+    withUser(user.id, (tx) =>
+      Promise.all([
+        tx.select().from(teams).where(eq(teams.id, team.teamId)),
+        tx.select().from(schedules).where(eq(schedules.teamId, team.teamId)),
+      ]),
+    ),
     getTeamPlan(orgSlug, teamSlug),
   ]);
   const billingHref = plan.plan === "unlimited" ? null : `${teamPath(orgSlug, teamSlug)}/settings/billing`;

@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
-import { db } from "@/db";
+import { withUser } from "@/db/with-user";
 import { checkIns, members, occurrences, recordings, schedules, teams, users } from "@/db/schema";
 import { aiConfigured } from "@/lib/ai";
 import { audit } from "@/lib/audit";
@@ -119,22 +119,30 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
     // One video note per check-in: a new recording replaces the old one,
     // and the old take's objects go with it.
     const replacedKeys = await recordingKeys(eq(recordings.checkInId, parsed.checkInId));
-    await db.delete(recordings).where(eq(recordings.checkInId, parsed.checkInId));
+    const rec = await withUser(user.id, async (tx) => {
+      await tx.delete(recordings).where(eq(recordings.checkInId, parsed.checkInId));
+      const [row] = await tx
+        .insert(recordings)
+        .values({
+          checkInId: parsed.checkInId,
+          userId: user.id,
+          objectKey: parsed.objectKey,
+          posterKey: parsed.posterKey ?? null,
+          audioKey: parsed.audioKey ?? null,
+          mimeType: parsed.mimeType,
+          sizeBytes: parsed.sizeBytes,
+          durationMs: parsed.durationMs,
+        })
+        .returning();
+      // A recording is the video for a "require video" team, so an earlier
+      // skip reason no longer applies.
+      await tx
+        .update(checkIns)
+        .set({ videoSkipReason: null, videoSkipNote: null })
+        .where(eq(checkIns.id, parsed.checkInId));
+      return row;
+    });
     await deleteRecordingObjects(replacedKeys);
-
-    const [rec] = await db
-      .insert(recordings)
-      .values({
-        checkInId: parsed.checkInId,
-        userId: user.id,
-        objectKey: parsed.objectKey,
-        posterKey: parsed.posterKey ?? null,
-        audioKey: parsed.audioKey ?? null,
-        mimeType: parsed.mimeType,
-        sizeBytes: parsed.sizeBytes,
-        durationMs: parsed.durationMs,
-      })
-      .returning();
     await audit({
       orgId: ctx.orgId,
       actorUserId: user.id,
@@ -143,13 +151,6 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
       resourceId: rec.id,
       meta: { checkInId: parsed.checkInId, replaced: replacedKeys.length > 0 },
     });
-
-    // A recording is the video for a "require video" team, so an earlier
-    // skip reason no longer applies.
-    await db
-      .update(checkIns)
-      .set({ videoSkipReason: null, videoSkipNote: null })
-      .where(eq(checkIns.id, parsed.checkInId));
 
     // Transcribe + draft after the response; the client polls getRecordingDraft.
     after(async () => {
@@ -191,15 +192,17 @@ export async function getRecordingDraft(input: unknown): Promise<DraftStatus> {
   const parsed = DraftRequestSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid request" };
 
-  const [rec] = await db
-    .select({
-      status: recordings.status,
-      draftCipher: recordings.draftCipher,
-      checkInId: recordings.checkInId,
-      processingError: recordings.processingError,
-    })
-    .from(recordings)
-    .where(and(eq(recordings.id, parsed.data.recordingId), eq(recordings.userId, user.id)));
+  const [rec] = await withUser(user.id, (tx) =>
+    tx
+      .select({
+        status: recordings.status,
+        draftCipher: recordings.draftCipher,
+        checkInId: recordings.checkInId,
+        processingError: recordings.processingError,
+      })
+      .from(recordings)
+      .where(and(eq(recordings.id, parsed.data.recordingId), eq(recordings.userId, user.id))),
+  );
   if (!rec) return { ok: false, error: "Recording not found" };
 
   if (rec.status === "failed") {
@@ -222,14 +225,16 @@ export async function getRecordingDraft(input: unknown): Promise<DraftStatus> {
   const draft = CheckInDraftSchema.safeParse(stored.draft);
   if (!draft.success) return { ok: true, status: "failed", aiConfigured: true };
 
-  const roster = await db
-    .select({ userId: users.id, name: users.name, email: users.email })
-    .from(checkIns)
-    .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
-    .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
-    .innerJoin(members, eq(members.teamId, schedules.teamId))
-    .innerJoin(users, eq(users.id, members.userId))
-    .where(eq(checkIns.id, rec.checkInId));
+  const roster = await withUser(user.id, (tx) =>
+    tx
+      .select({ userId: users.id, name: users.name, email: users.email })
+      .from(checkIns)
+      .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
+      .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
+      .innerJoin(members, eq(members.teamId, schedules.teamId))
+      .innerJoin(users, eq(users.id, members.userId))
+      .where(eq(checkIns.id, rec.checkInId)),
+  );
 
   const composed = composeDraft(
     { previous: stored.previous ?? [], typed: parsed.data.typed, hints: stored.hints },
@@ -242,14 +247,13 @@ export async function getRecordingDraft(input: unknown): Promise<DraftStatus> {
 export async function deleteRecording(recordingId: string) {
   const user = await requireUser();
   const id = z.string().uuid().parse(recordingId);
-  const [rec] = await db
-    .select()
-    .from(recordings)
-    .where(and(eq(recordings.id, id), eq(recordings.userId, user.id)));
+  const [rec] = await withUser(user.id, (tx) =>
+    tx.select().from(recordings).where(and(eq(recordings.id, id), eq(recordings.userId, user.id))),
+  );
   if (!rec) throw new Error("Recording not found");
   const ctx = await authorCheckIn(rec.checkInId, user.id);
   if (!ctx) throw new Error("Recording not found");
-  await db.delete(recordings).where(eq(recordings.id, id));
+  await withUser(user.id, (tx) => tx.delete(recordings).where(eq(recordings.id, id)));
   await audit({
     orgId: ctx.orgId,
     actorUserId: user.id,
@@ -271,15 +275,17 @@ export async function getPlaybackUrl(recordingId: unknown): Promise<PlaybackResu
   if (!id.success) return { ok: false, error: "Video not found" };
   if (!(await rateLimit(`playback:${user.id}`, 60, 60_000)).allowed) return { ok: false, error: "Slow down" };
 
-  const [rec] = await db
-    .select({ objectKey: recordings.objectKey, date: occurrences.scheduleDate, orgId: teams.orgId })
-    .from(recordings)
-    .innerJoin(checkIns, eq(checkIns.id, recordings.checkInId))
-    .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
-    .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
-    .innerJoin(teams, eq(teams.id, schedules.teamId))
-    .innerJoin(members, and(eq(members.teamId, teams.id), eq(members.userId, user.id)))
-    .where(eq(recordings.id, id.data));
+  const [rec] = await withUser(user.id, (tx) =>
+    tx
+      .select({ objectKey: recordings.objectKey, date: occurrences.scheduleDate, orgId: teams.orgId })
+      .from(recordings)
+      .innerJoin(checkIns, eq(checkIns.id, recordings.checkInId))
+      .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
+      .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
+      .innerJoin(teams, eq(teams.id, schedules.teamId))
+      .innerJoin(members, and(eq(members.teamId, teams.id), eq(members.userId, user.id)))
+      .where(eq(recordings.id, id.data)),
+  );
   if (!rec) return { ok: false, error: "Video not found" };
   const cutoff = historyCutoff(await getEntitlements(rec.orgId), localDate(new Date(), user.tz));
   if (cutoff && rec.date < cutoff) return { ok: false, error: "Video not found" };

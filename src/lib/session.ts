@@ -30,20 +30,20 @@ export async function requireUser(): Promise<SessionUser> {
 export async function getMemberships(userId: string) {
   return withUser(userId, (tx) =>
     tx
-    .select({
-      memberId: members.id,
-      role: members.role,
-      teamId: teams.id,
-      teamName: teams.name,
-      teamSlug: teams.slug,
-      orgId: organizations.id,
-      orgName: organizations.name,
-      orgSlug: organizations.slug,
-    })
-    .from(members)
-    .innerJoin(teams, eq(teams.id, members.teamId))
-    .innerJoin(organizations, eq(organizations.id, teams.orgId))
-    .where(eq(members.userId, userId)),
+      .select({
+        memberId: members.id,
+        role: members.role,
+        teamId: teams.id,
+        teamName: teams.name,
+        teamSlug: teams.slug,
+        orgId: organizations.id,
+        orgName: organizations.name,
+        orgSlug: organizations.slug,
+      })
+      .from(members)
+      .innerJoin(teams, eq(teams.id, members.teamId))
+      .innerJoin(organizations, eq(organizations.id, teams.orgId))
+      .where(eq(members.userId, userId)),
   );
 }
 
@@ -52,26 +52,26 @@ export async function getMemberships(userId: string) {
 export async function getTeamBySlug(userId: string, teamSlug: string, orgSlug?: string) {
   const rows = await withUser(userId, (tx) =>
     tx
-    .select({
-      teamId: teams.id,
-      teamName: teams.name,
-      teamSlug: teams.slug,
-      requireVideo: teams.requireVideo,
-      orgId: organizations.id,
-      orgName: organizations.name,
-      orgOwnerUserId: organizations.ownerUserId,
-      role: members.role,
-    })
-    .from(members)
-    .innerJoin(teams, eq(teams.id, members.teamId))
-    .innerJoin(organizations, eq(organizations.id, teams.orgId))
-    .where(
-      and(
-        eq(members.userId, userId),
-        eq(teams.slug, teamSlug),
-        orgSlug ? eq(organizations.slug, orgSlug) : undefined,
+      .select({
+        teamId: teams.id,
+        teamName: teams.name,
+        teamSlug: teams.slug,
+        requireVideo: teams.requireVideo,
+        orgId: organizations.id,
+        orgName: organizations.name,
+        orgOwnerUserId: organizations.ownerUserId,
+        role: members.role,
+      })
+      .from(members)
+      .innerJoin(teams, eq(teams.id, members.teamId))
+      .innerJoin(organizations, eq(organizations.id, teams.orgId))
+      .where(
+        and(
+          eq(members.userId, userId),
+          eq(teams.slug, teamSlug),
+          orgSlug ? eq(organizations.slug, orgSlug) : undefined,
+        ),
       ),
-    ),
   );
   const row = rows[0];
   if (!row) return null;

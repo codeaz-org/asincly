@@ -6,7 +6,7 @@ import { PlanGate } from "@/components/billing/plan-gate";
 import { SlackSettings } from "@/components/settings/slack-card";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, SectionTitle } from "@/components/ui/card";
-import { db } from "@/db";
+import { withUser } from "@/db/with-user";
 import { slackInstalls } from "@/db/schema";
 import { teamPath } from "@/lib/paths";
 import { slackConfigured } from "@/lib/slack/api";
@@ -29,12 +29,13 @@ export default async function IntegrationsPage({
 }) {
   const { orgSlug, teamSlug } = await params;
   const { slack } = await searchParams;
-  const { team } = await getTeamPageContext(orgSlug, teamSlug);
+  const { user, team } = await getTeamPageContext(orgSlug, teamSlug);
   if (team.role !== "owner" && team.role !== "admin") notFound();
 
   const [plan, [install]] = await Promise.all([
     getTeamPlan(orgSlug, teamSlug),
-    db.select().from(slackInstalls).where(eq(slackInstalls.teamId, team.teamId)),
+    // RLS: team owners and admins only.
+    withUser(user.id, (tx) => tx.select().from(slackInstalls).where(eq(slackInstalls.teamId, team.teamId))),
   ]);
   const root = teamPath(orgSlug, teamSlug);
   const notice = slack ? NOTICE[slack] : undefined;

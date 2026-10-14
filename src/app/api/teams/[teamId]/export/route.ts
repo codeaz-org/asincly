@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
+import { withUser } from "@/db/with-user";
 import { members, teams } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { buildExportBundle } from "@/lib/export";
@@ -35,7 +36,7 @@ export async function GET(
     return NextResponse.json({ error: "Too many exports — try again later." }, { status: 429 });
   }
 
-  const bundle = await buildExportBundle(teamId);
+  const bundle = await withUser(user.id, (tx) => buildExportBundle(tx, teamId));
   await audit({
     orgId: row.orgId,
     actorUserId: user.id,
