@@ -4,9 +4,10 @@ import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
-import { checkIns, members, occurrences, organizations, recordings, schedules, teams } from "@/db/schema";
+import { checkIns, members, occurrences, recordings, schedules } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { carryOver } from "@/lib/carry-over";
+import { authorCheckIn } from "@/lib/check-in-access";
 import { extractMentions } from "@/lib/mentions";
 import { fireMentionEvents } from "@/lib/notifications";
 import { requireUser } from "@/lib/session";
@@ -122,12 +123,8 @@ export async function saveCheckInDraft(input: unknown) {
   const user = await requireUser();
   const parsed = DraftSchema.parse(input);
 
-  const [ci] = await db.select().from(checkIns).where(eq(checkIns.id, parsed.checkInId));
-  if (!ci || ci.userId !== user.id) throw new Error("Not your check-in");
-  if (ci.status === "submitted") {
-    // Editing a submitted one is fine — plan supports that pattern in later
-    // phases. For now we allow updates on submitted rows too.
-  }
+  // Editing a submitted check-in is allowed too.
+  if (!(await authorCheckIn(parsed.checkInId, user.id))) throw new Error("Not your check-in");
 
   const patch: Partial<typeof checkIns.$inferInsert> = { updatedAt: new Date() };
   if (parsed.yesterday !== undefined) patch.yesterday = parsed.yesterday;
@@ -162,23 +159,9 @@ export async function submitCheckIn(input: unknown): Promise<SubmitResult> {
     if (!parsed.success) return { ok: false, error: "That check-in is too long to send." };
     const { checkInId, yesterday, today, blockers, videoSkip } = parsed.data;
 
-    const [ci] = await db.select().from(checkIns).where(eq(checkIns.id, checkInId));
-    if (!ci || ci.userId !== user.id) return { ok: false, error: "Not your check-in" };
-
-    const [ctx] = await db
-      .select({
-        orgSlug: organizations.slug,
-        teamSlug: teams.slug,
-        orgId: organizations.id,
-        requireVideo: teams.requireVideo,
-      })
-      .from(checkIns)
-      .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
-      .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
-      .innerJoin(teams, eq(teams.id, schedules.teamId))
-      .innerJoin(organizations, eq(organizations.id, teams.orgId))
-      .where(eq(checkIns.id, checkInId));
-    if (!ctx) return { ok: false, error: "Team not found" };
+    const ctx = await authorCheckIn(checkInId, user.id);
+    if (!ctx) return { ok: false, error: "Not your check-in" };
+    const ci = ctx.ci;
 
     // Mandatory video: a recording, or a stated reason for skipping it.
     const [recording] = await db
@@ -244,12 +227,21 @@ export async function submitCheckIn(input: unknown): Promise<SubmitResult> {
   }
 }
 
+// Takes a sent check-in back to draft, out of teammates' feeds.
 export async function reopenCheckIn(checkInId: string) {
   const user = await requireUser();
-  const [ci] = await db.select().from(checkIns).where(eq(checkIns.id, checkInId));
-  if (!ci || ci.userId !== user.id) throw new Error("Not your check-in");
+  const id = z.string().uuid().parse(checkInId);
+  const ctx = await authorCheckIn(id, user.id);
+  if (!ctx) throw new Error("Not your check-in");
   await db
     .update(checkIns)
     .set({ status: "draft", submittedAt: null, updatedAt: new Date() })
-    .where(eq(checkIns.id, checkInId));
+    .where(eq(checkIns.id, id));
+  await audit({
+    orgId: ctx.orgId,
+    actorUserId: user.id,
+    action: "check_in.reopen",
+    resourceType: "check_in",
+    resourceId: id,
+  });
 }

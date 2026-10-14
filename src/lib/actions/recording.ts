@@ -5,8 +5,10 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { checkIns, members, occurrences, organizations, recordings, schedules, teams, users } from "@/db/schema";
+import { checkIns, members, occurrences, recordings, schedules, users } from "@/db/schema";
 import { aiConfigured } from "@/lib/ai";
+import { audit } from "@/lib/audit";
+import { authorCheckIn } from "@/lib/check-in-access";
 import { CheckInDraftSchema, type PrevItem } from "@/lib/ai/draft-schema";
 import { decrypt } from "@/lib/crypto";
 import { displayName } from "@/lib/display";
@@ -56,9 +58,7 @@ export async function getUploadUrl(input: {
     if (!result.success) return { ok: false, error: "Unsupported recording format" };
     const parsed = result.data;
 
-    // The caller must own the check-in.
-    const [ci] = await db.select().from(checkIns).where(eq(checkIns.id, parsed.checkInId));
-    if (!ci || ci.userId !== user.id) return { ok: false, error: "Not your check-in" };
+    if (!(await authorCheckIn(parsed.checkInId, user.id))) return { ok: false, error: "Not your check-in" };
 
     const objectKey = `check-ins/${parsed.checkInId}/${crypto.randomUUID()}.${extensionFor(parsed.mimeType)}`;
     const uploadUrl = await presignedPutUrl(objectKey, parsed.mimeType);
@@ -101,17 +101,7 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
       return { ok: false, error: "That's a lot of recordings — try again later." };
     }
 
-    const [ci] = await db.select().from(checkIns).where(eq(checkIns.id, parsed.checkInId));
-    if (!ci || ci.userId !== user.id) return { ok: false, error: "Not your check-in" };
-
-    const [ctx] = await db
-      .select({ orgId: teams.orgId, orgSlug: organizations.slug, teamSlug: teams.slug })
-      .from(checkIns)
-      .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
-      .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
-      .innerJoin(teams, eq(teams.id, schedules.teamId))
-      .innerJoin(organizations, eq(organizations.id, teams.orgId))
-      .where(eq(checkIns.id, parsed.checkInId));
+    const ctx = await authorCheckIn(parsed.checkInId, user.id);
     if (!ctx) return { ok: false, error: "Not your check-in" };
 
     // The recorder stops at the plan's limit; allow a little slack for
@@ -140,6 +130,14 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
         durationMs: parsed.durationMs,
       })
       .returning();
+    await audit({
+      orgId: ctx.orgId,
+      actorUserId: user.id,
+      action: "recording.create",
+      resourceType: "recording",
+      resourceId: rec.id,
+      meta: { checkInId: parsed.checkInId, replaced: replacedKeys.length > 0 },
+    });
 
     // A recording is the video for a "require video" team, so an earlier
     // skip reason no longer applies.
@@ -239,6 +237,15 @@ export async function deleteRecording(recordingId: string) {
     .from(recordings)
     .where(and(eq(recordings.id, id), eq(recordings.userId, user.id)));
   if (!rec) throw new Error("Recording not found");
+  const ctx = await authorCheckIn(rec.checkInId, user.id);
+  if (!ctx) throw new Error("Recording not found");
   await db.delete(recordings).where(eq(recordings.id, id));
+  await audit({
+    orgId: ctx.orgId,
+    actorUserId: user.id,
+    action: "recording.delete",
+    resourceType: "recording",
+    resourceId: id,
+  });
   await deleteRecordingObjects([rec.objectKey, rec.posterKey, rec.audioKey].filter((k): k is string => !!k));
 }

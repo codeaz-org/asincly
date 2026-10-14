@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
 import { members, organizations, schedules, teams } from "@/db/schema";
+import { audit } from "@/lib/audit";
 import { requireUser } from "@/lib/session";
 import { PRESET_RRULES, type PresetKey } from "@/lib/time";
 import { customRrule, hhmm, withWindowLength } from "@/lib/validation/schedule";
@@ -45,6 +46,7 @@ export async function updateSchedule(formData: FormData) {
     .select({
       teamSlug: teams.slug,
       orgSlug: organizations.slug,
+      orgId: organizations.id,
       role: members.role,
     })
     .from(schedules)
@@ -70,6 +72,14 @@ export async function updateSchedule(formData: FormData) {
       })
       .where(eq(schedules.id, parsed.scheduleId)),
   );
+  await audit({
+    orgId: row.orgId,
+    actorUserId: user.id,
+    action: "schedule.update",
+    resourceType: "schedule",
+    resourceId: parsed.scheduleId,
+    meta: { rrule, windowOpen: parsed.windowOpen, windowClose: parsed.windowClose, active: parsed.active === "on" },
+  });
 
   redirect(`/${row.orgSlug}/${row.teamSlug}`);
 }
