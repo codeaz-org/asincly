@@ -63,6 +63,10 @@ export async function GET(req: Request) {
 
   // One schedule failing (a bad rule, a member with a broken tz) must not
   // stop reminders for every other tenant.
+  // ponytail: one request walks every active schedule in turn (a few indexed
+  // queries each). Fine for hundreds of teams inside maxDuration; past that,
+  // shard by schedule id across several cron calls or move to a job table
+  // drained with FOR UPDATE SKIP LOCKED (docs/RELEASE.md 2.1).
   for (const s of scheds) {
     try {
       await tickSchedule(s, now, stats, appUrl);
