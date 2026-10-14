@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { MIN_WINDOW_MINUTES, windowMinutes } from "@/lib/time";
-import { hhmm, withWindowLength } from "./schedule";
+import { MIN_WINDOW_MINUTES, PRESET_RRULES, windowMinutes } from "@/lib/time";
+import { customRrule, hhmm, withWindowLength } from "./schedule";
 
 const Schema = withWindowLength(z.object({ windowOpen: hhmm, windowClose: hhmm }));
 const check = (windowOpen: string, windowClose: string) =>
@@ -64,5 +64,26 @@ describe("window length validation", () => {
   it("still rejects a malformed time", () => {
     expect(check("9:00", "11:00")).toBe(false);
     expect(check("09:00", "notatime")).toBe(false);
+  });
+});
+
+describe("customRrule", () => {
+  const ok = (r: string) => customRrule.safeParse(r).success;
+
+  it("accepts the presets and other day-level rules", () => {
+    for (const r of Object.values(PRESET_RRULES)) expect(ok(r)).toBe(true);
+    expect(ok("FREQ=WEEKLY;INTERVAL=2;BYDAY=TU")).toBe(true);
+    expect(ok("FREQ=MONTHLY;BYDAY=1MO")).toBe(true);
+  });
+
+  it("rejects garbage, which used to throw inside the tick for every tenant", () => {
+    expect(ok("not a rule")).toBe(false);
+    expect(ok("FREQ=FORTNIGHTLY")).toBe(false);
+  });
+
+  it("rejects sub-daily rules, which iterate for minutes from the anchor", () => {
+    expect(ok("FREQ=SECONDLY")).toBe(false);
+    expect(ok("FREQ=HOURLY")).toBe(false);
+    expect(ok("FREQ=DAILY;BYHOUR=9")).toBe(false);
   });
 });

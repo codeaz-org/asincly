@@ -112,7 +112,10 @@ export function OnboardingWizard({ email, tz }: { email: string; tz: string }) {
                   ))}
                 </div>
                 {preset === "custom" && (
-                  <Input name="customRrule" aria-label="Custom RRULE" required placeholder="FREQ=WEEKLY;BYDAY=TU,TH" className="font-mono text-sm" />
+                  <>
+                    <Input name="customRrule" aria-label="Custom RRULE" required placeholder="FREQ=WEEKLY;BYDAY=TU,TH" className="font-mono text-sm" />
+                    <p className="text-xs text-soft">Daily, weekly, monthly or yearly; no times of day (the window sets those).</p>
+                  </>
                 )}
                 <div className="grid grid-cols-2 gap-3">
                   <label className="space-y-2">

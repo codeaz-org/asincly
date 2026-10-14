@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { members, organizations, schedules, teams } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { PRESET_RRULES, type PresetKey } from "@/lib/time";
-import { hhmm, withWindowLength } from "@/lib/validation/schedule";
+import { customRrule, hhmm, withWindowLength } from "@/lib/validation/schedule";
 import { withUser } from "@/db/with-user";
 
 const UpdateSchema = withWindowLength(
@@ -15,7 +15,7 @@ const UpdateSchema = withWindowLength(
     scheduleId: z.string().uuid(),
     name: z.string().min(1).max(80),
     preset: z.enum(["daily", "weekdays", "mwf", "weekly", "custom"]),
-    customRrule: z.string().max(500).optional(),
+    customRrule: customRrule.optional(),
     windowOpen: hhmm,
     windowClose: hhmm,
     active: z.enum(["on", "off"]).default("on"),

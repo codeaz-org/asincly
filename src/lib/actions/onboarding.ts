@@ -12,7 +12,7 @@ import { syncSeats } from "@/lib/billing/seats";
 import { isBillingEnabled } from "@/lib/billing/plans";
 import { rateLimit } from "@/lib/rate-limit";
 import { PRESET_RRULES, isValidTimeZone, type PresetKey } from "@/lib/time";
-import { hhmm, withWindowLength } from "@/lib/validation/schedule";
+import { customRrule, hhmm, withWindowLength } from "@/lib/validation/schedule";
 import { requireUser } from "@/lib/session";
 import { slugify } from "@/lib/slug";
 import { InviteRoleSchema } from "@/lib/validation/billing";
@@ -25,7 +25,7 @@ const CompleteSchema = withWindowLength(
     teamName: z.string().min(1).max(80),
     scheduleName: z.string().min(1).max(80),
     preset: z.enum(["daily", "weekdays", "mwf", "weekly", "custom"]),
-    customRrule: z.string().max(500).optional(),
+    customRrule: customRrule.optional(),
     windowOpen: hhmm,
     windowClose: hhmm,
   }),

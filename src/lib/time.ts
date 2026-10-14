@@ -112,6 +112,21 @@ export function occursOn(rrule: string, dateISO: string): boolean {
   return rule.after(at, true)?.toISOString().slice(0, 10) === dateISO;
 }
 
+// Rules the scheduler can evaluate cheaply: day-or-coarser frequency and no
+// time-of-day parts. A sub-daily rule iterates from ANCHOR in seconds or
+// minutes, so one saved rule could stall the tick for every tenant.
+export function isSupportedRrule(rrule: string): boolean {
+  try {
+    const opts = RRule.parseString(rrule);
+    if (opts.freq == null || opts.freq > RRule.DAILY) return false;
+    if (opts.byhour != null || opts.byminute != null || opts.bysecond != null) return false;
+    occursOn(rrule, "2026-01-01");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ────────── Convenience presets ──────────
 
 export const PRESET_RRULES = {

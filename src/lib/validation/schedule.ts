@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MIN_WINDOW_MINUTES, windowMinutes } from "@/lib/time";
+import { isSupportedRrule, MIN_WINDOW_MINUTES, windowMinutes } from "@/lib/time";
 
 // Boundary schema shared by onboarding and the schedule editor, so both
 // enforce the same window rules.
@@ -7,6 +7,12 @@ import { MIN_WINDOW_MINUTES, windowMinutes } from "@/lib/time";
 const HHMM = /^\d{2}:\d{2}$/;
 
 export const hhmm = z.string().regex(HHMM, "Use HH:MM");
+
+export const customRrule = z
+  .string()
+  .trim()
+  .max(500)
+  .refine(isSupportedRrule, "Use a daily, weekly, monthly or yearly RRULE without times of day.");
 
 // A window shorter than the reminder tick can close before any tick observes
 // it open, so nobody is reminded. Applied as a refinement on the object

@@ -164,6 +164,7 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
                           placeholder="Custom RRULE, e.g. FREQ=WEEKLY;BYDAY=TU,TH"
                           className="h-11 font-mono text-sm"
                         />
+                        <p className="text-xs text-soft">Daily, weekly, monthly or yearly; no times of day (the window sets those).</p>
                       </fieldset>
                       <div className="grid grid-cols-2 gap-3">
                         <label className="space-y-2">

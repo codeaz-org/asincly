@@ -118,6 +118,27 @@ describe("cron tick", () => {
     expect(await occurrenceFor("2026-05-13")).toHaveLength(1);
   });
 
+  it("one tenant's broken rule doesn't stop the tick for everyone else", async () => {
+    // Written straight to the table: validation now refuses it, but rows
+    // saved before that, or edited by hand, still reach the tick.
+    const [other] = await db.insert(teams).values({ orgId, name: "Broken", slug: "broken" }).returning();
+    await db.insert(members).values({ teamId: other.id, userId, role: "owner" });
+    await db.insert(schedules).values({
+      teamId: other.id,
+      name: "Broken",
+      rrule: "not a rule",
+      windowOpenLocal: "08:00",
+      windowCloseLocal: "18:00",
+      active: true,
+    });
+
+    at("2026-05-15T09:00:00Z"); // Friday
+    const res = await tick();
+    expect(res.status).toBe(200);
+    expect((await res.json()).failedSchedules).toBeGreaterThan(0);
+    expect((await windowOpensFor("2026-05-15")).length).toBeGreaterThan(0);
+  });
+
   it("still skips the following Tuesday", async () => {
     at("2026-05-19T09:00:00Z"); // Tuesday
     await tick();
