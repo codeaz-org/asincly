@@ -73,7 +73,7 @@
     "playwright-core": "^1.64.0",
     "shadcn": "^4.21.4",
     "tailwindcss": "^4",
-    "typescript": "^5",
+    "typescript": "^6.0.3",
     "vite": "^6.4.3",
     "vitest": "^3.2.7"
   },
