@@ -16,8 +16,11 @@ const eslintConfig = defineConfig([
       "src/db/**",
       // Auth.js adapter: writes users and tokens before any session exists.
       "src/auth.ts",
-      // Resolves the session's user row on every request.
+      // Resolves the session's user row on every request; sessions and TOTP
+      // secrets are tables the app role can't read.
       "src/lib/session.ts",
+      "src/lib/actions/account-security.ts",
+      "src/app/account/security/page.tsx",
       // Scheduled jobs: act for no single viewer.
       "src/app/api/cron/**",
       "src/lib/process-recording.ts",

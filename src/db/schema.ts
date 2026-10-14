@@ -55,6 +55,28 @@ export const sessions = pgTable("session", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   expires: timestamp("expires", { mode: "date", withTimezone: true }).notNull(),
+  // Shown on /account/sessions. Filled on the first request a session makes
+  // (Auth.js creates the row without request context).
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  userAgent: text("user_agent"),
+  // Coarse: the network, not the host (a.b.c.0 / first four IPv6 groups).
+  ipPrefix: text("ip_prefix"),
+  // When this session passed a TOTP check. Null means it hasn't.
+  mfaAt: timestamp("mfa_at", { withTimezone: true }),
+});
+
+// TOTP second factor. The secret is encrypted with DATA_ENCRYPTION_KEY;
+// backup codes are stored as SHA-256 hashes and removed when used.
+export const userTotp = pgTable("user_totp", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  secretCipher: text("secret_cipher").notNull(),
+  backupCodeHashes: jsonb("backup_code_hashes").$type<string[]>().notNull().default([]),
+  // Null until the first code is verified; an unconfirmed row isn't enforced.
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const verificationTokens = pgTable(
@@ -81,6 +103,12 @@ export const organizations = pgTable("organization", {
   // ownership is per team and anyone allowed to create a team gets it, so it
   // must never stand in for this.
   ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  // Owners and admins must use a second factor to work in this org.
+  require2faForAdmins: boolean("require_2fa_for_admins").notNull().default(false),
+  // People with an email at ssoDomain sign in with Google or Microsoft only
+  // (no magic links) when requireSso is on.
+  ssoDomain: text("sso_domain"),
+  requireSso: boolean("require_sso").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -136,3 +136,14 @@ export async function setOrgBilling(
     .values({ orgId, ...state })
     .onConflictDoUpdate({ target: orgBilling.orgId, set: { ...state, updatedAt: new Date() } });
 }
+
+// Another signed-in browser for an existing user (a fresh Auth.js session).
+export async function newSessionFor(userId: string) {
+  const sessionToken = crypto.randomUUID();
+  await testDb.insert(sessions).values({ sessionToken, userId, expires: new Date(Date.now() + 30 * 24 * 3600 * 1000) });
+  return sessionToken;
+}
+
+export async function setOrgSecurity(orgId: string, values: { require2faForAdmins?: boolean; requireSso?: boolean; ssoDomain?: string | null }) {
+  await testDb.update(organizations).set(values).where(eq(organizations.id, orgId));
+}

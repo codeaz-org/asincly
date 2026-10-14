@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { OrgSecurity } from "@/components/settings/org-security";
 import { TransferOrg } from "@/components/settings/transfer-org";
 import { eq } from "drizzle-orm";
 import { ChevronDown, Download } from "lucide-react";
@@ -10,7 +11,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, Pill, SectionTitle } from "@/components/ui/card";
 import { FieldLabel, Input } from "@/components/ui/field";
 import { withUser } from "@/db/with-user";
-import { schedules, teams } from "@/db/schema";
+import { organizations, schedules, teams } from "@/db/schema";
 import { updateSchedule } from "@/lib/actions/schedule";
 import {
   createSchedule,
@@ -40,11 +41,19 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
   if (team.role !== "owner" && team.role !== "admin") notFound();
   const isOwner = team.role === "owner";
 
-  const [[[t], teamSchedules], plan] = await Promise.all([
+  const [[[t], teamSchedules, [org]], plan] = await Promise.all([
     withUser(user.id, (tx) =>
       Promise.all([
         tx.select().from(teams).where(eq(teams.id, team.teamId)),
         tx.select().from(schedules).where(eq(schedules.teamId, team.teamId)),
+        tx
+          .select({
+            require2fa: organizations.require2faForAdmins,
+            requireSso: organizations.requireSso,
+            ssoDomain: organizations.ssoDomain,
+          })
+          .from(organizations)
+          .where(eq(organizations.id, team.orgId)),
       ]),
     ),
     getTeamPlan(orgSlug, teamSlug),
@@ -244,6 +253,15 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
         </form>
         )}
       </section>
+
+      {team.isOrgOwner && (
+        <section className="space-y-3">
+          <SectionTitle>Sign-in security · {team.orgName}</SectionTitle>
+          <Card className="divide-y divide-line">
+            <OrgSecurity orgId={team.orgId} require2fa={org.require2fa} requireSso={org.requireSso} ssoDomain={org.ssoDomain} />
+          </Card>
+        </section>
+      )}
 
       {isOwner && (
       <section className="space-y-3">

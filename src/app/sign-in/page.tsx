@@ -15,6 +15,7 @@ const ERRORS: Record<string, string> = {
   Verification: "That link expired or was already used. Send a new one.",
   Configuration: "Sign-in is misconfigured on this server.",
   AccessDenied: "That account can't sign in here.",
+  SsoRequired: "Your organization signs in with Google. Use \"Continue with Google\" with your work account.",
   RateLimited: "Too many sign-in attempts. Wait a few minutes and try again.",
   EmailSignin: "Couldn't send a link to that address right now. Wait a few minutes and try again.",
 };

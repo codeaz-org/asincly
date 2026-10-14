@@ -183,6 +183,13 @@
       "when": 1791961449701,
       "tag": "0025_rls_writes",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791961847844,
+      "tag": "0026_sessions_2fa_sso",
+      "breakpoints": true
     }
   ]
 }

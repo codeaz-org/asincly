@@ -105,7 +105,13 @@ export default async function AccountPage() {
           <section className="space-y-3">
             <SectionTitle>Session</SectionTitle>
             <Card className="p-4 sm:p-5 flex flex-wrap items-center gap-3">
-              <p className="flex-1 text-sm text-soft">Sign out of this browser. Other devices stay signed in.</p>
+              <p className="flex-1 text-sm text-soft">
+                Sign out of this browser. Two-factor and your other devices are under{" "}
+                <Link href="/account/security" className="text-amber hover:underline underline-offset-4">
+                  Security
+                </Link>
+                .
+              </p>
               <form
                 action={async () => {
                   "use server";
