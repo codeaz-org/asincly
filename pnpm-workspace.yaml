@@ -5,3 +5,6 @@ allowBuilds:
 
 overrides:
   vite: ^6
+  # Pinned below the patched releases by next/postcss; drop once next ships them.
+  sharp: ">=0.35.5 <0.36"
+  source-map-js: ">=1.2.2 <2"
