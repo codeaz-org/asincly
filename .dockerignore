@@ -10,3 +10,4 @@ scrollcraft
 docs/screenshots
 *.log
 backups
+.env
