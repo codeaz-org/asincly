@@ -57,7 +57,7 @@ B, C or D.
 
 | Piece | Free allowance (Sept 2026) | Notes |
 |---|---|---|
-| [Vercel Hobby](https://vercel.com/docs/plans/hobby) | 1M function invocations, 4 CPU-hrs, 300s max duration | Cron jobs limited to **once per day**: keep the daily cron in `vercel.json`, remove the `*/5` tick entry, and run the tick from an external pinger |
+| [Vercel Hobby](https://vercel.com/docs/plans/hobby) | 1M function invocations, 4 CPU-hrs, 300s max duration | Cron jobs limited to **once per day**: the bundled `vercel.json` has only the daily job; run the tick from an external pinger |
 | [Neon Free](https://neon.com/pricing) | 0.5 GB storage, 100 CU-hours/project, scale-to-zero after 5 min | No credit card. First request after idle is slower (cold start) |
 | [Backblaze B2](https://www.backblaze.com/cloud-storage/pricing) | 10 GB storage, free egress up to 3× stored data | No credit card. Alternative: [Cloudflare R2](https://developers.cloudflare.com/r2/pricing/) with 10 GB and free egress, but R2 needs a payment method on file |
 | [Resend Free](https://resend.com/pricing) | 3,000 emails/month, 100/day | Verify a sending domain |
@@ -110,8 +110,8 @@ A recording is about 10–20 MB per 5 minutes at 720p. The default 90-day retent
 5. **Scheduler.** Two endpoints, both called with `Authorization: Bearer $CRON_SECRET`:
    `/api/cron/tick` every 5 minutes (reminders, digests) and `/api/cron/daily` once a day
    (recording retention, storage cleanup, old notifications and sessions).
-   - On Hobby, delete the `/api/cron/tick` line from `vercel.json` (Hobby crons run at most
-     daily and the deploy is refused otherwise); Vercel then runs the daily job for you.
+   - The bundled `vercel.json` schedules only the daily job, because Hobby crons run at
+     most daily and refuse the deploy otherwise. Vercel runs it for you.
    - Call the tick from [cron-job.org](https://cron-job.org) with the header above, or use
      the bundled GitHub workflow: in the fork, **Settings → Secrets and variables →
      Actions**, add the secrets `APP_URL` and `CRON_SECRET` and the variable
@@ -172,8 +172,9 @@ Resend + Groq.**
 
 Same steps as path A, with two differences:
 - Vercel Pro's terms allow business use.
-- Vercel Cron runs both jobs from the bundled `vercel.json` (tick every 5 minutes, daily
-  at 03:00 UTC); no external scheduler needed. Vercel sends
+- Vercel Cron can run both jobs: add
+  `{ "path": "/api/cron/tick", "schedule": "*/5 * * * *" }` to `crons` in `vercel.json`
+  (the bundled file has only the daily job, for Hobby); no external scheduler needed. Vercel sends
   `Authorization: Bearer $CRON_SECRET` automatically when `CRON_SECRET` is set in the
   project.
 
