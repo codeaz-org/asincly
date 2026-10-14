@@ -86,7 +86,9 @@ function at(iso: string) {
   vi.setSystemTime(new Date(iso));
 }
 
-describe("cron tick", () => {
+// Each tick scans every schedule in the local database, which grows with
+// e2e runs; the default 5s isn't enough once it has a few hundred orgs.
+describe("cron tick", { timeout: 30_000 }, () => {
   it("rejects a request without the secret", async () => {
     const res = await GET(new Request("http://localhost/api/cron/tick"));
     expect(res.status).toBe(401);
@@ -175,6 +177,5 @@ describe("cron tick", () => {
     expect(await digestsFor(userId)).toHaveLength(1);
     expect(await digestsFor(guest.id)).toHaveLength(1);
     await db.delete(users).where(eq(users.id, guest.id));
-    // Two full ticks over every schedule in the local database.
-  }, 30_000);
+  });
 });
