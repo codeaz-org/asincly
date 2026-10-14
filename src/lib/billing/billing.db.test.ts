@@ -57,10 +57,10 @@ function signedRequest(event: Record<string, unknown>) {
   });
 }
 
-function subscriptionEvent(type: string, sub: Stripe.Subscription) {
+function subscriptionEvent(type: string, sub: Stripe.Subscription, created = Math.floor(Date.now() / 1000)) {
   const id = `evt_${Math.random().toString(36).slice(2, 12)}`;
   eventIds.push(id);
-  return { id, object: "event", type, api_version: "2026-08-26.dahlia", data: { object: sub } };
+  return { id, object: "event", type, created, api_version: "2026-08-26.dahlia", data: { object: sub } };
 }
 
 describe("entitlements (DB)", () => {
@@ -119,8 +119,15 @@ describe("stripe webhook", () => {
 
   it("downgrades to Free when the subscription ends", async () => {
     const ended = fakeSubscription({ id: `sub_${orgId}`, customer: `cus_${orgId}`, status: "canceled" });
-    await POST(signedRequest(subscriptionEvent("customer.subscription.deleted", ended)));
+    await POST(signedRequest(subscriptionEvent("customer.subscription.deleted", ended, Math.floor(Date.now() / 1000) + 60)));
     const e = await getEntitlements(orgId);
     expect(e).toMatchObject({ plan: "free", status: "canceled", maxMembers: 3 });
+  });
+
+  it("ignores an older update that Stripe delivers after a newer one", async () => {
+    const stale = fakeSubscription({ id: `sub_${orgId}`, customer: `cus_${orgId}`, status: "active" });
+    await POST(signedRequest(subscriptionEvent("customer.subscription.updated", stale, Math.floor(Date.now() / 1000) - 60)));
+    const e = await getEntitlements(orgId);
+    expect(e).toMatchObject({ plan: "free", status: "canceled" });
   });
 });

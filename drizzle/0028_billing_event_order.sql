@@ -1,0 +1,1 @@
+ALTER TABLE "org_billing" ADD COLUMN "stripe_event_at" timestamp with time zone;

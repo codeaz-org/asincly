@@ -372,6 +372,9 @@ export const orgBilling = pgTable("org_billing", {
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
   cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
   pastDueSince: timestamp("past_due_since", { withTimezone: true }),
+  // Created time of the newest Stripe event applied, so a late, older
+  // subscription event can't overwrite newer state.
+  stripeEventAt: timestamp("stripe_event_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

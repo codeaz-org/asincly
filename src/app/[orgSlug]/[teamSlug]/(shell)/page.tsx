@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FREE_PURGE_GRACE_DAYS } from "@/lib/billing/plans";
 import { withUser } from "@/db/with-user";
 import { AtSign, MessageCircle } from "lucide-react";
 import { cn } from "cn";
@@ -56,7 +57,7 @@ export default async function TodayPage({
         </header>
         <PlanGate
           title={`The Free plan shows the last ${plan.historyDays} days.`}
-          hint="Nothing is deleted. Upgrade to Pro to see your team's full history again."
+          hint={`Written check-ins are kept. Videos older than the Free window are deleted ${FREE_PURGE_GRACE_DAYS} days after leaving Pro. Upgrade to see the full history.`}
           href={`${root}/settings/billing`}
           canUpgrade={team.isOrgOwner}
         />

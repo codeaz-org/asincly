@@ -4,7 +4,7 @@ import { PlanTable } from "@/components/billing/plan-table";
 import { Footer } from "@/components/footer";
 import { Logo } from "@/components/logo";
 import { buttonVariants } from "@/components/ui/button";
-import { TRIAL_DAYS, isBillingEnabled } from "@/lib/billing/plans";
+import { FREE_PURGE_GRACE_DAYS, TRIAL_DAYS, isBillingEnabled } from "@/lib/billing/plans";
 import { SOURCE_URL } from "@/lib/source";
 
 export const metadata = {
@@ -59,7 +59,9 @@ export default function PricingPage() {
             <div className="space-y-1.5">
               <h2 className="text-[15px] font-medium text-ink">What happens after the trial?</h2>
               <p className="text-soft">
-                You move to Free. Nothing is deleted: history older than 14 days is locked until you upgrade.
+                You move to Free. Check-ins older than 14 days are locked until you upgrade. Their videos are kept
+                for {FREE_PURGE_GRACE_DAYS} days, then deleted; written check-ins and summaries are never deleted by
+                the plan change.
               </p>
             </div>
             <div className="space-y-1.5">

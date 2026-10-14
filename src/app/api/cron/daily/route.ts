@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt } from "drizzle-orm";
+import { and, eq, gte, inArray, lt } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import {
@@ -13,7 +13,15 @@ import {
   verificationTokens,
 } from "@/db/schema";
 import { billingState } from "@/lib/billing/entitlements";
-import { effectiveRetentionDays, entitlementsFor, freeSince, isBillingEnabled } from "@/lib/billing/plans";
+import { emailOrgOwner } from "@/lib/billing/owner-email";
+import {
+  effectiveRetentionDays,
+  entitlementsFor,
+  FREE,
+  FREE_PURGE_GRACE_DAYS,
+  freeSince,
+  isBillingEnabled,
+} from "@/lib/billing/plans";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { purgeRateLimits } from "@/lib/rate-limit";
 import { deleteRecordingObjects, sweepOrphanObjects } from "@/lib/recording-objects";
@@ -62,6 +70,7 @@ export async function GET(req: Request) {
   });
 
   await run("purgedRateLimits", () => purgeRateLimits(now));
+  if (isBillingEnabled()) await run("trialEmails", () => emailTrialOwners(now));
 
   const ok = !Object.values(stats).includes("failed");
   return NextResponse.json({ ok, ...stats }, { status: ok ? 200 : 500 });
@@ -105,4 +114,36 @@ async function purgeExpiredRecordings(now: Date): Promise<number> {
     purged += expired.length;
   }
   return purged;
+}
+
+// The trial is ours (no card up front), so Stripe never warns anyone. Once a
+// day: three days before it ends, and the day after it has. Each window is
+// one day wide, so each org gets each email once.
+async function emailTrialOwners(now: Date): Promise<number> {
+  const at = (days: number) => new Date(now.getTime() + days * DAY);
+  const [endingSoon, ended] = await Promise.all([
+    db
+      .select({ orgId: orgBilling.orgId, endsAt: orgBilling.trialEndsAt })
+      .from(orgBilling)
+      .where(and(eq(orgBilling.status, "trialing"), gte(orgBilling.trialEndsAt, at(2)), lt(orgBilling.trialEndsAt, at(3)))),
+    db
+      .select({ orgId: orgBilling.orgId })
+      .from(orgBilling)
+      .where(and(eq(orgBilling.status, "trialing"), gte(orgBilling.trialEndsAt, at(-1)), lt(orgBilling.trialEndsAt, now))),
+  ]);
+  for (const o of endingSoon) {
+    await emailOrgOwner(
+      o.orgId,
+      "Your Pro trial ends in 3 days",
+      `Your Asincly Pro trial ends on ${o.endsAt!.toUTCString().slice(0, 16)}. Add a card to keep Pro; otherwise you move to the Free plan (up to ${FREE.maxMembers} members, recent history). Written check-ins are kept; videos older than the Free window are deleted ${FREE_PURGE_GRACE_DAYS} days after the trial unless you upgrade.`,
+    );
+  }
+  for (const o of ended) {
+    await emailOrgOwner(
+      o.orgId,
+      "Your Pro trial has ended",
+      `You're on the Free plan now. Videos older than the Free history window are kept for ${FREE_PURGE_GRACE_DAYS} days, then deleted; upgrading before then keeps them.`,
+    );
+  }
+  return endingSoon.length + ended.length;
 }
