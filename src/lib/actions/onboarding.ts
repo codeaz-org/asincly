@@ -232,7 +232,7 @@ export async function inviteMembers(
     revalidatePath(`/${caller.orgSlug}/${caller.teamSlug}`);
     return { ok: true, added, alreadyIn, invalid };
   } catch (e) {
-    console.error("[invite] failed", e);
+    console.error("[invite] failed", e instanceof Error ? e.message : "unknown error");
     const msg = e instanceof Error ? e.message : "Something went wrong.";
     return { ok: false, error: msg };
   }

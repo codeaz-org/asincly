@@ -1,5 +1,6 @@
-// Thin Resend wrapper. If RESEND_API_KEY is unset, logs to console instead
-// (dev-friendly, no failed sends).
+// Thin Resend wrapper. If RESEND_API_KEY is unset, the email is skipped: in
+// development it is printed to the console; in production only the fact that
+// it was skipped is logged — bodies carry check-in text and addresses.
 
 type SendArgs = {
   to: string;
@@ -9,7 +10,11 @@ type SendArgs = {
 
 export async function sendEmail(args: SendArgs): Promise<void> {
   if (!process.env.RESEND_API_KEY) {
-    console.log(`[email:noop] to=${args.to} subject="${args.subject}"\n${args.text}`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[email:noop] to=${args.to} subject="${args.subject}"\n${args.text}`);
+    } else {
+      console.warn("[email] not sent: RESEND_API_KEY is unset");
+    }
     return;
   }
   const { Resend } = await import("resend");

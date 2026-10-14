@@ -23,6 +23,13 @@ export async function audit(args: Args): Promise<void> {
       meta: args.meta,
     });
   } catch (e) {
-    console.error("[audit] write failed", { ...args, error: e });
+    // Identifiers only: meta can hold user text (reasons, invitee emails).
+    console.error("[audit] write failed", {
+      orgId: args.orgId,
+      action: args.action,
+      resourceType: args.resourceType,
+      resourceId: args.resourceId ?? null,
+      error: e instanceof Error ? e.message : "unknown error",
+    });
   }
 }

@@ -64,7 +64,7 @@ export async function getUploadUrl(input: {
     const uploadUrl = await presignedPutUrl(objectKey, parsed.mimeType);
     return { ok: true, uploadUrl, objectKey };
   } catch (e) {
-    console.error("[getUploadUrl]", e instanceof Error ? e.message : e);
+    console.error("[getUploadUrl]", e instanceof Error ? e.message : "unknown error");
     return { ok: false, error: "Couldn't prepare the upload" };
   }
 }
@@ -156,7 +156,7 @@ export async function registerRecording(input: unknown): Promise<RegisterResult>
 
     return { ok: true, recordingId: rec.id };
   } catch (e) {
-    console.error("[registerRecording]", e instanceof Error ? e.message : e);
+    console.error("[registerRecording]", e instanceof Error ? e.message : "unknown error");
     return { ok: false, error: "Couldn't attach the video" };
   }
 }

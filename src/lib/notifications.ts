@@ -58,7 +58,8 @@ export async function notify(input: Enqueue): Promise<void> {
       .set({ emailSentAt: new Date() })
       .where(eq(notifications.id, inserted.id));
   } catch (e) {
-    console.error("[notify:email]", e);
+    // Message only: SDK errors can carry the serialized request, email text included.
+    console.error("[notify:email]", e instanceof Error ? e.message : "unknown error");
   }
 }
 
