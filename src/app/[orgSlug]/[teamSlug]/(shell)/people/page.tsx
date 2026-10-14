@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { withUser } from "@/db/with-user";
 import { PlanGate } from "@/components/billing/plan-gate";
 import { AwayControl } from "@/components/people/away-control";
 import { InviteForm } from "@/components/invite-form";
@@ -32,9 +33,10 @@ export default async function PeoplePage({ params }: { params: Promise<{ orgSlug
     getTeamPageContext(orgSlug, teamSlug),
     getViewerToday(orgSlug, teamSlug),
   ]);
-  const [roster, entries, plan, seats, teamCount] = await Promise.all([
-    getTeamRoster(team.teamId),
-    getDayFeed(team.teamId, today.todayISO, user.id),
+  const [[roster, entries], plan, seats, teamCount] = await Promise.all([
+    withUser(user.id, (tx) =>
+      Promise.all([getTeamRoster(tx, team.teamId), getDayFeed(tx, team.teamId, today.todayISO, user.id)]),
+    ),
     getTeamPlan(orgSlug, teamSlug),
     countBillableSeats(team.orgId),
     countTeams(team.orgId),

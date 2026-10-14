@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { withUser } from "@/db/with-user";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
@@ -7,7 +8,6 @@ import { LogoMark } from "@/components/brand/mark";
 import { CheckInFlow } from "@/components/check-in/flow";
 import { buttonVariants } from "@/components/ui/button";
 import { TzDetector } from "@/components/tz-detector";
-import { db } from "@/db";
 import { recordings } from "@/db/schema";
 import { getOrCreateTodayContext } from "@/lib/actions/check-in";
 import { getPreviousContext } from "@/lib/check-in-context";
@@ -37,10 +37,9 @@ export default async function CheckInPage({
   const { user, team } = await getTeamPageContext(orgSlug, teamSlug);
   if (team.role === "guest") redirect(teamPath(orgSlug, teamSlug));
 
-  const [ctx, roster, activeSchedules, plan] = await Promise.all([
+  const [ctx, [roster, activeSchedules], plan] = await Promise.all([
     getOrCreateTodayContext(team.teamId, schedule),
-    getTeamRoster(team.teamId),
-    getActiveSchedules(team.teamId),
+    withUser(user.id, (tx) => Promise.all([getTeamRoster(tx, team.teamId), getActiveSchedules(tx, team.teamId)])),
     getTeamPlan(orgSlug, teamSlug),
   ]);
   // Not a standup day for this schedule — nothing was created, so there is no
@@ -72,13 +71,15 @@ export default async function CheckInPage({
     );
   }
 
-  const [existing, previous] = await Promise.all([
-    db
-      .select({ id: recordings.id, status: recordings.status })
-      .from(recordings)
-      .where(eq(recordings.checkInId, ctx.checkIn.id)),
-    getPreviousContext(team.teamId, user.id, ctx.occurrenceId),
-  ]);
+  const [existing, previous] = await withUser(user.id, (tx) =>
+    Promise.all([
+      tx
+        .select({ id: recordings.id, status: recordings.status })
+        .from(recordings)
+        .where(eq(recordings.checkInId, ctx.checkIn.id)),
+      getPreviousContext(tx, team.teamId, user.id, ctx.occurrenceId),
+    ]),
+  );
   const pending = existing.find((r) => ["uploaded", "processing", "transcribing", "drafting"].includes(r.status));
   const skipReason = VIDEO_SKIP_REASONS.find((r) => r === ctx.checkIn.videoSkipReason);
 

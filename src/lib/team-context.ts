@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { withUser } from "@/db/with-user";
 import { notFound } from "next/navigation";
 import type { MarkState } from "@/components/brand/mark";
 import { getEntitlements } from "@/lib/billing/entitlements";
@@ -20,11 +21,13 @@ export const getViewerToday = cache(async (orgSlug: string, teamSlug: string) =>
   const { user, team } = await getTeamPageContext(orgSlug, teamSlug);
   const now = new Date();
   const todayISO = localDate(now, user.tz);
-  const [schedules, mine, away] = await Promise.all([
-    getActiveSchedules(team.teamId),
-    getMyCheckIn(team.teamId, todayISO, user.id),
-    getAwayPeriods(team.teamId, now),
-  ]);
+  const [schedules, mine, away] = await withUser(user.id, (tx) =>
+    Promise.all([
+      getActiveSchedules(tx, team.teamId),
+      getMyCheckIn(tx, team.teamId, todayISO, user.id),
+      getAwayPeriods(tx, team.teamId, now),
+    ]),
+  );
   const myAway = awayToday(away, user.id, user.tz, now);
   const primary = schedules[0] ?? null;
   // A day the RRULE doesn't cover has no window to be inside, so the viewer's

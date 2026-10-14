@@ -1,5 +1,5 @@
 import { and, desc, eq, gte, inArray, ne } from "drizzle-orm";
-import { db } from "@/db";
+import type { Q } from "@/db/with-user";
 import { blockerActions, checkIns, occurrences, schedules } from "@/db/schema";
 import type { PrevItem } from "@/lib/ai/draft-schema";
 import { blockerItems, itemKey, noteItems } from "@/lib/note-items";
@@ -16,11 +16,12 @@ export type PreviousContext = {
 };
 
 export async function getPreviousContext(
+  q: Q,
   teamId: string,
   userId: string,
   currentOccurrenceId: string,
 ): Promise<PreviousContext> {
-  const recent = await db
+  const recent = await q
     .select({
       checkInId: checkIns.id,
       today: checkIns.today,
@@ -52,7 +53,7 @@ export async function getPreviousContext(
   }));
 
   // Blockers from recent check-ins the author hasn't marked resolved.
-  const resolved = await db
+  const resolved = await q
     .select({ checkInId: blockerActions.checkInId, itemKey: blockerActions.itemKey })
     .from(blockerActions)
     .where(

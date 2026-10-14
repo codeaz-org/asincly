@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { db } from "@/db";
+import { withUser } from "@/db/with-user";
 import { members, organizations, teams, users } from "@/db/schema";
 
 export type SessionUser = {
@@ -27,7 +28,8 @@ export async function requireUser(): Promise<SessionUser> {
 }
 
 export async function getMemberships(userId: string) {
-  return db
+  return withUser(userId, (tx) =>
+    tx
     .select({
       memberId: members.id,
       role: members.role,
@@ -41,13 +43,15 @@ export async function getMemberships(userId: string) {
     .from(members)
     .innerJoin(teams, eq(teams.id, members.teamId))
     .innerJoin(organizations, eq(organizations.id, teams.orgId))
-    .where(eq(members.userId, userId));
+    .where(eq(members.userId, userId)),
+  );
 }
 
 // Team slugs are only unique inside an org, so pass `orgSlug` whenever the
 // URL has one; without it two orgs with a "platform" team would collide.
 export async function getTeamBySlug(userId: string, teamSlug: string, orgSlug?: string) {
-  const rows = await db
+  const rows = await withUser(userId, (tx) =>
+    tx
     .select({
       teamId: teams.id,
       teamName: teams.name,
@@ -67,7 +71,8 @@ export async function getTeamBySlug(userId: string, teamSlug: string, orgSlug?: 
         eq(teams.slug, teamSlug),
         orgSlug ? eq(organizations.slug, orgSlug) : undefined,
       ),
-    );
+    ),
+  );
   const row = rows[0];
   if (!row) return null;
   const { orgOwnerUserId, ...rest } = row;

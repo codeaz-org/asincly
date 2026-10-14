@@ -105,7 +105,7 @@ async function tickSchedule(s: TickSchedule, now: Date, stats: Stats, appUrl: st
   const teamMembers = everyone.filter((m) => m.role !== "guest");
 
   // Away periods for this team (still running somewhere in the world).
-  const away = await getAwayPeriods(s.teamId, now);
+  const away = await getAwayPeriods(db, s.teamId, now);
 
   // ── window_open ──
   for (const m of teamMembers) {

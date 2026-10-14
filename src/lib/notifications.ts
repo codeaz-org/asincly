@@ -1,5 +1,6 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
+import { withUser } from "@/db/with-user";
 import {
   checkIns,
   members,
@@ -147,26 +148,33 @@ export async function fireMentionEvents(checkInId: string, onlyUserIds?: string[
   }
 }
 
+// The viewer's own inbox, read and updated as them (RLS: own rows only).
 export async function listRecentForUser(userId: string, limit = 20) {
-  return db
-    .select()
-    .from(notifications)
-    .where(eq(notifications.userId, userId))
-    .orderBy(desc(notifications.createdAt))
-    .limit(limit);
+  return withUser(userId, (tx) =>
+    tx
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit),
+  );
 }
 
 export async function unreadCount(userId: string) {
-  const rows = await db
-    .select({ id: notifications.id })
-    .from(notifications)
-    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+  const rows = await withUser(userId, (tx) =>
+    tx
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), isNull(notifications.readAt))),
+  );
   return rows.length;
 }
 
 export async function markAllReadForUser(userId: string) {
-  await db
-    .update(notifications)
-    .set({ readAt: new Date() })
-    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+  await withUser(userId, (tx) =>
+    tx
+      .update(notifications)
+      .set({ readAt: new Date() })
+      .where(and(eq(notifications.userId, userId), isNull(notifications.readAt))),
+  );
 }

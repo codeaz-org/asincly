@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { withUser } from "@/db/with-user";
 import { AtSign, MessageCircle } from "lucide-react";
 import { cn } from "cn";
 import { BlockerRow } from "@/components/dashboard/blocker-row";
@@ -68,12 +69,16 @@ export default async function TodayPage({
     );
   }
 
-  const [roster, entries, days, replies] = await Promise.all([
-    getTeamRoster(team.teamId),
-    getDayFeed(team.teamId, dateISO, user.id),
-    listRecentDays(team.teamId, today.todayISO),
-    isToday ? getRepliesToMe(team.teamId, user.id, new Date(today.now.getTime() - 24 * 3600 * 1000)) : Promise.resolve([]),
-  ]);
+  const [roster, entries, days, replies] = await withUser(user.id, (tx) =>
+    Promise.all([
+      getTeamRoster(tx, team.teamId),
+      getDayFeed(tx, team.teamId, dateISO, user.id),
+      listRecentDays(tx, team.teamId, today.todayISO),
+      isToday
+        ? getRepliesToMe(tx, team.teamId, user.id, new Date(today.now.getTime() - 24 * 3600 * 1000))
+        : Promise.resolve([]),
+    ]),
+  );
 
   const names = namesById(roster);
   const isGuest = team.role === "guest";

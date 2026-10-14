@@ -68,7 +68,7 @@ export async function processRecording(recordingId: string, hints: DraftHints = 
 
     await setStatus("drafting");
     const [previous, roster] = await Promise.all([
-      getPreviousContext(ctx.teamId, rec.userId, ctx.checkIn.occurrenceId),
+      getPreviousContext(db, ctx.teamId, rec.userId, ctx.checkIn.occurrenceId),
       db
         .select({ userId: users.id, name: users.name, email: users.email })
         .from(members)

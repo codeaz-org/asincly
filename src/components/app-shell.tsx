@@ -8,7 +8,7 @@ import { BottomNav, DesktopTabs } from "@/components/shell/nav";
 import { TeamSwitcher, UserMenu } from "@/components/shell/menus";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
-import { db } from "@/db";
+import { withUser } from "@/db/with-user";
 import { users } from "@/db/schema";
 import { setName } from "@/lib/actions/onboarding";
 import { displayName } from "@/lib/display";
@@ -37,7 +37,7 @@ export async function AppShell(props: Props) {
     listRecentForUser(props.userId),
     unreadCount(props.userId),
     getMemberships(props.userId),
-    db.select({ name: users.name }).from(users).where(eq(users.id, props.userId)),
+    withUser(props.userId, (tx) => tx.select({ name: users.name }).from(users).where(eq(users.id, props.userId))),
     getTeamPlan(props.orgSlug, props.teamSlug),
   ]);
 

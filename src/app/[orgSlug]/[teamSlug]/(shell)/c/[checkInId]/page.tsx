@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { withUser } from "@/db/with-user";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Comments } from "@/components/check-in/comments";
@@ -22,9 +23,10 @@ export default async function CheckInDetailPage({
   const { orgSlug, teamSlug, checkInId } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(checkInId)) notFound();
   const { user, team } = await getTeamPageContext(orgSlug, teamSlug);
-  const [detail, roster, plan] = await Promise.all([
-    getCheckInDetail(team.teamId, checkInId, user.id),
-    getTeamRoster(team.teamId),
+  const [[detail, roster], plan] = await Promise.all([
+    withUser(user.id, (tx) =>
+      Promise.all([getCheckInDetail(tx, team.teamId, checkInId, user.id), getTeamRoster(tx, team.teamId)]),
+    ),
     getTeamPlan(orgSlug, teamSlug),
   ]);
   if (!detail) notFound();

@@ -169,6 +169,13 @@
       "when": 1791960718072,
       "tag": "0023_rate_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791961098525,
+      "tag": "0024_rls_hardening",
+      "breakpoints": true
     }
   ]
 }

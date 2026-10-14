@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
-import { db } from "@/db";
+import type { Q } from "@/db/with-user";
 import {
   blockerActions,
   checkInComments,
@@ -18,8 +18,10 @@ import { presignedGetUrl } from "@/lib/s3";
 import { localDate } from "@/lib/time";
 import type { Summary } from "@/lib/ai";
 
-// Read models for the app screens. Callers must already have checked that
-// the viewer is a member of `teamId` (getTeamBySlug does this).
+// Read models for the app screens. Every function takes the connection to
+// read with: pages pass the viewer's withUser() transaction, so Postgres RLS
+// limits each query to the viewer's teams even if a membership check above
+// it is ever missed. Only server jobs with no viewer (the cron) pass `db`.
 
 export type FeedRecording = {
   id: string;
@@ -66,8 +68,8 @@ export type Schedule = {
   windowCloseLocal: string;
 };
 
-export async function getActiveSchedules(teamId: string): Promise<Schedule[]> {
-  return db
+export async function getActiveSchedules(q: Q, teamId: string): Promise<Schedule[]> {
+  return q
     .select({
       id: schedules.id,
       name: schedules.name,
@@ -80,8 +82,8 @@ export async function getActiveSchedules(teamId: string): Promise<Schedule[]> {
     .orderBy(asc(schedules.createdAt));
 }
 
-export async function getTeamRoster(teamId: string) {
-  return db
+export async function getTeamRoster(q: Q, teamId: string) {
+  return q
     .select({
       memberId: members.id,
       role: members.role,
@@ -102,10 +104,10 @@ export type Roster = Awaited<ReturnType<typeof getTeamRoster>>;
 export type DaySummary = { date: string; count: number };
 
 // Recent schedule dates that have at least one submitted check-in, newest first.
-export async function listRecentDays(teamId: string, todayISO: string, days = 14): Promise<DaySummary[]> {
+export async function listRecentDays(q: Q, teamId: string, todayISO: string, days = 14): Promise<DaySummary[]> {
   const cutoff = new Date(`${todayISO}T00:00:00Z`);
   cutoff.setUTCDate(cutoff.getUTCDate() - days);
-  const rows = await db
+  const rows = await q
     .select({
       date: occurrences.scheduleDate,
       count: sql<number>`count(${checkIns.id})::int`,
@@ -121,10 +123,10 @@ export async function listRecentDays(teamId: string, todayISO: string, days = 14
 
 // ────────── One day's feed ──────────
 
-async function loadRecordings(checkInIds: string[]): Promise<Map<string, FeedRecording[]>> {
+async function loadRecordings(q: Q, checkInIds: string[]): Promise<Map<string, FeedRecording[]>> {
   const out = new Map<string, FeedRecording[]>();
   if (checkInIds.length === 0) return out;
-  const rows = await db
+  const rows = await q
     .select({
       id: recordings.id,
       checkInId: recordings.checkInId,
@@ -165,11 +167,11 @@ async function loadRecordings(checkInIds: string[]): Promise<Map<string, FeedRec
 
 // Reactions grouped by emoji in first-used order. Keys are check-in ids for
 // reactions on a check-in, and comment ids for reactions on a reply.
-async function loadReactions(checkInIds: string[], viewerId: string) {
+async function loadReactions(q: Q, checkInIds: string[], viewerId: string) {
   const onCheckIns = new Map<string, ReactionSummary[]>();
   const onComments = new Map<string, ReactionSummary[]>();
   if (checkInIds.length === 0) return { onCheckIns, onComments };
-  const rows = await db
+  const rows = await q
     .select({
       checkInId: checkInReactions.checkInId,
       commentId: checkInReactions.commentId,
@@ -199,10 +201,10 @@ async function loadReactions(checkInIds: string[], viewerId: string) {
   return { onCheckIns, onComments };
 }
 
-async function loadCommentCounts(checkInIds: string[]) {
+async function loadCommentCounts(q: Q, checkInIds: string[]) {
   const out = new Map<string, number>();
   if (checkInIds.length === 0) return out;
-  const rows = await db
+  const rows = await q
     .select({ checkInId: checkInComments.checkInId, count: sql<number>`count(*)::int` })
     .from(checkInComments)
     .where(and(inArray(checkInComments.checkInId, checkInIds), isNull(checkInComments.deletedAt)))
@@ -211,10 +213,10 @@ async function loadCommentCounts(checkInIds: string[]) {
   return out;
 }
 
-async function loadBlockerActions(checkInIds: string[]) {
+async function loadBlockerActions(q: Q, checkInIds: string[]) {
   const out = new Map<string, Array<{ itemKey: string; userId: string; kind: "help" | "resolved" }>>();
   if (checkInIds.length === 0) return out;
-  const rows = await db
+  const rows = await q
     .select({
       checkInId: blockerActions.checkInId,
       itemKey: blockerActions.itemKey,
@@ -261,13 +263,13 @@ type EntryRow = {
   videoSkipNote: string | null;
 };
 
-async function hydrateEntries(rows: EntryRow[], viewerId: string): Promise<FeedEntry[]> {
+async function hydrateEntries(q: Q, rows: EntryRow[], viewerId: string): Promise<FeedEntry[]> {
   const ids = rows.map((r) => r.checkInId);
   const [recs, reactions, comments, actions] = await Promise.all([
-    loadRecordings(ids),
-    loadReactions(ids, viewerId),
-    loadCommentCounts(ids),
-    loadBlockerActions(ids),
+    loadRecordings(q, ids),
+    loadReactions(q, ids, viewerId),
+    loadCommentCounts(q, ids),
+    loadBlockerActions(q, ids),
   ]);
   return rows.map((r) => {
     const acts = actions.get(r.checkInId) ?? [];
@@ -288,8 +290,8 @@ async function hydrateEntries(rows: EntryRow[], viewerId: string): Promise<FeedE
 
 // Every submitted check-in on `dateISO` across the team's active schedules,
 // oldest first (the order the day actually happened in).
-export async function getDayFeed(teamId: string, dateISO: string, viewerId: string): Promise<FeedEntry[]> {
-  const rows = await db
+export async function getDayFeed(q: Q, teamId: string, dateISO: string, viewerId: string): Promise<FeedEntry[]> {
+  const rows = await q
     .select(entryColumns)
     .from(checkIns)
     .innerJoin(users, eq(users.id, checkIns.userId))
@@ -304,7 +306,7 @@ export async function getDayFeed(teamId: string, dateISO: string, viewerId: stri
       ),
     )
     .orderBy(asc(checkIns.submittedAt));
-  return hydrateEntries(rows, viewerId);
+  return hydrateEntries(q, rows, viewerId);
 }
 
 export type MyCheckIn = {
@@ -315,8 +317,8 @@ export type MyCheckIn = {
 } | null;
 
 // The viewer's check-in for their own local "today" (drafts included).
-export async function getMyCheckIn(teamId: string, dateISO: string, userId: string): Promise<MyCheckIn> {
-  const [row] = await db
+export async function getMyCheckIn(q: Q, teamId: string, dateISO: string, userId: string): Promise<MyCheckIn> {
+  const [row] = await q
     .select({
       id: checkIns.id,
       status: checkIns.status,
@@ -345,9 +347,9 @@ export async function getMyCheckIn(teamId: string, dateISO: string, userId: stri
 export type AwayPeriod = { id: string; userId: string; startsOn: string; endsOn: string; note: string | null };
 
 // Away periods that haven't ended yet (in anyone's calendar).
-export async function getAwayPeriods(teamId: string, now = new Date()): Promise<AwayPeriod[]> {
+export async function getAwayPeriods(q: Q, teamId: string, now = new Date()): Promise<AwayPeriod[]> {
   const earliest = new Date(now.getTime() - 26 * 3600 * 1000).toISOString().slice(0, 10);
-  return db
+  return q
     .select({
       id: memberAway.id,
       userId: memberAway.userId,
@@ -379,8 +381,8 @@ export type CommentRow = {
   deleted: boolean;
 };
 
-export async function getCheckInDetail(teamId: string, checkInId: string, viewerId: string) {
-  const [row] = await db
+export async function getCheckInDetail(q: Q, teamId: string, checkInId: string, viewerId: string) {
+  const [row] = await q
     .select({ ...entryColumns, scheduleDate: occurrences.scheduleDate })
     .from(checkIns)
     .innerJoin(users, eq(users.id, checkIns.userId))
@@ -390,8 +392,8 @@ export async function getCheckInDetail(teamId: string, checkInId: string, viewer
   if (!row) return null;
   const { scheduleDate, ...entryRow } = row;
   const [[entry], comments, reactions] = await Promise.all([
-    hydrateEntries([entryRow], viewerId),
-    db
+    hydrateEntries(q, [entryRow], viewerId),
+    q
       .select({
         id: checkInComments.id,
         userId: checkInComments.userId,
@@ -405,7 +407,7 @@ export async function getCheckInDetail(teamId: string, checkInId: string, viewer
       .innerJoin(users, eq(users.id, checkInComments.userId))
       .where(eq(checkInComments.checkInId, checkInId))
       .orderBy(asc(checkInComments.createdAt)),
-    loadReactions([checkInId], viewerId),
+    loadReactions(q, [checkInId], viewerId),
   ]);
   return {
     entry,
@@ -420,8 +422,8 @@ export async function getCheckInDetail(teamId: string, checkInId: string, viewer
 }
 
 // Comments on the viewer's check-ins from others since `since`.
-export async function getRepliesToMe(teamId: string, userId: string, since: Date) {
-  return db
+export async function getRepliesToMe(q: Q, teamId: string, userId: string, since: Date) {
+  return q
     .select({
       commentId: checkInComments.id,
       checkInId: checkInComments.checkInId,

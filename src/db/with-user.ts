@@ -13,3 +13,7 @@ export function withUser<T>(userId: string, fn: (tx: Tx) => Promise<T>): Promise
     return fn(tx);
   });
 }
+
+// A connection to read with: a withUser() transaction on the request path,
+// or `db` for server jobs that act for nobody in particular.
+export type Q = typeof appDb | Tx;

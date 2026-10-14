@@ -2,7 +2,11 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "./index";
 import {
+  auditLogs,
   blockerActions,
+  notifications,
+  recordings,
+  sessions,
   orgBilling,
   slackInstalls,
   checkInComments,
@@ -324,3 +328,69 @@ describe("row-level security: slack_install", () => {
   });
 });
 
+
+describe("row-level security: cross-org denial on the remaining tables", () => {
+  // B (another org) must see none of team A's rows; C (team A) sees them.
+  it("occurrence, check_in and recording stay inside the team", async () => {
+    const [rec] = await db
+      .insert(recordings)
+      .values({ checkInId: checkInAId, userId: userAId, objectKey: "k", mimeType: "video/webm" })
+      .returning();
+    try {
+      for (const table of [occurrences, checkIns, recordings] as const) {
+        const asB = await withUser(userBId, (tx) => tx.select().from(table));
+        expect(asB.some((r) => "scheduleDate" in r && r.scheduleDate === "2026-09-14")).toBe(false);
+      }
+      const recAsB = await withUser(userBId, (tx) => tx.select().from(recordings).where(eq(recordings.id, rec.id)));
+      const recAsC = await withUser(userCId, (tx) => tx.select().from(recordings).where(eq(recordings.id, rec.id)));
+      expect(recAsB).toEqual([]);
+      expect(recAsC).toHaveLength(1);
+      const ciAsB = await withUser(userBId, (tx) => tx.select().from(checkIns).where(eq(checkIns.id, checkInAId)));
+      expect(ciAsB).toEqual([]);
+    } finally {
+      await db.delete(recordings).where(eq(recordings.id, rec.id));
+    }
+  });
+
+  it("notifications are visible to their recipient only", async () => {
+    const [n] = await db
+      .insert(notifications)
+      .values({ userId: userAId, teamId: teamAId, type: "nudged", title: "hi" })
+      .returning();
+    const asC = await withUser(userCId, (tx) => tx.select().from(notifications).where(eq(notifications.id, n.id)));
+    const asB = await withUser(userBId, (tx) => tx.select().from(notifications).where(eq(notifications.id, n.id)));
+    const asA = await withUser(userAId, (tx) => tx.select().from(notifications).where(eq(notifications.id, n.id)));
+    expect(asC).toEqual([]);
+    expect(asB).toEqual([]);
+    expect(asA).toHaveLength(1);
+  });
+
+  it("users are visible to people they share an org with, not to strangers", async () => {
+    const asB = await withUser(userBId, (tx) => tx.select({ id: users.id }).from(users));
+    const asC = await withUser(userCId, (tx) => tx.select({ id: users.id }).from(users));
+    expect(asB.map((u) => u.id)).toEqual([userBId]);
+    const seenByC = asC.map((u) => u.id);
+    expect(seenByC).toEqual(expect.arrayContaining([userAId, userCId]));
+    expect(seenByC).not.toContain(userBId);
+  });
+
+  it("audit_log: no forged rows into another org; members who aren't admins can't read it", async () => {
+    // The old policy accepted any row whose actor was the caller.
+    await expect(
+      withUser(userBId, (tx) =>
+        tx.insert(auditLogs).values({ orgId: orgAId, actorUserId: userBId, action: "forged", resourceType: "x" }),
+      ),
+    ).rejects.toThrow();
+    await db.insert(auditLogs).values({ orgId: orgAId, actorUserId: userAId, action: "test", resourceType: "x" });
+    const asOwner = await withUser(userAId, (tx) => tx.select().from(auditLogs).where(eq(auditLogs.orgId, orgAId)));
+    const asMember = await withUser(userCId, (tx) => tx.select().from(auditLogs).where(eq(auditLogs.orgId, orgAId)));
+    const asOutsider = await withUser(userBId, (tx) => tx.select().from(auditLogs).where(eq(auditLogs.orgId, orgAId)));
+    expect(asOwner.length).toBeGreaterThan(0);
+    expect(asMember).toEqual([]);
+    expect(asOutsider).toEqual([]);
+  });
+
+  it("the app role can't read Auth.js sessions at all", async () => {
+    await expect(withUser(userAId, (tx) => tx.select().from(sessions))).rejects.toThrow();
+  });
+});
