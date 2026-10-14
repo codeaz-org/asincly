@@ -20,10 +20,12 @@ if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
 
 providers.push(
   Resend({
-    from: emailFrom(),
+    // Placeholder for Auth.js's config; the real sender is checked when a
+    // link is sent, so builds don't need EMAIL_FROM.
+    from: process.env.EMAIL_FROM ?? "Asincly <no-reply@asincly.local>",
     // A sign-in link is a bearer credential sitting in an inbox: one hour.
     maxAge: 60 * 60,
-    async sendVerificationRequest({ identifier, url, provider }) {
+    async sendVerificationRequest({ identifier, url }) {
       // Every magic link passes through here, including requests made to
       // /api/auth directly rather than through the sign-in form. Caps mail
       // to one inbox (and the Resend bill).
@@ -39,7 +41,7 @@ providers.push(
       const { Resend: ResendClient } = await import("resend");
       const client = new ResendClient(process.env.RESEND_API_KEY!);
       const { error } = await client.emails.send({
-        from: provider.from as string,
+        from: emailFrom(),
         to: identifier,
         subject: "Sign in to Asincly",
         text: `Sign in to Asincly:\n${url}\n\nThis link expires in 1 hour and works once.\n\nIf you didn't ask to sign in, ignore this email; nobody can use your account without this link.`,

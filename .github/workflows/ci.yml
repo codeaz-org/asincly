@@ -5,6 +5,19 @@ on:
     branches: [main]
   pull_request:
 
+# A newer push to the same branch or PR supersedes the run in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # Same major as the runtime image (Dockerfile), so CI tests what ships.
+  NODE_VERSION: 26
+  MINIO_IMAGE: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -28,24 +41,143 @@ jobs:
       DATABASE_URL_APP: postgres://asincly_app:asincly_app@localhost:5432/asincly
       AUTH_SECRET: ci-placeholder-secret
       DATA_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      S3_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: asincly
+      S3_SECRET_ACCESS_KEY: asincly-ci-secret
+      S3_BUCKET_RECORDINGS: asincly-recordings
+      S3_FORCE_PATH_STYLE: "true"
     steps:
       - uses: actions/checkout@v7
       # Version comes from "packageManager" in package.json.
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+      # Service containers can't be given MinIO's `server` arguments.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=$S3_ACCESS_KEY_ID -e MINIO_ROOT_PASSWORD=$S3_SECRET_ACCESS_KEY \
+            $MINIO_IMAGE server /data
+          for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      # Fails on a high or critical advisory in anything that ships.
+      - run: pnpm audit --prod --audit-level high
       - run: pnpm db:migrate
+      - name: Schema and migrations agree
+        run: |
+          pnpm drizzle-kit generate --name drift-check
+          if [ -n "$(git status --porcelain drizzle)" ]; then
+            echo "::error::src/db/schema.ts has changes with no migration. Run pnpm db:generate and commit it."
+            git status --porcelain drizzle
+            exit 1
+          fi
       - run: pnpm test
       - run: pnpm build
 
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Self-host behaviour, and the hosted cloud with plans and limits.
+        billing: ["false", "true"]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: asincly
+          POSTGRES_PASSWORD: asincly
+          POSTGRES_DB: asincly
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U asincly"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      CI: "true"
+      DATABASE_URL: postgres://asincly:asincly@localhost:5432/asincly
+      DATABASE_URL_APP: postgres://asincly_app:asincly_app@localhost:5432/asincly
+      AUTH_SECRET: ci-placeholder-secret
+      AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      DATA_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      CRON_SECRET: ci-cron-secret
+      S3_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: asincly
+      S3_SECRET_ACCESS_KEY: asincly-ci-secret
+      S3_BUCKET_RECORDINGS: asincly-recordings
+      S3_FORCE_PATH_STYLE: "true"
+      # Deterministic transcriber and drafter; ignored outside development.
+      AI_FAKE: "1"
+      BILLING_ENABLED: ${{ matrix.billing }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=$S3_ACCESS_KEY_ID -e MINIO_ROOT_PASSWORD=$S3_SECRET_ACCESS_KEY \
+            $MINIO_IMAGE server /data
+          for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm db:migrate
+      - run: pnpm e2e
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: playwright-${{ matrix.billing }}
+          path: test-results/
+          retention-days: 7
+
   docker:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: asincly
+          POSTGRES_PASSWORD: asincly
+          POSTGRES_DB: asincly
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U asincly"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v7
       - name: Build the self-host image
-        run: docker build --target runtime -t asincly:ci .
+        run: |
+          docker build --target build -t asincly:build .
+          docker build --target runtime -t asincly:ci .
+      # Building isn't enough: migrate with the image, start it, and ask it.
+      - name: Boot it
+        run: |
+          docker run --rm --network host \
+            -e NODE_ENV=production -e APP_DB_PASSWORD=ci-app-password \
+            -e DATABASE_URL=postgres://asincly:asincly@localhost:5432/asincly \
+            asincly:build node scripts/migrate.mjs
+          docker run -d --name app --network host \
+            -e DATABASE_URL=postgres://asincly:asincly@localhost:5432/asincly \
+            -e DATABASE_URL_APP=postgres://asincly_app:ci-app-password@localhost:5432/asincly \
+            -e AUTH_SECRET=ci-placeholder-secret -e AUTH_URL=http://localhost:3000 -e AUTH_TRUST_HOST=true \
+            -e DATA_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= \
+            asincly:ci
+          for i in $(seq 1 60); do curl -sf http://localhost:3000/api/health && exit 0; sleep 1; done
+          docker logs app
+          exit 1
