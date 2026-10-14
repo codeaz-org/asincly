@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Noto_Color_Emoji } from "next/font/google";
+import { connection } from "next/server";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -50,7 +51,10 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Every page renders per request: the CSP nonce (src/proxy.ts) is applied
+  // during SSR, and a prerendered page would ship scripts without it.
+  await connection();
   return (
     <html
       lang="en"

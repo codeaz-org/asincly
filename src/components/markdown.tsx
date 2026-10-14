@@ -81,6 +81,14 @@ export function Markdown({
               {children}
             </code>
           ),
+          // Images become links: an <img> would fetch on render, letting a
+          // check-in log every teammate's IP and read time.
+          img: ({ src, alt }) =>
+            typeof src === "string" && src ? (
+              <a href={src} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-accent transition">
+                {alt || "image"}
+              </a>
+            ) : null,
           a: ({ children, href }) => {
             if (href?.startsWith(MENTION_HREF_PREFIX)) {
               const isMe =
