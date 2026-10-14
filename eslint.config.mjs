@@ -28,8 +28,10 @@ const eslintConfig = defineConfig([
       // Server-only bookkeeping tables the app role can't touch.
       "src/lib/audit.ts",
       "src/lib/rate-limit.ts",
-      // Writes on other people's behalf: notifications to teammates.
+      // Writes on other people's behalf: notifications to teammates, and the
+      // signed (sessionless) unsubscribe link.
       "src/lib/notifications.ts",
+      "src/app/api/email/**",
       // Stripe and Slack: org-level state written from webhooks and OAuth.
       "src/lib/billing/**",
       "src/lib/slack/**",

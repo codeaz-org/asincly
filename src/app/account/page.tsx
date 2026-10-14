@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, Pill, SectionTitle } from "@/components/ui/card";
 import { FieldLabel, Input } from "@/components/ui/field";
 import { db } from "@/db";
+import { withUser } from "@/db/with-user";
 import { members, organizations, recordings, teams, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { rateLimit } from "@/lib/rate-limit";
@@ -68,6 +69,30 @@ export default async function AccountPage() {
                 <Button type="submit" variant="primary" size="lg">
                   Save
                 </Button>
+              </form>
+            </Card>
+          </section>
+
+          <section className="space-y-3">
+            <SectionTitle>Email</SectionTitle>
+            <Card className="p-4 sm:p-5">
+              <form action={updateEmailPrefs} className="space-y-4">
+                <label className="flex items-start gap-3">
+                  <input type="checkbox" name="reminders" defaultChecked={u.emailReminders} className="mt-1 size-4 accent-[oklch(0.78_0.15_60)]" />
+                  <span>
+                    <span className="block text-sm text-ink">Check-in reminders</span>
+                    <span className="block text-xs text-soft">When your team&rsquo;s window opens and you haven&rsquo;t checked in.</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3">
+                  <input type="checkbox" name="activity" defaultChecked={u.emailActivity} className="mt-1 size-4 accent-[oklch(0.78_0.15_60)]" />
+                  <span>
+                    <span className="block text-sm text-ink">Activity</span>
+                    <span className="block text-xs text-soft">Mentions, replies, help on your blockers, nudges.</span>
+                  </span>
+                </label>
+                <p className="text-xs text-soft">Sign-in links and billing emails always arrive. Everything shows in the app either way.</p>
+                <Button type="submit">Save</Button>
               </form>
             </Card>
           </section>
@@ -171,6 +196,18 @@ async function updateProfile(formData: FormData) {
     .set({ name: parsed.name || null, tz: parsed.tz })
     .where(eq(users.id, user.id));
   revalidatePath("/", "layout");
+}
+
+async function updateEmailPrefs(formData: FormData) {
+  "use server";
+  const user = await requireUser();
+  await withUser(user.id, (tx) =>
+    tx
+      .update(users)
+      .set({ emailReminders: formData.get("reminders") === "on", emailActivity: formData.get("activity") === "on" })
+      .where(eq(users.id, user.id)),
+  );
+  revalidatePath("/account");
 }
 
 async function deleteAccount(formData: FormData) {

@@ -5,6 +5,7 @@ import Resend from "next-auth/providers/resend";
 import { db } from "@/db";
 import { and, eq, sql } from "drizzle-orm";
 import { accounts, organizations, sessions, users, verificationTokens } from "@/db/schema";
+import { emailFrom } from "@/lib/email";
 import { rateLimit } from "@/lib/rate-limit";
 
 const providers = [];
@@ -19,7 +20,7 @@ if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
 
 providers.push(
   Resend({
-    from: process.env.EMAIL_FROM ?? "Asincly <no-reply@asincly.local>",
+    from: emailFrom(),
     // A sign-in link is a bearer credential sitting in an inbox: one hour.
     maxAge: 60 * 60,
     async sendVerificationRequest({ identifier, url, provider }) {
@@ -41,7 +42,7 @@ providers.push(
         from: provider.from as string,
         to: identifier,
         subject: "Sign in to Asincly",
-        text: `Sign in: ${url}\n\nThis link expires in 1 hour.`,
+        text: `Sign in to Asincly:\n${url}\n\nThis link expires in 1 hour and works once.\n\nIf you didn't ask to sign in, ignore this email; nobody can use your account without this link.`,
       });
       if (error) throw new Error(`Resend: ${error.message}`);
     },

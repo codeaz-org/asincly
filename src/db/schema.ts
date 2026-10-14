@@ -26,6 +26,10 @@ export const users = pgTable("user", {
   emailVerified: timestamp("emailVerified", { mode: "date", withTimezone: true }),
   image: text("image"),
   tz: text("tz").notNull().default("UTC"),
+  // Email preferences: check-in reminders, and activity (mentions, replies,
+  // help offered, nudges). In-app notifications are unaffected.
+  emailReminders: boolean("email_reminders").notNull().default(true),
+  emailActivity: boolean("email_activity").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

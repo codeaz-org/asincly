@@ -12,6 +12,7 @@ import {
   users,
 } from "@/db/schema";
 import { sendEmail } from "@/lib/email";
+import { EMAIL_KIND_LABEL, emailKindFor, unsubscribeUrl } from "@/lib/email-prefs";
 import { extractMentions } from "@/lib/mentions";
 import { checkInDetailPath } from "@/lib/paths";
 
@@ -44,15 +45,21 @@ export async function notify(input: Enqueue): Promise<void> {
 
   if (input.sendEmail === false) return;
 
-  const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, input.userId));
+  const [u] = await db
+    .select({ email: users.email, reminders: users.emailReminders, activity: users.emailActivity })
+    .from(users)
+    .where(eq(users.id, input.userId));
   if (!u) return;
+  const kind = emailKindFor(input.type);
+  if (!u[kind]) return;
   const url = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}${input.linkPath ?? "/"}`;
-  const body = `${input.body ?? ""}\n\n${url}\n\n— Asincly`.trim();
+  const body = `${input.body ?? ""}\n\n${url}`.trim();
   try {
     await sendEmail({
       to: u.email,
       subject: input.title,
       text: body,
+      unsubscribe: { url: unsubscribeUrl(input.userId, kind), what: EMAIL_KIND_LABEL[kind] },
     });
     await db
       .update(notifications)
