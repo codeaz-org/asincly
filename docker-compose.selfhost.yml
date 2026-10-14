@@ -33,8 +33,11 @@ services:
       MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY in .env}
     ports:
       # Browsers upload recordings straight to storage with pre-signed URLs,
-      # so S3_ENDPOINT must be reachable from users' browsers.
-      - "9000:9000"
+      # so S3_ENDPOINT must be reachable from users' browsers. Loopback by
+      # default: with the https profile Caddy serves it on S3_DOMAIN, and a
+      # port open on every interface would bypass TLS. PUBLIC_BIND=0.0.0.0
+      # only for a plain-http setup on a private network.
+      - "${PUBLIC_BIND:-127.0.0.1}:9000:9000"
     volumes:
       - miniodata:/data
     healthcheck:
@@ -71,9 +74,13 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgres://${POSTGRES_USER:-asincly}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-asincly}
       DATABASE_URL_APP: postgres://asincly_app:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-asincly}
+      # Behind Caddy, so trust the forwarded host — but always build links from
+      # AUTH_URL, never from a Host header someone else sent.
       AUTH_TRUST_HOST: "true"
+      AUTH_URL: ${AUTH_URL:?set AUTH_URL in .env (your https://APP_DOMAIN)}
     ports:
-      - "3000:3000"
+      # Loopback by default, for the same reason as MinIO above.
+      - "${PUBLIC_BIND:-127.0.0.1}:3000:3000"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -101,6 +108,32 @@ services:
       CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in .env}
     depends_on:
       - app
+
+  # Nightly database dump into ./backups, kept for BACKUP_KEEP_DAYS (14).
+  # Copy that folder off the machine; a backup on the same disk isn't one.
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          f=/backups/asincly-$$(date -u +%Y%m%dT%H%M%SZ).sql.gz
+          pg_dump --no-owner | gzip > "$$f.part" && mv "$$f.part" "$$f" && echo "backup: $$f" || echo "backup failed"
+          find /backups -name 'asincly-*.sql.gz' -mtime +$${BACKUP_KEEP_DAYS:-14} -delete
+          sleep 86400
+        done
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-asincly}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-asincly}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   caddy:
     image: caddy:2-alpine

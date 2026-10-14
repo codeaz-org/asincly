@@ -15,6 +15,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "sh -c 'if [ \"$VERCEL_ENV\" = production ]; then node scripts/migrate.mjs; fi && next build'",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",

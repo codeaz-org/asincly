@@ -96,6 +96,7 @@ A recording is about 10–20 MB per 5 minutes at 720p. The default 90-day retent
    NEXT_PUBLIC_SOURCE_URL=https://github.com/<you>/asincly
    DATABASE_URL=<Neon pooled URL, owner role>
    DATABASE_URL_APP=postgres://asincly_app:<APP_DB_PASSWORD>@<Neon pooled host>/neondb?sslmode=require
+   APP_DB_PASSWORD=<the same password>
    AUTH_SECRET=…  DATA_ENCRYPTION_KEY=…  CRON_SECRET=…
    RESEND_API_KEY=…  EMAIL_FROM="Asincly <hello@yourdomain.com>"
    S3_ENDPOINT=…  S3_REGION=…  S3_ACCESS_KEY_ID=…  S3_SECRET_ACCESS_KEY=…
@@ -113,6 +114,19 @@ A recording is about 10–20 MB per 5 minutes at 720p. The default 90-day retent
      `CRON_ENABLED=true`. GitHub delays scheduled runs under load, sometimes by hours, and
      pauses them in repositories with no activity for 60 days.
 6. Open your URL, sign in and create your team.
+
+**Migrations on Vercel.** Production deploys run `pnpm db:migrate` before `next build`
+(the `vercel-build` script; preview deploys skip it so they never change the production
+schema). Set `APP_DB_PASSWORD` in the project so the app role isn't left on its
+development password. The old deployment keeps serving while the new one builds, so write
+migrations that the previous release can live with: add columns and tables first, drop
+them a release later.
+
+**Changing URLs needs a rebuild.** `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SOURCE_URL` and
+`S3_ENDPOINT` are compiled into the build (the client bundle and the CSP's allowed bucket
+origin come from them). After changing one, redeploy; on Docker, rebuild the image
+(`--build`). An env change alone leaves the old values in place, and a mismatched
+`S3_ENDPOINT` shows up as uploads or playback blocked by the CSP.
 
 ---
 
@@ -209,6 +223,11 @@ What runs:
 To try it locally without a domain, leave out `--profile https` and keep
 `http://localhost:3000` / `http://localhost:9000`.
 
+The app and MinIO ports are bound to `127.0.0.1`: with `--profile https`, Caddy is the only
+way in, so nobody reaches the app over plain http around it. For a plain-http setup on a
+trusted private network, set `PUBLIC_BIND=0.0.0.0` in `.env`. `AUTH_URL` is required:
+sign-in links are built from it, never from the request's Host header.
+
 **Updating:**
 
 ```bash
@@ -216,13 +235,9 @@ git pull
 docker compose -f docker-compose.selfhost.yml --profile https up -d --build
 ```
 
-**Backups:**
-
-```bash
-docker compose -f docker-compose.selfhost.yml exec postgres pg_dump -U asincly asincly > backup.sql
-```
-
-Also back up the `miniodata` volume and, above all, `DATA_ENCRYPTION_KEY`.
+**Backups:** the `backup` service dumps the database every 24 hours into `./backups`
+and keeps 14 days (`BACKUP_KEEP_DAYS`). See [Operations](#operations) for what else to
+keep and how to restore.
 
 ---
 
@@ -247,6 +262,46 @@ data without the key, and the key is useless without the backup, so store them a
 
 Upgrading from a version before the versioned envelope: run step 3 once; until then the
 old values still read.
+
+---
+
+## Operations
+
+### What to back up
+
+| What | Managed stack | Docker self-host |
+|---|---|---|
+| Database | Neon / Supabase point-in-time restore (check your plan's window) | `backup` service → `./backups`; copy it off the machine (`rclone`, `restic`, a nightly `rsync`) |
+| Recordings | R2/B2/S3: turn on bucket versioning or replicate to a second bucket if videos must survive an accidental delete | Mirror MinIO with `mc mirror` to another bucket or disk |
+| `DATA_ENCRYPTION_KEY` | Outside the platform (see [Encryption key](#encryption-key)) | Same |
+| `.env` | Your secrets manager | Your secrets manager |
+
+Recordings are the least critical: retention deletes them anyway, and the database (with
+summaries and transcripts) is what a team actually reads.
+
+### Restoring
+
+```bash
+# Docker: into a fresh stack
+gunzip -c backups/asincly-<timestamp>.sql.gz | \
+  docker compose -f docker-compose.selfhost.yml exec -T postgres psql -U asincly asincly
+docker compose -f docker-compose.selfhost.yml run --rm migrate   # sets the app role password
+```
+
+Restore into a scratch database once before you need it, and check a transcript decrypts
+(open a check-in with a video summary). A backup you haven't restored is a guess.
+
+### Monitoring
+
+- **Uptime:** point a monitor (UptimeRobot, Better Stack, Checkly…) at `/api/health`. It
+  returns 200 when the app reaches Postgres and 503 when it can't.
+- **Errors:** every server error is logged as one JSON line with `"event":"request_error"`
+  and a `digest` — the same reference users see on the error page. On Vercel, add a log
+  drain (or an error-tracking integration) and alert on that event; on Docker, ship
+  `docker compose logs app` to your collector.
+- **Scheduled work:** `/api/cron/tick` and `/api/cron/daily` return their counts as JSON
+  and a 500 if a daily job failed (`"failed"` per job). Alert on non-200 responses.
+- **Stripe:** watch failed deliveries on the webhook endpoint in the Stripe dashboard.
 
 ---
 
