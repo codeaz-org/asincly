@@ -39,6 +39,10 @@ each provider's pricing page before you commit.
    the time of writing, roughly 28,800 audio seconds/day of Whisper and 1,000 Llama
    requests/day. A five-minute check-in uses 300 audio seconds and one request. Check your
    limits in the Groq console. Without a key, people write check-ins by hand.
+   **Running it for other people** (a company, customers): use a paid plan with a data
+   processing agreement whose terms exclude training on your data and limit retention.
+   The free tier is for trying Asincly, not for colleagues' recordings. See
+   [docs/legal](legal/README.md).
 
 All variables are documented in [`.env.example`](../.env.example).
 
@@ -340,6 +344,15 @@ it on the provider:
 
 Deleting a recording, a team, an organization or an account removes its objects right away.
 `/api/cron/daily` also removes any object no recording points at, as a backstop.
+
+---
+
+## Legal pages
+
+`/legal/*` (privacy, terms, DPA, subprocessors, imprint…) read the operator's details from the
+`LEGAL_*` variables in `.env.example`; until they're set, each page shows a red notice. Check
+the subprocessor list in `src/lib/legal.ts` against the providers you use, and read
+[docs/legal/README.md](legal/README.md) before inviting anyone outside your own team.
 
 ---
 

@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { Footer } from "@/components/footer";
 import { Logo } from "@/components/logo";
+import { operator } from "@/lib/legal";
 
 const LINKS = [
   ["/legal/terms", "Terms"],
   ["/legal/privacy", "Privacy"],
+  ["/legal/dpa", "DPA"],
+  ["/legal/subprocessors", "Subprocessors"],
   ["/legal/cookies", "Cookies"],
   ["/legal/security", "Security"],
+  ["/legal/imprint", "Imprint"],
+  ["/legal/accessibility", "Accessibility"],
 ] as const;
 
 export default function LegalLayout({ children }: { children: React.ReactNode }) {
@@ -28,6 +33,12 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
 
       <main className="flex-1">
         <article className="mx-auto max-w-2xl px-4 sm:px-6 py-12 md:py-16 space-y-5 [&_a]:text-amber [&_a]:underline-offset-4 [&_a:hover]:underline">
+          {!operator().configured && (
+            <p role="note" className="rounded-xl border border-danger/40 bg-danger/[0.06] px-4 py-3 text-sm text-ink">
+              This instance hasn&rsquo;t set its operator&rsquo;s details (the <code>LEGAL_*</code> environment
+              variables), so the bracketed placeholders below are not filled in.
+            </p>
+          )}
           {children}
         </article>
       </main>

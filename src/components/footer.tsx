@@ -27,6 +27,9 @@ export function Footer() {
           <Link href="/legal/security" className="hover:text-ink transition">
             Security
           </Link>
+          <Link href="/legal/imprint" className="hover:text-ink transition">
+            Imprint
+          </Link>
           <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer" className="hover:text-ink transition">
             Source code
           </a>

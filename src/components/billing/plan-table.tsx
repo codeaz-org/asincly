@@ -24,7 +24,7 @@ export function PlanTable({
               "pro",
               "Pro",
               formatPrice(PRICE_PER_MEMBER.month),
-              `per member / month · ${formatPrice(PRICE_PER_MEMBER.year)} yearly`,
+              `per member / month · ${formatPrice(PRICE_PER_MEMBER.year)} yearly · excl. VAT`,
             ],
           ] as const
         ).map(([id, name, price, note]) => (
@@ -78,7 +78,7 @@ export function PlanTable({
               <PlanHead
                 name="Pro"
                 price={formatPrice(PRICE_PER_MEMBER.month)}
-                note={`per member / month · ${formatPrice(PRICE_PER_MEMBER.year)} yearly`}
+                note={`per member / month · ${formatPrice(PRICE_PER_MEMBER.year)} yearly · excl. VAT`}
                 active={current === "pro"}
                 highlight
               />
