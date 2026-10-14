@@ -6,7 +6,7 @@ import {
   signInAs,
 } from "./fixtures";
 
-// Visual smoke: screenshots of the authed surfaces into scrollcraft/lab.
+// Visual smoke: screenshots of the authed surfaces into test-results/screens.
 // Not assertion-based — the PNGs are read by a human (or a model) after runs.
 
 test.afterAll(async () => {
@@ -23,11 +23,11 @@ test("screenshot check-in editor and team feed", async ({ browser }) => {
 
   await page.goto(`/${org.slug}/${team.slug}/check-in`);
   await page.waitForSelector("h1");
-  await page.screenshot({ path: "scrollcraft/lab/asincly/app-check-in.png" });
+  await page.screenshot({ path: "test-results/screens/app-check-in.png" });
 
   await page.goto(`/${org.slug}/${team.slug}`);
   await page.waitForSelector("h1, header");
-  await page.screenshot({ path: "scrollcraft/lab/asincly/app-feed.png" });
+  await page.screenshot({ path: "test-results/screens/app-feed.png" });
 
   await ctx.close();
 });
