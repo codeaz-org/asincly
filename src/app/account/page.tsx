@@ -6,7 +6,7 @@ import { z } from "zod";
 import { auth, signOut } from "@/auth";
 import { Footer } from "@/components/footer";
 import { Logo } from "@/components/logo";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, Pill, SectionTitle } from "@/components/ui/card";
 import { FieldLabel, Input } from "@/components/ui/field";
 import { db } from "@/db";
@@ -164,6 +164,19 @@ export default async function AccountPage() {
               >
                 <Button type="submit">Sign out</Button>
               </form>
+            </Card>
+          </section>
+
+          <section className="space-y-3">
+            <SectionTitle>Your data</SectionTitle>
+            <Card className="p-4 sm:p-5 flex flex-wrap items-center gap-3">
+              <p className="flex-1 min-w-[12rem] text-sm text-soft">
+                Everything you&rsquo;ve put into Asincly as JSON: profile, check-ins, transcripts and summaries of your videos
+                (with download links valid for an hour), replies, reactions and notifications.
+              </p>
+              <a href="/api/account/export" download className={buttonVariants({ variant: "secondary" })}>
+                Download my data
+              </a>
             </Card>
           </section>
 

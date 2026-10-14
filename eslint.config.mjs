@@ -46,6 +46,8 @@ const eslintConfig = defineConfig([
       "src/lib/actions/social.ts",
       "src/app/account/page.tsx",
       "src/app/api/teams/**",
+      // A person's own data, including teams they've left (RLS would hide it).
+      "src/app/api/account/**",
     ],
     rules: {
       "no-restricted-imports": [
