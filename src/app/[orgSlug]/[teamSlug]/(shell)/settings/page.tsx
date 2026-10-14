@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { TransferOrg } from "@/components/settings/transfer-org";
 import { eq } from "drizzle-orm";
 import { ChevronDown, Download } from "lucide-react";
 import Link from "next/link";
@@ -285,10 +286,11 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
 
       )}
 
-      {isOwner && (
+      {(isOwner || team.isOrgOwner) && (
       <section className="space-y-3">
         <SectionTitle className="[&_h2]:text-danger">Danger zone</SectionTitle>
         <div className="rounded-2xl border border-danger/30 bg-danger/[0.04] divide-y divide-danger/20">
+          {isOwner && (
           <DangerForm
             title={`Delete ${t.name}`}
             body="Removes this team with all its check-ins, replies and recordings. The organization and other teams stay."
@@ -300,6 +302,8 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
               await deleteTeam(team.teamId);
             }}
           />
+          )}
+          {team.isOrgOwner && <TransferOrg orgId={team.orgId} orgName={team.orgName} />}
           {team.isOrgOwner && (
           <DangerForm
             title={`Delete ${team.orgName}`}

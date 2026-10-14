@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { withUser } from "@/db/with-user";
 import { PlanGate } from "@/components/billing/plan-gate";
 import { AwayControl } from "@/components/people/away-control";
+import { MemberMenu } from "@/components/people/member-menu";
 import { InviteForm } from "@/components/invite-form";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -127,6 +128,9 @@ export default async function PeoplePage({ params }: { params: Promise<{ orgSlug
                   <Pill tone={m.role === "guest" ? "neutral" : "amber"} className="shrink-0">
                     {m.role}
                   </Pill>
+                )}
+                {team.role === "owner" && !isMe && m.role !== "owner" && (
+                  <MemberMenu memberId={m.memberId} name={displayName(m.name, m.email)} role={m.role} />
                 )}
                 {m.role !== "owner" && (isAdmin || isMe) && (
                   <form action={removeMember.bind(null, m.memberId)} className="shrink-0">

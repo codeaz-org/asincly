@@ -1,13 +1,13 @@
 "use server";
 
-import { and, eq, inArray, type SQL } from "drizzle-orm";
+import { and, eq, inArray, ne, type SQL } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
-import { checkIns, members, occurrences, organizations, recordings, schedules, teams } from "@/db/schema";
+import { checkIns, members, occurrences, organizations, recordings, schedules, teams, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
-import { assertCanCreateTeam, assertFeature, limitResult } from "@/lib/billing/entitlements";
+import { assertCanAddMembers, assertCanCreateTeam, assertFeature, limitResult } from "@/lib/billing/entitlements";
 import { cancelSubscriptionForDeletedOrg, syncSeats } from "@/lib/billing/seats";
 import { deleteRecordingObjects, recordingKeys } from "@/lib/recording-objects";
 import { revokeSlackFor } from "@/lib/slack/notify";
@@ -80,6 +80,132 @@ export async function removeMember(memberId: string) {
   await syncSeats(ctx.orgId);
   if (self) redirect("/");
   revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}/team`);
+}
+
+// ────────── Roles and ownership ──────────
+
+export type RoleResult = { ok: true } | { ok: false; error: string; upgrade?: boolean };
+
+const SetRoleSchema = z.object({
+  memberId: z.string().uuid(),
+  role: z.enum(["admin", "member", "guest"]),
+});
+
+// Team owners set anyone else's role below owner. Seats and the guest
+// feature are checked the way invites check them.
+export async function setMemberRole(input: unknown): Promise<RoleResult> {
+  const user = await requireUser();
+  const parsed = SetRoleSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid role" };
+  const [target] = await db
+    .select({ teamId: members.teamId, userId: members.userId, role: members.role })
+    .from(members)
+    .where(eq(members.id, parsed.data.memberId));
+  if (!target) return { ok: false, error: "Member not found" };
+  const ctx = await requireOwner(target.teamId, user.id);
+  if (target.userId === user.id) return { ok: false, error: "You can't change your own role" };
+  if (target.role === "owner") return { ok: false, error: "Transfer ownership instead" };
+  if (target.role === parsed.data.role) return { ok: true };
+
+  try {
+    if (parsed.data.role === "guest") await assertFeature(ctx.orgId, "guests");
+    if (target.role === "guest") {
+      // Becoming a contributor takes a seat unless they hold one elsewhere in the org.
+      const [seated] = await db
+        .select({ id: members.id })
+        .from(members)
+        .innerJoin(teams, eq(teams.id, members.teamId))
+        .where(and(eq(teams.orgId, ctx.orgId), eq(members.userId, target.userId), ne(members.role, "guest")))
+        .limit(1);
+      if (!seated) await assertCanAddMembers(ctx.orgId, 1);
+    }
+  } catch (e) {
+    const limited = limitResult(e);
+    if (limited && !limited.ok) return { ok: false, error: limited.error, upgrade: true };
+    throw e;
+  }
+
+  await db.update(members).set({ role: parsed.data.role }).where(eq(members.id, parsed.data.memberId));
+  await audit({
+    orgId: ctx.orgId,
+    actorUserId: user.id,
+    action: "member.set_role",
+    resourceType: "member",
+    resourceId: parsed.data.memberId,
+    meta: { teamId: target.teamId, from: target.role, to: parsed.data.role },
+  });
+  await syncSeats(ctx.orgId);
+  revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}`, "layout");
+  return { ok: true };
+}
+
+// The team owner hands the team to another contributor and stays on as admin.
+export async function transferTeamOwnership(memberId: unknown): Promise<RoleResult> {
+  const user = await requireUser();
+  const id = z.string().uuid().safeParse(memberId);
+  if (!id.success) return { ok: false, error: "Member not found" };
+  const [target] = await db
+    .select({ teamId: members.teamId, userId: members.userId, role: members.role })
+    .from(members)
+    .where(eq(members.id, id.data));
+  if (!target) return { ok: false, error: "Member not found" };
+  const ctx = await requireOwner(target.teamId, user.id);
+  if (target.userId === user.id) return { ok: true };
+  if (target.role === "guest") return { ok: false, error: "Make them a member first" };
+
+  await db.transaction(async (tx) => {
+    await tx.update(members).set({ role: "owner" }).where(eq(members.id, id.data));
+    await tx
+      .update(members)
+      .set({ role: "admin" })
+      .where(and(eq(members.teamId, target.teamId), eq(members.userId, user.id)));
+  });
+  await audit({
+    orgId: ctx.orgId,
+    actorUserId: user.id,
+    action: "team.transfer_ownership",
+    resourceType: "team",
+    resourceId: target.teamId,
+    meta: { to: target.userId },
+  });
+  revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}`, "layout");
+  return { ok: true };
+}
+
+// The org owner (billing, deleting the org) hands that role to someone who
+// already runs a team in it.
+export async function transferOrgOwnership(input: unknown): Promise<RoleResult> {
+  const user = await requireUser();
+  const parsed = z.object({ orgId: z.string().uuid(), email: z.string().trim().toLowerCase().email().max(254) }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Enter their email address" };
+  const { orgId, email } = parsed.data;
+  const [org] = await db
+    .select({ slug: organizations.slug })
+    .from(organizations)
+    .where(and(eq(organizations.id, orgId), eq(organizations.ownerUserId, user.id)));
+  if (!org) return { ok: false, error: "Only the organization owner can do this" };
+  const [eligible] = await db
+    .select({ userId: members.userId })
+    .from(members)
+    .innerJoin(teams, eq(teams.id, members.teamId))
+    .innerJoin(users, eq(users.id, members.userId))
+    .where(and(eq(teams.orgId, orgId), eq(users.email, email), inArray(members.role, ["owner", "admin"])))
+    .limit(1);
+  if (!eligible) return { ok: false, error: "They need to own or administer a team in this organization first" };
+  const userId = eligible.userId;
+  if (userId === user.id) return { ok: true };
+
+  await db.update(organizations).set({ ownerUserId: userId }).where(eq(organizations.id, orgId));
+  await audit({
+    orgId,
+    actorUserId: user.id,
+    action: "org.transfer_ownership",
+    resourceType: "organization",
+    resourceId: orgId,
+    meta: { to: userId },
+  });
+  revalidatePath(`/${org.slug}`, "layout");
+  return { ok: true };
 }
 
 // ────────── Teams ──────────
