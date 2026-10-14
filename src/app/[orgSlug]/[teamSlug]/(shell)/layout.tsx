@@ -22,6 +22,7 @@ export default async function TeamShellLayout({
       orgName={team.orgName}
       teamName={team.teamName}
       role={team.role}
+      isOrgOwner={team.isOrgOwner}
       userId={user.id}
       userEmail={user.email}
       myState={today.markState}

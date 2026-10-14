@@ -155,13 +155,14 @@ export default async function PeoplePage({ params }: { params: Promise<{ orgSlug
             <InviteForm
               teamId={team.teamId}
               guestsAllowed={plan.guests}
-              billingHref={team.role === "owner" ? billingHref : null}
+              billingHref={team.isOrgOwner ? billingHref : null}
               seatNote={plan.maxMembers != null ? `${seats} of ${plan.maxMembers} members on the Free plan` : undefined}
             />
           </Card>
         </section>
       )}
 
+      {isAdmin && (
       <section className="space-y-3" aria-labelledby="new-team-title" id="new-team">
         <SectionTitle>
           <span id="new-team-title">New team in {team.orgName}</span>
@@ -172,7 +173,7 @@ export default async function PeoplePage({ params }: { params: Promise<{ orgSlug
             title={`The Free plan includes ${plan.maxTeams} team.`}
             hint="Pro adds as many teams as you need."
             href={billingHref}
-            canUpgrade={team.role === "owner"}
+            canUpgrade={team.isOrgOwner}
           />
         ) : (
           <Card className="p-4 sm:p-5">
@@ -189,6 +190,7 @@ export default async function PeoplePage({ params }: { params: Promise<{ orgSlug
           </Card>
         )}
       </section>
+      )}
     </div>
   );
 }

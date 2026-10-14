@@ -107,7 +107,7 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
             teamId={team.teamId}
             requireVideo={t.requireVideo && plan.requireVideoRule}
             locked={!plan.requireVideoRule}
-            billingHref={isOwner ? billingHref : null}
+            billingHref={team.isOrgOwner ? billingHref : null}
           />
         </Card>
       </section>
@@ -210,7 +210,7 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
             title="Multiple schedules are part of Pro."
             hint="Run separate check-ins, like an EU and a US sync, in one team."
             href={billingHref}
-            canUpgrade={isOwner}
+            canUpgrade={team.isOrgOwner}
           />
         ) : (
         <form
@@ -295,6 +295,7 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
               await deleteTeam(team.teamId);
             }}
           />
+          {team.isOrgOwner && (
           <DangerForm
             title={`Delete ${team.orgName}`}
             body="Every team, schedule, check-in and recording in the organization. Cannot be undone."
@@ -308,6 +309,7 @@ export default async function TeamSettingsPage({ params }: { params: Promise<{ o
               await deleteOrg(team.orgId);
             }}
           />
+          )}
         </div>
       </section>
       )}

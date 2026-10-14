@@ -77,6 +77,10 @@ export const organizations = pgTable("organization", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  // The one person who can delete the org and manage its billing. Team
+  // ownership is per team and anyone allowed to create a team gets it, so it
+  // must never stand in for this.
+  ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

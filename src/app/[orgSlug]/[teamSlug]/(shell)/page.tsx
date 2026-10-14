@@ -57,7 +57,7 @@ export default async function TodayPage({
           title={`The Free plan shows the last ${plan.historyDays} days.`}
           hint="Nothing is deleted. Upgrade to Pro to see your team's full history again."
           href={`${root}/settings/billing`}
-          canUpgrade={team.role === "owner"}
+          canUpgrade={team.isOrgOwner}
         />
         <p className="text-center text-xs text-soft">
           <Link href={root} className="hover:text-ink transition">

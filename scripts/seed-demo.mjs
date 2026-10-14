@@ -55,6 +55,7 @@ try {
         INSERT INTO "user" (id, name, email, tz, "emailVerified")
         VALUES (${randomUUID()}, ${p.name}, ${p.email}, ${p.tz}, now()) RETURNING id`;
       ids[p.name] = u.id;
+      if (i === 0) await tx`UPDATE organization SET owner_user_id = ${u.id} WHERE id = ${org.id}`;
       await tx`INSERT INTO member (team_id, user_id, role) VALUES (${team.id}, ${u.id}, ${i === 0 ? "owner" : i === 4 ? "admin" : "member"})`;
     }
     const mention = (name) => `[@${name}](mention:${ids[name]})`;

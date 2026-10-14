@@ -24,6 +24,7 @@ type Props = {
   teamName: string;
   orgName: string;
   role: "owner" | "admin" | "member" | "guest";
+  isOrgOwner: boolean;
   userId: string;
   userEmail: string;
   /** The viewer's own state for today — drawn on the mobile check-in button. */
@@ -44,10 +45,10 @@ export async function AppShell(props: Props) {
   const canManage = props.role === "owner" || props.role === "admin";
   const checkInLabel = props.myState === "done" ? "Edit your check-in" : "Check in";
 
-  // Billing nudges go to the owner only: they're the one who can act.
+  // Billing nudges go to the org owner only: they're the one who can act.
   const trialLeft = trialDaysLeft(plan, new Date());
   const billingBanner =
-    props.role !== "owner"
+    !props.isOrgOwner
       ? null
       : plan.status === "past_due"
         ? { tone: "danger" as const, text: "Your last payment failed. Update your card to keep Pro." }

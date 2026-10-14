@@ -73,7 +73,7 @@ export async function completeOnboarding(formData: FormData) {
   const created = await db.transaction(async (tx) => {
     const [org] = await tx
       .insert(organizations)
-      .values({ name: parsed.orgName, slug: orgSlug })
+      .values({ name: parsed.orgName, slug: orgSlug, ownerUserId: user.id })
       .returning();
     const [team] = await tx
       .insert(teams)

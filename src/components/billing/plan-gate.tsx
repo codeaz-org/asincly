@@ -34,7 +34,7 @@ export function PlanGate({
       <div className={cn("space-y-1", compact && "flex-1 min-w-0")}>
         <p className={cn("font-medium text-ink", compact ? "text-sm" : "text-base")}>{title}</p>
         {hint && <p className={cn("text-soft", compact ? "text-xs" : "text-sm max-w-sm")}>{hint}</p>}
-        {!canUpgrade && <p className="text-xs text-faint">Ask your team owner to upgrade.</p>}
+        {!canUpgrade && <p className="text-xs text-faint">Ask your organization owner to upgrade.</p>}
       </div>
       {canUpgrade && (
         <Link href={href} className={buttonVariants({ variant: compact ? "secondary" : "primary", size: compact ? "sm" : "md" })}>

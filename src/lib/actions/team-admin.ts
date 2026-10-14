@@ -87,8 +87,9 @@ export async function removeMember(memberId: string) {
 
 const TeamNameSchema = z.string().min(1).max(80);
 
-// Any member of the org can spin up a new team; they become its owner and
-// get a default weekday schedule so the team works immediately.
+// Owners and admins of a team in the org can spin up a new team; they become
+// its owner and get a default weekday schedule so the team works immediately.
+// Members and guests can't: owning a team grants invites, retention and export.
 export async function createTeam(orgId: string, formData: FormData) {
   const user = await requireUser();
   const name = TeamNameSchema.parse(formData.get("name"));
@@ -97,8 +98,10 @@ export async function createTeam(orgId: string, formData: FormData) {
     .select({ id: members.id })
     .from(members)
     .innerJoin(teams, eq(teams.id, members.teamId))
-    .where(and(eq(teams.orgId, orgId), eq(members.userId, user.id)));
-  if (!callerRow) throw new Error("Not a member of this organization");
+    .where(
+      and(eq(teams.orgId, orgId), eq(members.userId, user.id), inArray(members.role, ["owner", "admin"])),
+    );
+  if (!callerRow) throw new Error("Only team owners and admins can create teams");
   await assertCanCreateTeam(orgId);
 
   const { slugify } = await import("@/lib/slug");
@@ -394,14 +397,11 @@ function safeJsonDecrypt(cipher: string): unknown {
 // prefix — Phase 5+ once we have a lot of teams).
 export async function deleteOrg(orgId: string) {
   const user = await requireUser();
-  // Any team the caller owns in this org proves ownership.
-  const [row] = await db
-    .select({ role: members.role, orgSlug: organizations.slug })
-    .from(members)
-    .innerJoin(teams, eq(teams.id, members.teamId))
-    .innerJoin(organizations, eq(organizations.id, teams.orgId))
-    .where(and(eq(teams.orgId, orgId), eq(members.userId, user.id), eq(members.role, "owner")));
-  if (!row) throw new Error("Owner only");
+  const [org] = await db
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(and(eq(organizations.id, orgId), eq(organizations.ownerUserId, user.id)));
+  if (!org) throw new Error("Only the organization owner can delete it");
 
   await audit({
     orgId,

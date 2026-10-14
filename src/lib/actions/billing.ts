@@ -15,7 +15,8 @@ export type BillingRedirect = { ok: true; url: string } | { ok: false; error: st
 
 const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
-// Only the owner of the team the request comes from can change billing.
+// Billing belongs to the org, so only the org owner can change it. The team id
+// only locates the org; owning that team is not enough.
 async function requireBillingOwner(teamId: string, userId: string) {
   const [row] = await db
     .select({
@@ -24,12 +25,13 @@ async function requireBillingOwner(teamId: string, userId: string) {
       orgName: organizations.name,
       orgSlug: organizations.slug,
       teamSlug: teams.slug,
+      orgOwnerUserId: organizations.ownerUserId,
     })
     .from(members)
     .innerJoin(teams, eq(teams.id, members.teamId))
     .innerJoin(organizations, eq(organizations.id, teams.orgId))
     .where(and(eq(members.teamId, teamId), eq(members.userId, userId)));
-  if (!row || row.role !== "owner") return null;
+  if (!row || row.orgOwnerUserId !== userId) return null;
   return row;
 }
 

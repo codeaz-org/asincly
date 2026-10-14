@@ -77,7 +77,7 @@ export default async function IntegrationsPage({
             title="Slack digest and reminders are part of Pro."
             hint="Post the daily digest to a channel and remind people by DM when their window opens."
             href={`${root}/settings/billing`}
-            canUpgrade={team.role === "owner"}
+            canUpgrade={team.isOrgOwner}
           />
         ) : install ? (
           <Card className="p-4 sm:p-5 space-y-5">

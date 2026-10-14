@@ -43,7 +43,7 @@ export default async function CheckInDetailPage({
           title={`This check-in is older than ${plan.historyDays} days.`}
           hint="It's still stored. Upgrade to Pro to open your team's full history."
           href={`${root}/settings/billing`}
-          canUpgrade={team.role === "owner"}
+          canUpgrade={team.isOrgOwner}
         />
       </div>
     );

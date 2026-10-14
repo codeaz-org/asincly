@@ -27,7 +27,7 @@ export default async function BillingPage({
   const { status } = await searchParams;
   const { team } = await getTeamPageContext(orgSlug, teamSlug);
   if (team.role !== "owner" && team.role !== "admin") notFound();
-  const isOwner = team.role === "owner";
+  const isOwner = team.isOrgOwner;
 
   const now = new Date();
   const { entitlements: e, billing, seats, teamCount, aiUsed } = await getBillingOverview(team.orgId, now);
@@ -98,7 +98,7 @@ export default async function BillingPage({
             )}
           </div>
         )}
-        {!isOwner && <p className="border-t border-line pt-4 text-xs text-soft">Only the owner can change the plan.</p>}
+        {!isOwner && <p className="border-t border-line pt-4 text-xs text-soft">Only the organization owner can change the plan.</p>}
         {isOwner && !canPay && (
           <p className="border-t border-line pt-4 text-xs text-soft">Payments aren&rsquo;t configured on this server yet.</p>
         )}

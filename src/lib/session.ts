@@ -55,6 +55,7 @@ export async function getTeamBySlug(userId: string, teamSlug: string, orgSlug?: 
       requireVideo: teams.requireVideo,
       orgId: organizations.id,
       orgName: organizations.name,
+      orgOwnerUserId: organizations.ownerUserId,
       role: members.role,
     })
     .from(members)
@@ -67,5 +68,8 @@ export async function getTeamBySlug(userId: string, teamSlug: string, orgSlug?: 
         orgSlug ? eq(organizations.slug, orgSlug) : undefined,
       ),
     );
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+  const { orgOwnerUserId, ...rest } = row;
+  return { ...rest, isOrgOwner: orgOwnerUserId === userId };
 }

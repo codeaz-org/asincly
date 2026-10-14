@@ -38,7 +38,7 @@ export async function seedUserWithSession(emailPrefix: string) {
 export async function seedOrgWithTeam(userId: string) {
   const [org] = await testDb
     .insert(organizations)
-    .values({ name: `E2E Org ${rand()}`, slug: `e2e-${rand()}${rand()}` })
+    .values({ name: `E2E Org ${rand()}`, slug: `e2e-${rand()}${rand()}`, ownerUserId: userId })
     .returning();
   const [team] = await testDb
     .insert(teams)
