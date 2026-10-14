@@ -136,6 +136,27 @@ export function OnboardingWizard({ email, tz }: { email: string; tz: string }) {
           </div>
         ))}
 
+        {last && (
+          <label className="mt-10 flex items-start gap-3 text-sm text-soft">
+            <input type="checkbox" name="acceptTerms" required className="mt-1 size-4 accent-[oklch(0.78_0.15_60)]" />
+            <span>
+              I accept the{" "}
+              <a href="/legal/terms" target="_blank" className="text-amber hover:underline underline-offset-4">
+                Terms
+              </a>{" "}
+              and the{" "}
+              <a href="/legal/dpa" target="_blank" className="text-amber hover:underline underline-offset-4">
+                Data Processing Agreement
+              </a>{" "}
+              on behalf of this organization, and have read the{" "}
+              <a href="/legal/privacy" target="_blank" className="text-amber hover:underline underline-offset-4">
+                Privacy Policy
+              </a>
+              .
+            </span>
+          </label>
+        )}
+
         <div className="mt-12 flex items-center gap-3">
           {step > 0 && (
             <Button type="button" variant="ghost" size="lg" onClick={() => setStep((s) => s - 1)}>

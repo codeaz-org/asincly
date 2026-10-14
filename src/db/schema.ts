@@ -116,6 +116,10 @@ export const organizations = pgTable("organization", {
   // (no magic links) when requireSso is on.
   ssoDomain: text("sso_domain"),
   requireSso: boolean("require_sso").notNull().default(false),
+  // Who accepted the Terms and the DPA for the organization, which version, and when.
+  termsVersion: text("terms_version"),
+  termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true }),
+  termsAcceptedBy: text("terms_accepted_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

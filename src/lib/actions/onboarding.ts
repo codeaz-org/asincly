@@ -1,5 +1,6 @@
 "use server";
 
+import { LEGAL_VERSION } from "@/lib/legal";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -28,6 +29,8 @@ const CompleteSchema = withWindowLength(
     customRrule: customRrule.optional(),
     windowOpen: hhmm,
     windowClose: hhmm,
+    // Whoever creates the organization accepts the Terms and DPA for it.
+    acceptTerms: z.literal("on", { message: "Accept the Terms and the Data Processing Agreement to continue." }),
   }),
 );
 
@@ -57,6 +60,7 @@ export async function completeOnboarding(formData: FormData) {
     customRrule: formData.get("customRrule") || undefined,
     windowOpen: formData.get("windowOpen"),
     windowClose: formData.get("windowClose"),
+    acceptTerms: formData.get("acceptTerms"),
   });
 
   const rrule =
@@ -73,7 +77,14 @@ export async function completeOnboarding(formData: FormData) {
   const created = await db.transaction(async (tx) => {
     const [org] = await tx
       .insert(organizations)
-      .values({ name: parsed.orgName, slug: orgSlug, ownerUserId: user.id })
+      .values({
+        name: parsed.orgName,
+        slug: orgSlug,
+        ownerUserId: user.id,
+        termsVersion: LEGAL_VERSION,
+        termsAcceptedAt: new Date(),
+        termsAcceptedBy: user.id,
+      })
       .returning();
     const [team] = await tx
       .insert(teams)
