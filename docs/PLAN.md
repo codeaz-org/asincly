@@ -34,11 +34,12 @@ is green. Tick boxes as work lands.
 - [x] Pre-signed upload to bucket; `recording` table; signed playback URLs
 - [~] Inngest jobs: transcribe → summarize → extract action items / blockers / mentions → save
       (pipeline runs synchronously today; moves to Inngest steps in Phase 4)
-- [x] `lib/ai/` provider interface with Anthropic + Deepgram default, OpenAI + local-Whisper adapters
-      (interface + noop fallback; Deepgram/Anthropic/Whisper adapters slot in when their env keys land)
+- [x] `lib/ai/` provider interface; Groq (Whisper + Llama) is the default, with noop and fake
+      providers. OpenAI / Anthropic / local Whisper adapters slot into the same interface.
 - [x] Column-level encryption for transcript + summary
 - [x] Feed shows summary above collapsed video; "watch" expands player
-- [ ] Per-occurrence team digest generated when window closes or all members submit (Phase 4 with the scheduler)
+- [~] Per-occurrence team digest generated when window closes or all members submit — fires as an
+      in-app notification and a Slack post; no email or AI roll-up yet
 
 ## Phase 4 — Notifications and integrations
 - [x] `notification` table (in-app + email). Per-channel preferences UI deferred.
@@ -57,11 +58,11 @@ is green. Tick boxes as work lands.
       Actions + Docker.
 - [x] Team data export (JSON, decrypted transcripts + summaries) and hard delete;
       recording retention setting (per-team, purged nightly by cron).
-- [ ] Admin TOTP 2FA; session management; org-level SSO enforcement
+- [x] Admin TOTP 2FA; session management; org-level SSO enforcement (Google; Microsoft deferred)
 - [x] Self-host guide: docker compose (Postgres + MinIO) + `pnpm build && pnpm start` +
       cron hitting `/api/cron/tick`. Full app-in-container Dockerfile deferred.
 - [ ] Branding settings (logo, accent colour) per org
-- [ ] Threat-model doc, pen-test checklist. `SECURITY.md` disclosure process is in place.
+- [x] Threat-model doc, pen-test checklist (`docs/THREAT-MODEL.md`, `docs/PENTEST.md`). `SECURITY.md` disclosure process is in place.
 - [ ] Public repo, landing page → real sign-up
 
 ### Explicitly deferred, needs its own sprint

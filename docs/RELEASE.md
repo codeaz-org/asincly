@@ -117,21 +117,21 @@ From here on: commit straight to `main`, small conventional commits, keep `main`
 
 ### 2.2 Delete-flow bugs that make documented promises false
 
-- [ ] **No object is ever deleted from the bucket.** `src/lib/s3.ts` exports no delete at all.
+- [x] **No object is ever deleted from the bucket.** `src/lib/s3.ts` exports no delete at all.
       `recording.ts:218`, `team-admin.ts:373` and `cron/tick/route.ts:43` each delete database
       rows and leave the video and audio behind, each with a comment deferring to a sweeper or
       lifecycle rule that exists nowhere — not in `deploy/`, not in either compose file. So GDPR
       hard delete, team delete, and the per-team retention setting do not delete recordings,
       while `src/app/legal/privacy/page.tsx:54` and `src/app/account/page.tsx:121` promise they
       do. Add `deleteObjects` to `s3.ts` and call it on all four paths.
-- [ ] **`deleteAccount`** (`src/app/account/page.tsx:167`) is a bare `db.delete(users)` —
+- [x] **`deleteAccount`** (`src/app/account/page.tsx:167`) is a bare `db.delete(users)` —
       cascades through members, check-ins and recordings with no audit row, no rate limit, no
       object cleanup.
-- [ ] **The export route is the un-audited one.** `api/teams/[teamId]/export/route.ts:28` calls
+- [x] **The export route is the un-audited one.** `api/teams/[teamId]/export/route.ts:28` calls
       `buildExportBundle` directly and emits every decrypted transcript. The audited wrapper
       `exportTeam` (`team-admin.ts:279`, which writes `team.export`) has **no callers** — the
       settings UI links to the route. Audit and rate-limit the route.
-- [ ] Other unaudited mutations: `registerRecording`, `deleteRecording`, `updateSchedule`, and
+- [x] Other unaudited mutations: `registerRecording`, `deleteRecording`, `updateSchedule`, and
       `reopenCheckIn` (silently un-submits a published check-in).
 
 ### 2.3 Log leaks
@@ -139,12 +139,12 @@ From here on: commit straight to `main`, small conventional commits, keep `main`
 `process-recording.ts` and `check-in.ts` are disciplined about logging `e.message` only. Three
 places are not:
 
-- [ ] `src/lib/email.ts:12` — logs the full email body and recipient whenever `RESEND_API_KEY`
+- [x] `src/lib/email.ts:12` — logs the full email body and recipient whenever `RESEND_API_KEY`
       is unset. That is the *default* self-host production path, not just dev.
-- [ ] `src/lib/audit.ts:26` — spreads `args.meta` into `console.error`. Callers pass user free
+- [x] `src/lib/audit.ts:26` — spreads `args.meta` into `console.error`. Callers pass user free
       text: `check-in.ts:212` the "Can't record today" reason, `onboarding.ts:185` invitee email
       lists.
-- [ ] `src/lib/notifications.ts:61` — logs the raw error object; a Resend SDK error can carry
+- [x] `src/lib/notifications.ts:61` — logs the raw error object; a Resend SDK error can carry
       the serialized request including the email text. Also `onboarding.ts:168` logs invitee
       emails on the happy path.
 
@@ -160,16 +160,21 @@ the team through `getTeamBySlug(user.id, …)`, so membership is checked in Type
 passes by calling `withUser` directly, so the tests assert a layer production never exercises.
 One missed membership check in a future page is a silent cross-tenant read with no backstop.
 
-- [ ] Convert `src/lib/queries.ts` to take a `tx` from `withUser()` instead of importing `db`.
+- [x] Convert `src/lib/queries.ts` to take a `tx` from `withUser()` instead of importing `db`.
       Callers already hold `user.id` from `getTeamPageContext`, so this is a signature change.
-- [ ] Convert `check-in.ts`, `recording.ts`, `team-admin.ts`, `onboarding.ts` the same way.
-- [ ] Leave `db` for exactly three things, stated in the comment: migrations, the Auth.js
+- [x] Convert `check-in.ts`, `recording.ts`, `team-admin.ts`, `onboarding.ts` the same way.
+      *Done differently:* check-in and recording paths (and the export read, settings pages,
+      inbox, memberships) run under `withUser`. `team-admin.ts` and `onboarding.ts` stay on the
+      owner client behind the allowlist: they create users and orgs and delete across tables
+      by cascade, after an explicit role check.
+- [x] Leave `db` for exactly three things, stated in the comment: migrations, the Auth.js
       adapter, and the job drain (no user in scope).
-- [ ] CI grep or lint rule failing on `db` imports outside that allowlist — otherwise this
+      *Done differently:* an allowlist per file in `eslint.config.mjs`, each with its reason (jobs, webhooks, auth tables, admin flows); everything else is a lint error.
+- [x] CI grep or lint rule failing on `db` imports outside that allowlist — otherwise this
       regresses within a month.
-- [ ] Extend `rls.test.ts` with cross-org denial per table; it never touches `recording`,
+- [x] Extend `rls.test.ts` with cross-org denial per table; it never touches `recording`,
       `notification`, `audit_log` or `occurrence`.
-- [ ] Fix `drizzle/0002_rls.sql:159`: the `… OR actor_user_id = current_user_id()` clause lets
+- [x] Fix `drizzle/0002_rls.sql:159`: the `… OR actor_user_id = current_user_id()` clause lets
       any authenticated user forge an `audit_log` row into any `org_id`.
 
 ### 3.2 Rate limiting that survives more than one instance
@@ -178,14 +183,14 @@ One missed membership check in a future page is a silent cross-tenant read with 
 the limits README and `docs/ARCHITECTURE.md` advertise are far weaker than they read — and they
 are what defends the paid AI endpoints.
 
-- [ ] Back it with Postgres (a `rate_limit` table, one `INSERT … ON CONFLICT` per hit). No new
+- [x] Back it with Postgres (a `rate_limit` table, one `INSERT … ON CONFLICT` per hit). No new
       dependency; Postgres is already on every request path.
-- [ ] **Auth has no limiter at all.** `src/app/sign-in/page.tsx:99` calls `signIn("resend", …)`
+- [x] **Auth has no limiter at all.** `src/app/sign-in/page.tsx:99` calls `signIn("resend", …)`
       unbounded — magic-link spam, user enumeration, a direct Resend bill. There is no
       `middleware.ts` in the repo; add one in front of `/api/auth/*`.
-- [ ] Also uncovered: `getRecordingDraft` (`recording.ts:169`, client-polled, AES-decrypts per
+- [x] Also uncovered: `getRecordingDraft` (`recording.ts:169`, client-polled, AES-decrypts per
       call) and the export route.
-- [ ] `/api/cron/tick:35` compares the secret with `!==` — use `crypto.timingSafeEqual`, and
+- [x] `/api/cron/tick:35` compares the secret with `!==` — use `crypto.timingSafeEqual`, and
       drop the `?secret=` query-string form, which lands in CDN and proxy access logs.
 
 ### 3.3 Admin TOTP 2FA
@@ -193,28 +198,28 @@ are what defends the paid AI endpoints.
 Auth.js runs `session: { strategy: "database" }` against a real `session` table
 (`src/db/schema.ts:52`), which makes this tractable without touching the JWT story.
 
-- [ ] Migration: `user_totp` (secret encrypted with the existing `src/lib/crypto.ts`, backup
+- [x] Migration: `user_totp` (secret encrypted with the existing `src/lib/crypto.ts`, backup
       codes hashed, `confirmed_at`); `session.mfa_at timestamptz`;
       `organization.require_2fa_for_admins`.
-- [ ] Implement TOTP with `node:crypto` HMAC-SHA1 — RFC 6238 is ~30 lines, no dependency. Add
+- [x] Implement TOTP with `node:crypto` HMAC-SHA1 — RFC 6238 is ~30 lines, no dependency. Add
       `qrcode` (server-side SVG) for enrolment; manual-key-only entry is a real tax on a flow
       people already resent.
-- [ ] Enforce in `requireUser()` (`src/lib/session.ts`): owner/admin of an org with the flag on
+- [x] Enforce in `requireUser()` (`src/lib/session.ts`): owner/admin of an org with the flag on
       and a session lacking `mfa_at` redirects to `/account/2fa/verify`.
-- [ ] Recovery: 10 single-use backup codes shown once; an owner can reset another admin's 2FA,
+- [x] Recovery: 10 single-use backup codes shown once; an owner can reset another admin's 2FA,
       audited.
 
 ### 3.4 Session management
 
-- [ ] `/account/sessions` listing rows from `session` with created/expires/last-seen, plus
+- [x] `/account/sessions` listing rows from `session` with created/expires/last-seen, plus
       "revoke" and "revoke all others"; store user-agent and coarse IP at session create.
-- [ ] Revoke all sessions on 2FA enrol or disable.
+- [x] Revoke all sessions on 2FA enrol or disable.
 
 ### 3.5 Org-level SSO enforcement
 
-- [ ] `organization.sso_domain` + `require_sso`. In the Auth.js `signIn` callback, refuse the
+- [x] `organization.sso_domain` + `require_sso`. In the Auth.js `signIn` callback, refuse the
       Resend magic-link provider for an email whose domain matches an org with `require_sso`.
-- [ ] Guard against lockout: refuse to enable unless an owner already has a linked Google
+- [x] Guard against lockout: refuse to enable unless an owner already has a linked Google
       account.
 
 ### 3.6 CSP
@@ -223,30 +228,31 @@ Auth.js runs `session: { strategy: "database" }` against a real `session` table
 comment (`:17`) admits nonces are a TODO. With Next's inline hydration payload that is close to
 no XSS defence at all.
 
-- [ ] Nonce-based `script-src` via the new `middleware.ts`.
-- [ ] Tighten `img-src`/`media-src` (`:23-24`) — they allow any `https:` origin, defeating the
+- [x] Nonce-based `script-src` via the new `middleware.ts`.
+- [x] Tighten `img-src`/`media-src` (`:23-24`) — they allow any `https:` origin, defeating the
       `s3Origin` pin.
-- [ ] `:33` drops `upgrade-insecure-requests` whenever `S3_ENDPOINT` is `http://`, silently
+- [x] `:33` drops `upgrade-insecure-requests` whenever `S3_ENDPOINT` is `http://`, silently
       weakening the policy for self-hosters. Gate it on the app URL scheme instead.
-- [ ] `src/lib/security-headers.test.ts` asserts header *presence* only — it would pass with
+- [x] `src/lib/security-headers.test.ts` asserts header *presence* only — it would pass with
       `script-src *`. Assert the values.
 
 ### 3.7 Storage hardening
 
-- [ ] `presignedGetUrl` (`s3.ts:88`) defaults to **1 hour**, and `queries.ts:144` mints one for
+- [x] `presignedGetUrl` (`s3.ts:88`) defaults to **1 hour**, and `queries.ts:144` mints one for
       every recording in the rendered feed whether or not the viewer expands it. A leaked page
       payload is an hour of access to every teammate's video. Drop to ~5 minutes and mint on
       expand.
-- [ ] `ensureBucket` (`s3.ts:48`) creates the bucket bare — no SSE, no public-access block, no
+- [x] `ensureBucket` (`s3.ts:48`) creates the bucket bare — no SSE, no public-access block, no
       lifecycle rule, against CLAUDE.md's "buckets private, SSE enabled". Set both at creation
       and document the R2/B2 equivalents in `docs/DEPLOYMENT.md`.
+      *Done differently:* encryption at rest can't be set portably at creation, so it is documented per provider in DEPLOYMENT.md ("Storage privacy and encryption"); uploads are size-signed; the bucket is private by default everywhere.
 
 ### 3.8 Threat model and pen-test checklist
 
-- [ ] `docs/THREAT-MODEL.md`: trust boundaries (browser ↔ app ↔ Postgres ↔ bucket ↔ Groq ↔
+- [x] `docs/THREAT-MODEL.md`: trust boundaries (browser ↔ app ↔ Postgres ↔ bucket ↔ Groq ↔
       Stripe), an asset inventory keyed to what is encrypted vs plaintext, a STRIDE pass per
       boundary, the accepted-risk list.
-- [ ] `docs/PENTEST.md`: the checklist someone actually runs before launch — cross-tenant reads
+- [x] `docs/PENTEST.md`: the checklist someone actually runs before launch — cross-tenant reads
       per table, presigned-URL replay, webhook replay, CSP bypass, magic-link reuse, rate-limit
       fan-out.
 
@@ -257,60 +263,66 @@ no XSS defence at all.
 The suites that exist are good (`time`, `day-rail`, `draft`, `crypto`, `rls` are genuinely
 strong). The gaps are concentrated in exactly the destructive and revenue paths:
 
-- [ ] **Zero tests on the tick/drain** (236 LOC, including a destructive retention delete) — not
+- [x] **Zero tests on the tick/drain** (236 LOC, including a destructive retention delete) — not
       the 401 path, not `window_open` idempotency, not digest fan-out.
-- [ ] **Zero tests on export and hard delete** — the highest-risk surface in the product
+- [x] **Zero tests on export and hard delete** — the highest-risk surface in the product
       (destructive + decrypts every transcript).
-- [ ] **Zero tests on `recording.ts`** (MIME allowlist, 500 MB cap, ownership check) and the AI
+- [x] **Zero tests on `recording.ts`** (MIME allowlist, 500 MB cap, ownership check) and the AI
       pipeline — nothing asserts malformed model output is rejected by `CheckInDraftSchema`, nor
       that `AI_FAKE` is ignored when `NODE_ENV=production`.
-- [ ] **CI never runs Playwright.** `e2e/video.spec.ts` — the only coverage of upload →
+- [x] **CI never runs Playwright.** `e2e/video.spec.ts` — the only coverage of upload →
       transcribe → draft → playback — is `test.skip` unless `AI_FAKE=1` and runs nowhere. Add an
       e2e job with a MinIO service and `AI_FAKE=1`.
-- [ ] Migration-drift check (`src/db/schema.ts` vs `drizzle/meta/*_snapshot.json`); boot the
+- [x] Migration-drift check (`src/db/schema.ts` vs `drizzle/meta/*_snapshot.json`); boot the
       image in the `docker` job instead of only building it; add a `concurrency:` group.
-- [ ] Delete `src/lib/smoke.test.ts` (`expect(true)`).
-- [ ] `CONTRIBUTING.md` promises "every feature ships with Vitest tests … and a Playwright
+- [x] Delete `src/lib/smoke.test.ts` (`expect(true)`).
+- [x] `CONTRIBUTING.md` promises "every feature ships with Vitest tests … and a Playwright
       test". Either close the gaps above or soften the claim before publishing.
 
 ---
 
 ## Phase 5 — Repo hygiene before the tag
 
-- [ ] **`scrollcraft/` is 13 MB / 160 tracked files of design-lab output** — PNG scroll-frame
+- [x] **`scrollcraft/` is 13 MB / 160 tracked files of design-lab output** — PNG scroll-frame
       dumps, `BRIEF.md`, `PLAN.md`, `FINGERPRINTS.md`. In `.dockerignore` but not `.gitignore`.
       Coupling trap: `e2e/video.spec.ts` and `e2e/screens.spec.ts` write screenshots into
       `scrollcraft/lab/asincly/` — repoint them to a gitignored path *before* removing it. Added
       across ≥5 commits, so `git rm` at HEAD won't shrink clones; `git filter-repo` only if repo
       size justifies rewriting public history.
-- [ ] `git rm --cached test-results/.last-run.json` (tracked despite the ignore rule).
-- [ ] Delete the empty `lab/` dir and the unused create-next-app SVGs in `public/`
+- [x] `git rm --cached test-results/.last-run.json` (tracked despite the ignore rule).
+- [x] Delete the empty `lab/` dir and the unused create-next-app SVGs in `public/`
       (`next.svg`, `vercel.svg`, `file.svg`, `globe.svg`, `window.svg`).
-- [ ] `docs/PLAN.md` is an internal build plan linked from README as the public roadmap, and it
+- [x] `docs/PLAN.md` is an internal build plan linked from README as the public roadmap, and it
       is stale: it claims Inngest and an "Anthropic + Deepgram default" with OpenAI/Whisper
       adapters, when `src/lib/ai/` contains only `groq`, `fake` and `noop`. Correct the same
       claim in `CLAUDE.md`'s stack section, then convert to a public `ROADMAP.md`.
-- [ ] Add `CODE_OF_CONDUCT.md`, `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`,
+      *Done differently:* public ROADMAP.md + CHANGELOG.md; README/CONTRIBUTING point there; CLAUDE.md stack corrected.
+- [x] Add `CODE_OF_CONDUCT.md`, `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`,
       `CHANGELOG.md`. Set the repo description, homepage and topics (all empty today).
 - [ ] Verify the `good first issue` label and the `security@asincly.com` inbox actually exist —
+      *Update:* asincly.com isn't registered. SECURITY.md now uses GitHub private vulnerability
+      reporting — **turn it on** (Settings → Code security → Private vulnerability reporting).
+      The label exists.
       README and `SECURITY.md` both promise them.
-- [ ] Note `shadcn` (a CLI) sits in `dependencies` and is never imported, and `src/lib/utils.ts`
+- [x] Note `shadcn` (a CLI) sits in `dependencies` and is never imported, and `src/lib/utils.ts`
       re-exports the `cn@0.2.6` micro-package rather than `clsx` + `tailwind-merge` — worth a
       supply-chain look before the repo gets attention.
+      *Done differently:* shadcn moved to devDependencies (it pulled an MCP server and express into the production tree); `cn` is shadcn's own package, 9.8M weekly downloads, no dependencies — kept.
 
 ---
 
 ## Phase 6 — Deploy and launch
 
-- [ ] **Add `/api/health`** — none exists. The Dockerfile's `HEALTHCHECK` wgets `/sign-in`, a
+- [x] **Add `/api/health`** — none exists. The Dockerfile's `HEALTHCHECK` wgets `/sign-in`, a
       full React render. Needed for Docker, uptime monitors and load balancers.
-- [ ] **Vercel has no migration step.** `docs/DEPLOYMENT.md` A2 tells the operator to run
+- [x] **Vercel has no migration step.** `docs/DEPLOYMENT.md` A2 tells the operator to run
       `pnpm db:migrate` from their laptop. On every future deploy, new code runs against the old
       schema unless someone remembers. Add a build-time or CI migrate step. (Self-host is fine —
       the compose `migrate` service gates `app` on `service_completed_successfully`.)
-- [ ] `vercel.json` is an empty stub. Add `crons`, `regions`, and per-function `maxDuration` —
+- [x] `vercel.json` is an empty stub. Add `crons`, `regions`, and per-function `maxDuration` —
       `processRecording` runs in `after()` and a Whisper call can outlast the default ceiling.
-- [ ] **Document the build-time baking trap**: `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SOURCE_URL`
+      *Done differently:* crons for tick and daily; maxDuration as segment config on the cron routes and the check-in page; region left to the operator.
+- [x] **Document the build-time baking trap**: `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SOURCE_URL`
       and `S3_ENDPOINT` are Docker `ARG`s compiled into the bundle, and `next.config.ts` derives
       CSP `connect-src`/`media-src` from `S3_ENDPOINT` at build time. Changing storage endpoints
       needs a rebuild, not an env change — also why a prebuilt image can't be published as-is.
@@ -323,6 +335,8 @@ strong). The gaps are concentrated in exactly the destructive and revenue paths:
       makes every transcript permanently unreadable, and `crypto.ts` has no key id in the
       envelope, so there is no rotation path.
 - [ ] Set the `APP_URL` and `CRON_SECRET` repo secrets, then **read the Actions log** to confirm
+      *Update:* the scheduler is Vercel Cron now (`vercel.json`); GitHub's schedule ran hours
+      late. The workflow is opt-in (`CRON_ENABLED`) and fails loudly once enabled.
       a real drain — the green check has been lying for days. Fail the job loudly instead of
       `exit 0` when secrets are missing.
 - [ ] Smoke the whole loop on production: sign up → onboarding → record → AI draft → submit →
@@ -360,3 +374,44 @@ strong). The gaps are concentrated in exactly the destructive and revenue paths:
 3. Phases 2–4 are substantial work before anyone can sign up. Worth a staging deploy right after
    Phase 2 so the product is exercised end-to-end while Phase 3 is built, rather than
    discovering deploy problems at the very end.
+
+
+---
+
+## Release audit — 2026-10-14
+
+A second audit (security, EU legal, ops) on top of this plan. Everything code can fix is
+done, each in its own commit with tests; the suite is 208 unit/DB tests and 16 Playwright
+specs, run in CI with billing off and on.
+
+**New findings, fixed**
+- [x] Any guest could create a team, own it, and delete the whole org or open its billing →
+      `organization.owner_user_id`; team creation needs owner/admin (`692aa48`).
+- [x] One invalid custom RRULE stopped the tick for every tenant → validated rules,
+      per-schedule isolation (`8c1754d`).
+- [x] `buildExportBundle` was a callable server action with no auth (`b453c1e`).
+- [x] 18 production advisories (2 critical) → next 16.3.8, shadcn to devDependencies (`ee5ca12`).
+- [x] `user` table had no RLS and the app role could read sessions; `occurrence_write` let
+      guests delete everyone's check-ins; removed members could edit check-ins (`92cd554`, `e767fe6`, `03ca834`).
+- [x] Markdown images worked as tracking pixels (`e0f45ff`).
+- [x] Uploads weren't size-limited by the bucket (`e2c1767`).
+- [x] No role changes or ownership transfer at all (`3bcf538`).
+- [x] Out-of-order Stripe events could roll a plan back; no billing emails (`ceecdb2`).
+- [x] No unsubscribe or email preferences (`21888fc`).
+- [x] No AI notice, label or opt-out; no personal export; no terms acceptance (`39a2767`, `4a1c429`, `9a41d70`).
+- [x] Legal pages incomplete for an EU launch → rewritten, DPA, subprocessors, imprint,
+      accessibility, DPIA and ROPA templates (`cc03be6`).
+- [x] Encryption key couldn't rotate; ciphertexts weren't row-bound (`68fcb6f`).
+- [x] Production builds without `EMAIL_FROM` failed (caught by booting the image in CI).
+
+**Open — needs a person, not code**
+- [ ] Register the domain (asincly.com is unregistered) and set up the inboxes.
+- [ ] Have counsel review `/legal/*` and `docs/legal/*`; set the `LEGAL_*` variables.
+- [ ] Sign DPAs with each subprocessor; paid AI plan with no-training / limited retention;
+      confirm DPF/SCCs per provider; VAT/OSS registration, then `STRIPE_TAX_ENABLED=true`.
+- [ ] Turn on GitHub private vulnerability reporting; set the repo description, homepage and
+      topics; decide whether to rewrite history to drop the old design-lab files (52 MB .git).
+- [ ] Provision and deploy (the items above), run [PENTEST.md](PENTEST.md) on staging.
+- [ ] Merge or close the open Dependabot PRs; upgrade vitest to 4 once local Node is ≥22.12
+      (remaining audit findings are dev-only tooling).
+- [ ] Connect the marketing site's sign-up to the app (its form posts to a 403 endpoint).
