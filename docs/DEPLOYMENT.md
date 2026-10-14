@@ -226,6 +226,30 @@ Also back up the `miniodata` volume and, above all, `DATA_ENCRYPTION_KEY`.
 
 ---
 
+## Encryption key
+
+`DATA_ENCRYPTION_KEY` encrypts transcripts, AI summaries and drafts, Slack tokens and 2FA
+secrets (AES-256-GCM, each value bound to its row). A database backup is useless for that
+data without the key, and the key is useless without the backup, so store them apart:
+
+- Keep a copy of the key **outside the hosting platform** (a password manager or secrets
+  vault), not only in Vercel's or the server's environment.
+- Don't commit it, paste it into tickets, or reuse it between staging and production.
+
+**Rotating** (a suspected leak, someone with access leaving, or on a schedule):
+
+1. `openssl rand -base64 32` for a new key.
+2. Set it as `DATA_ENCRYPTION_KEY`; put the old value in `DATA_ENCRYPTION_KEYS_OLD`
+   (comma-separated if there are several). Deploy. Old values keep decrypting.
+3. `pnpm db:rotate-key` with the production `DATABASE_URL` and both variables set. It
+   re-encrypts every value onto the new key and is safe to re-run.
+4. When it reports `rotated 0, failed 0`, remove the old key from `DATA_ENCRYPTION_KEYS_OLD`.
+
+Upgrading from a version before the versioned envelope: run step 3 once; until then the
+old values still read.
+
+---
+
 ## Storage CORS
 
 Browsers upload recordings straight to the bucket with pre-signed URLs, so the bucket must

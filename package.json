@@ -29,7 +29,8 @@
     "db:push": "drizzle-kit push",
     "emoji:sync": "node scripts/sync-emoji-data.mjs",
     "cron:local": "bash -c 'source .env && curl -sSf -H \"authorization: Bearer $CRON_SECRET\" http://localhost:3000/api/cron/tick && echo'",
-    "db:seed": "node scripts/seed-demo.mjs"
+    "db:seed": "node scripts/seed-demo.mjs",
+    "db:rotate-key": "node --experimental-strip-types --no-warnings scripts/rotate-encryption-key.mjs"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",

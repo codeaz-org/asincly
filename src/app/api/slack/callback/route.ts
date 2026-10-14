@@ -44,7 +44,7 @@ export async function GET(req: Request) {
       slackTeamId: res.team.id,
       slackTeamName: res.team.name,
       botUserId: res.bot_user_id,
-      botTokenCipher: encrypt(res.access_token),
+      botTokenCipher: encrypt(res.access_token, `slack:${state.teamId}`),
       installedByUserId: state.userId,
       updatedAt: new Date(),
     };

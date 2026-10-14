@@ -146,7 +146,7 @@ async function loadRecordings(q: Q, checkInIds: string[]): Promise<Map<string, F
       let summary: Summary | null = null;
       if (r.summaryCipher) {
         try {
-          summary = JSON.parse(decrypt(r.summaryCipher)) as Summary;
+          summary = JSON.parse(decrypt(r.summaryCipher, `recording:${r.id}:summary`)) as Summary;
         } catch {
           summary = null;
         }

@@ -40,7 +40,7 @@ export async function getSlackChannels(input: unknown): Promise<Result<{ channel
   const [install] = await db.select().from(slackInstalls).where(eq(slackInstalls.teamId, parsed.data.teamId));
   if (!install) return { ok: false, error: "Slack isn't connected" };
   try {
-    return { ok: true, channels: await listChannels(decrypt(install.botTokenCipher)) };
+    return { ok: true, channels: await listChannels(decrypt(install.botTokenCipher, `slack:${install.teamId}`)) };
   } catch (e) {
     console.error("[slack] channels failed", { code: e instanceof SlackError ? e.code : "unexpected" });
     return { ok: false, error: slackMessage(e) };
@@ -61,7 +61,7 @@ export async function updateSlackSettings(input: unknown): Promise<Result> {
   let channelName = install.channelName;
   if (channelId && channelId !== install.channelId) {
     try {
-      const token = decrypt(install.botTokenCipher);
+      const token = decrypt(install.botTokenCipher, `slack:${install.teamId}`);
       const channel = (await listChannels(token)).find((c) => c.id === channelId);
       if (!channel) return { ok: false, error: "That channel wasn't found" };
       // Public channels: join so the bot can post. Private ones need an invite.
@@ -105,7 +105,7 @@ export async function sendSlackTest(input: unknown): Promise<Result> {
   if (!install?.channelId) return { ok: false, error: "Pick a channel first" };
   try {
     const text = "Asincly is connected. Daily digests for this team will be posted here.";
-    await postMessage(decrypt(install.botTokenCipher), install.channelId, {
+    await postMessage(decrypt(install.botTokenCipher, `slack:${install.teamId}`), install.channelId, {
       text,
       blocks: [{ type: "section", text: { type: "mrkdwn", text } }],
     });
@@ -124,7 +124,7 @@ export async function disconnectSlack(input: unknown): Promise<Result> {
   const [install] = await db.select().from(slackInstalls).where(eq(slackInstalls.teamId, parsed.data.teamId));
   if (!install) return { ok: true };
   try {
-    await revokeToken(decrypt(install.botTokenCipher));
+    await revokeToken(decrypt(install.botTokenCipher, `slack:${install.teamId}`));
   } catch (e) {
     // Already revoked on Slack's side is fine; the row goes either way.
     console.error("[slack] revoke failed", { code: e instanceof SlackError ? e.code : "unexpected" });

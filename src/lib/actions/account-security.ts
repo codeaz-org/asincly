@@ -35,8 +35,8 @@ export async function startTotpEnrolment(): Promise<Result<{ secret: string; svg
   const secret = generateSecret();
   await db
     .insert(userTotp)
-    .values({ userId: user.id, secretCipher: encrypt(secret) })
-    .onConflictDoUpdate({ target: userTotp.userId, set: { secretCipher: encrypt(secret), confirmedAt: null, backupCodeHashes: [] } });
+    .values({ userId: user.id, secretCipher: encrypt(secret, `totp:${user.id}`) })
+    .onConflictDoUpdate({ target: userTotp.userId, set: { secretCipher: encrypt(secret, `totp:${user.id}`), confirmedAt: null, backupCodeHashes: [] } });
   return { ok: true, secret, svg: renderSVG(otpauthUri(secret, user.email), { border: 1 }) };
 }
 
@@ -49,7 +49,7 @@ export async function confirmTotpEnrolment(code: unknown): Promise<Result<{ back
   if (!(await rateLimit(`totp-confirm:${user.id}`, 10, 15 * 60_000)).allowed) return { ok: false, error: "Too many tries — wait a few minutes" };
   const [row] = await db.select().from(userTotp).where(eq(userTotp.userId, user.id));
   if (!row || row.confirmedAt) return { ok: false, error: "Start again" };
-  if (!verifyTotp(decrypt(row.secretCipher), parsed.data, new Date())) return { ok: false, error: "That code didn't match — check the time on your phone" };
+  if (!verifyTotp(decrypt(row.secretCipher, `totp:${user.id}`), parsed.data, new Date())) return { ok: false, error: "That code didn't match — check the time on your phone" };
 
   const backupCodes = generateBackupCodes();
   const now = new Date();
@@ -73,7 +73,7 @@ export async function verifySecondFactor(_prev: unknown, formData: FormData): Pr
   const row = await confirmedTotp(user.id);
   if (!row) redirect("/");
 
-  let passed = verifyTotp(decrypt(row.secretCipher), parsed.data, new Date());
+  let passed = verifyTotp(decrypt(row.secretCipher, `totp:${user.id}`), parsed.data, new Date());
   if (!passed) {
     // A backup code works once.
     const h = hashBackupCode(parsed.data);
@@ -99,7 +99,7 @@ export async function disableTotp(code: unknown): Promise<Result> {
   if (!(await rateLimit(`totp-disable:${user.id}`, 10, 15 * 60_000)).allowed) return { ok: false, error: "Too many tries — wait a few minutes" };
   const row = await confirmedTotp(user.id);
   if (!row) return { ok: true };
-  if (!verifyTotp(decrypt(row.secretCipher), parsed.data, new Date())) return { ok: false, error: "That code didn't match" };
+  if (!verifyTotp(decrypt(row.secretCipher, `totp:${user.id}`), parsed.data, new Date())) return { ok: false, error: "That code didn't match" };
   const [required] = await db
     .select({ name: organizations.name })
     .from(members)

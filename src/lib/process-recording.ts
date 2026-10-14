@@ -101,9 +101,9 @@ export async function processRecording(recordingId: string, hints: DraftHints = 
       .set({
         status: "ready",
         processedAt: new Date(),
-        transcriptCipher: encrypt(transcript),
-        summaryCipher: encrypt(JSON.stringify(summary)),
-        draftCipher: encrypt(JSON.stringify({ draft, previous: previous.previous, hints })),
+        transcriptCipher: encrypt(transcript, `recording:${recordingId}:transcript`),
+        summaryCipher: encrypt(JSON.stringify(summary), `recording:${recordingId}:summary`),
+        draftCipher: encrypt(JSON.stringify({ draft, previous: previous.previous, hints }), `recording:${recordingId}:draft`),
       })
       .where(eq(recordings.id, recordingId));
   } catch (e) {

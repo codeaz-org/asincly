@@ -218,7 +218,7 @@ export async function getRecordingDraft(input: unknown): Promise<DraftStatus> {
 
   let stored: { draft: unknown; previous?: PrevItem[]; hints?: Record<string, "done" | "not_done"> };
   try {
-    stored = JSON.parse(decrypt(rec.draftCipher));
+    stored = JSON.parse(decrypt(rec.draftCipher, `recording:${parsed.data.recordingId}:draft`));
   } catch {
     return { ok: true, status: "failed", aiConfigured: true };
   }

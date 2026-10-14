@@ -55,7 +55,7 @@ export async function postDigestToSlack(input: {
       expected: input.expected,
       entries: rows.map((r) => ({ name: displayName(r.name, r.email), today: r.today, blockers: r.blockers })),
     });
-    await postMessage(decrypt(install.botTokenCipher), install.channelId, message);
+    await postMessage(decrypt(install.botTokenCipher, `slack:${install.teamId}`), install.channelId, message);
     return true;
   } catch (e) {
     await handleError(install, "digest", e);
@@ -74,7 +74,7 @@ export async function sendSlackReminder(input: {
   const install = await activeInstall(input.teamId, input.orgId);
   if (!install?.remindersEnabled) return false;
   try {
-    const token = decrypt(install.botTokenCipher);
+    const token = decrypt(install.botTokenCipher, `slack:${install.teamId}`);
     const slackUser = await lookupUserByEmail(token, input.email);
     if (!slackUser) return false;
     await postMessage(token, slackUser, reminderMessage(input));
@@ -98,7 +98,7 @@ export async function revokeSlackFor(where: { teamId: string } | { orgId: string
           .where(eq(teams.orgId, where.orgId));
   for (const r of rows) {
     try {
-      await revokeToken(decrypt(r.botTokenCipher));
+      await revokeToken(decrypt(r.botTokenCipher, `slack:${r.teamId}`));
     } catch (e) {
       console.error("[slack] revoke on delete failed", { teamId: r.teamId, code: e instanceof SlackError ? e.code : "unexpected" });
     }

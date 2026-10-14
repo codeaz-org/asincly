@@ -73,27 +73,27 @@ export async function buildExportBundle(q: Q, teamId: string) {
     awayPeriods,
     recordings: teamRecs.map((r) => ({
       ...r,
-      transcript: safeDecrypt(r.transcriptCipher),
-      summary: safeJsonDecrypt(r.summaryCipher),
+      transcript: safeDecrypt(r.transcriptCipher, `recording:${r.id}:transcript`),
+      summary: safeJsonDecrypt(r.summaryCipher, `recording:${r.id}:summary`),
       transcriptCipher: undefined,
       summaryCipher: undefined,
     })),
   };
 }
 
-function safeDecrypt(cipher: string): string {
+function safeDecrypt(cipher: string, context: string): string {
   if (!cipher) return "";
   try {
-    return decrypt(cipher);
+    return decrypt(cipher, context);
   } catch {
     return "";
   }
 }
 
-function safeJsonDecrypt(cipher: string): unknown {
+function safeJsonDecrypt(cipher: string, context: string): unknown {
   if (!cipher) return null;
   try {
-    return JSON.parse(decrypt(cipher));
+    return JSON.parse(decrypt(cipher, context));
   } catch {
     return null;
   }
