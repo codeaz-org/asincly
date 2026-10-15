@@ -60,7 +60,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
     country: "United States",
   },
   {
-    name: "Neon Inc.",
+    name: "Supabase, Inc.",
     purpose: "Database",
     data: "Accounts, teams, check-ins, comments; transcripts and summaries encrypted",
     country: "United States",
