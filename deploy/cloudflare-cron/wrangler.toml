@@ -1,0 +1,12 @@
+# Deploy: cd deploy/cloudflare-cron && wrangler deploy
+# Secret (once): wrangler secret put CRON_SECRET  — same value as on Vercel
+name = "asincly-cron"
+main = "index.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+[vars]
+APP_URL = "https://asincly.codeaz.org"
+
+[triggers]
+crons = ["*/5 * * * *"]
