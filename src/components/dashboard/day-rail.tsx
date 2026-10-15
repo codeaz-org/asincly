@@ -41,11 +41,13 @@ const LANE_PX = 26;
 export function DayRail({
   members,
   schedule,
+  offToday = false,
   nowISO,
   viewerId,
 }: {
   members: RailMember[];
   schedule: RailSchedule | null;
+  offToday?: boolean;
   nowISO: string;
   viewerId: string;
 }) {
@@ -100,10 +102,11 @@ export function DayRail({
             if (!m) return null;
             const name = displayName(m.name, m.email);
             const isViewer = p.userId === viewerId;
+            const statusCopy = offToday && p.status !== "done" && p.status !== "away" ? "No standup today" : STATUS_COPY[p.status];
             return (
               <PopoverRoot key={p.userId}>
                 <PopoverTrigger
-                  aria-label={`${name}, ${p.localTime} in ${p.city}: ${STATUS_COPY[p.status]}`}
+                  aria-label={`${name}, ${p.localTime} in ${p.city}: ${statusCopy}`}
                   className={`absolute grid place-items-center rounded-full text-ink outline-none focus-visible:ring-2 focus-visible:ring-amber transition-[left,bottom] duration-700 ease-out hover:scale-125 ${
                     isViewer ? "size-7 bg-ground ring-1 ring-amber/60" : "size-6 bg-ground"
                   }`}
@@ -128,7 +131,9 @@ export function DayRail({
                       </p>
                     </div>
                   </div>
-                  <p className="mt-3 text-xs text-soft">{STATUS_COPY[p.status]}</p>
+                  <p className="mt-3 text-xs text-soft">
+                    {statusCopy}
+                  </p>
                 </PopoverContent>
               </PopoverRoot>
             );
@@ -157,6 +162,7 @@ export function DayRail({
               <span className="text-soft">{l.label}</span>
             </li>
           ))}
+          {offToday && <li>no standup today</li>}
           {schedule && (
             <li className="inline-flex items-center gap-1.5">
               <span className="h-2 w-4 rounded-sm bg-amber/25 border-x border-amber/60" />

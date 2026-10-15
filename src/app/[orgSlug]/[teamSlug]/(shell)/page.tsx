@@ -97,10 +97,13 @@ export default async function TodayPage({
     done: doneIds.has(m.userId),
     away: !!awayToday(today.away, m.userId, m.tz, today.now),
   }));
-  const positions = railPositions(railMembers, today.primary, today.now);
+  // No standup today (e.g. Thursday on a Mon/Wed/Fri schedule): no window to
+  // draw and nobody to wait for.
+  const railSchedule = today.offToday ? null : today.primary;
+  const positions = railPositions(railMembers, railSchedule, today.now);
   const rosterById = new Map(roster.map((r) => [r.userId, r]));
   const pending: PendingMember[] = positions
-    .filter((p) => p.status !== "done" && p.userId !== user.id)
+    .filter((p) => !today.offToday && p.status !== "done" && p.userId !== user.id)
     .sort((a, b) => ["open", "before", "missed", "asleep", "away"].indexOf(a.status) - ["open", "before", "missed", "asleep", "away"].indexOf(b.status))
     .map((p) => {
       const r = rosterById.get(p.userId)!;
@@ -139,7 +142,9 @@ export default async function TodayPage({
 
   const orderedEntries = [...entries].sort((a, b) => Number(b.userId === user.id) - Number(a.userId === user.id));
   const headline = isToday
-    ? contributors.length === 1 && !isGuest
+    ? today.offToday && entries.length === 0
+      ? "No standup today."
+      : contributors.length === 1 && !isGuest
       ? entries.length === 1
         ? "You're checked in."
         : "Just you, for now."
@@ -163,7 +168,8 @@ export default async function TodayPage({
         <>
           <DayRail
             members={railMembers}
-            schedule={today.primary}
+            schedule={railSchedule}
+            offToday={today.offToday}
             nowISO={today.now.toISOString()}
             viewerId={user.id}
           />

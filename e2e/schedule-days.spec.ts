@@ -34,6 +34,11 @@ test("a schedule that skips today offers no check-in", async ({ browser }) => {
   await page.goto(`/${org.slug}/${team.slug}`, { waitUntil: "networkidle" });
   await expect(page.getByText(/nothing due today/i)).toBeVisible();
   await expect(page.getByRole("link", { name: /^check in$/i })).toHaveCount(0);
+  // …and the day rail agrees: no window drawn, nobody "missed" it.
+  await expect(page.getByRole("heading", { name: /no standup today/i })).toBeVisible();
+  const rail = page.getByRole("region", { name: /where everyone is in their day/i });
+  await expect(rail.getByText(/no standup today/i)).toBeVisible();
+  await expect(rail.getByText(/window \d\d:\d\d/)).toHaveCount(0);
 
   // Straight to the check-in URL: refused, and it says when the next one is.
   await page.goto(`/${org.slug}/${team.slug}/check-in`, { waitUntil: "networkidle" });
