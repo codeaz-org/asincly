@@ -1,9 +1,11 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Avatar } from "@/components/ui/avatar";
 import { loadShortcodeIndex, rememberEmoji, searchShortcodes } from "@/lib/emoji";
 import { continueList, indentList, wrapSelection } from "@/lib/md-edit";
-import { formatMention } from "@/lib/mentions";
+import { extractMentions, mentionSpans, toDisplay, toMarkup } from "@/lib/mentions";
 
 export type MentionCandidate = {
   userId: string;
@@ -45,10 +47,13 @@ type Suggestion =
 type Trigger = { kind: "mention" | "emoji"; at: number; query: string };
 
 // Textarea with inline autocomplete and Obsidian-style list helpers.
-// "@name" suggests teammates; ":code" suggests emoji (Slack shortcodes), and
-// typing a full ":tada:" converts it in place. Arrow keys navigate, Enter /
-// Tab accepts, Esc closes. Enter continues - / - [ ] / 1. lists; Tab indents;
-// Cmd+B/I bold/italic.
+// "@" opens a teammate menu at the caret (Linear-style): names starting with
+// what you type first, avatars, ↑↓ / ↵ / Tab / Esc. A picked teammate shows as
+// an "@Name" pill; Backspace right after a pill removes it whole. The value
+// in and out is markdown with [@Name](mention:id) links; the textarea itself
+// only ever shows "@Name" (see toDisplay / toMarkup).
+// ":code" suggests emoji (Slack shortcodes), and a full ":tada:" converts in
+// place. Enter continues - / - [ ] / 1. lists; Tab indents; Cmd+B/I.
 export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function MentionTextarea(
   {
     value,
@@ -68,7 +73,64 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
   handleRef,
 ) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
+  const backdropRef = useRef<HTMLDivElement | null>(null);
   const [trigger, setTrigger] = useState<Trigger | null>(null);
+
+  // Everyone a pill can stand for: people already mentioned (ids kept as
+  // they are) and the teammates on offer.
+  const known = useMemo(
+    () => [...extractMentions(value).map((m) => ({ userId: m.userId, name: m.name })), ...candidates],
+    [value, candidates],
+  );
+  const display = toDisplay(value);
+  const spans = mentionSpans(display, known);
+  // Without pills the textarea draws its own text; the layer stays empty and
+  // only provides the box for measuring the caret.
+  const pills = spans.length > 0;
+  const emit = (next: string) => onChange(toMarkup(next, known));
+
+  // A programmatic edit (pick, list helper, Backspace on a pill) moves the
+  // caret in the same commit that applies the text, so a key typed right after
+  // lands where it should.
+  const pendingCaret = useRef<{ start: number; end: number } | null>(null);
+  const editTo = (next: string, start: number, end = start) => {
+    pendingCaret.current = { start, end };
+    emit(next);
+  };
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const c = pendingCaret.current;
+    if (!el || !c || el.value !== display) return;
+    pendingCaret.current = null;
+    el.focus();
+    el.setSelectionRange(c.start, c.end);
+    // The toolbar's @ button opens the menu just like typing "@" does.
+    if (c.start === c.end) updateTrigger(el.value, c.start, el);
+  });
+
+  // The pill layer sits exactly under the textarea's (transparent) text:
+  // same box, font and wrapping, scrolled with it.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const bd = backdropRef.current;
+    if (!el || !bd) return;
+    const sync = () => {
+      const cs = getComputedStyle(el);
+      for (const k of MIRROR_PROPS) bd.style.setProperty(k, cs.getPropertyValue(k));
+      bd.style.width = `${el.offsetWidth}px`;
+      bd.style.height = `${el.offsetHeight}px`;
+      bd.style.top = `${el.offsetTop}px`;
+      bd.style.left = `${el.offsetLeft}px`;
+      // A scrollbar narrows the textarea's text box; narrow the layer to match.
+      const bar = el.offsetWidth - el.clientWidth - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
+      bd.style.paddingRight = `${parseFloat(cs.paddingRight) + Math.max(0, bar)}px`;
+      bd.scrollTop = el.scrollTop;
+    };
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
   const [emojiIndex, setEmojiIndex] = useState<Array<[string, string]> | null>(null);
   const [highlight, setHighlight] = useState(0);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -79,11 +141,7 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
       if (!el) return;
       const res = fn(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0);
       if (!res) return;
-      onChange(res.value);
-      requestAnimationFrame(() => {
-        el.focus();
-        el.setSelectionRange(res.selStart, res.selEnd);
-      });
+      editTo(res.value, res.selStart, res.selEnd);
     },
     focus() {
       ref.current?.focus();
@@ -93,12 +151,7 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
   const suggestions: Suggestion[] = !trigger
     ? []
     : trigger.kind === "mention"
-      ? candidates
-          .filter(
-            (c) =>
-              c.name.toLowerCase().includes(trigger.query.toLowerCase()) ||
-              c.email.toLowerCase().includes(trigger.query.toLowerCase()),
-          )
+      ? rankCandidates(candidates, trigger.query)
           .slice(0, 6)
           .map((c) => ({ kind: "mention", key: c.userId, label: c.name, detail: c.email, candidate: c }))
       : searchShortcodes(emojiIndex ?? [], trigger.query, 8).map((r) => ({
@@ -120,12 +173,11 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
     const caret = el.selectionStart ?? el.value.length;
     const converted = convertTypedShortcode(el.value, caret);
     if (converted) {
-      onChange(converted.value);
       close();
-      requestAnimationFrame(() => el.setSelectionRange(converted.caret, converted.caret));
+      editTo(converted.value, converted.caret);
       return;
     }
-    onChange(el.value);
+    emit(el.value);
     updateTrigger(el.value, caret, el);
   }
 
@@ -166,39 +218,25 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
     setTrigger({ kind, at: i, query });
     setHighlight(0);
 
-    // Position (viewport coords, the menu is position:fixed): under the
-    // caret's line, approximated by line count and clamped to the textarea.
-    const rect = el.getBoundingClientRect();
-    const style = getComputedStyle(el);
-    const lineHeight = parseFloat(style.lineHeight || "20") || 20;
-    const rowsBefore = v.slice(0, caret).split("\n").length;
-    const paddingTop = parseFloat(style.paddingTop || "0");
-    const top = Math.min(rect.top + paddingTop + rowsBefore * lineHeight - el.scrollTop + 6, rect.bottom + 6);
-    setPos({ top: Math.min(top, window.innerHeight - 240), left: Math.min(rect.left + 12, window.innerWidth - 260) });
+    // Position (viewport coords, the menu is position:fixed): just under the
+    // "@", wherever it sits, kept on screen.
+    const at = caretPoint(backdropRef.current, el, i);
+    setPos({ top: Math.min(at.bottom + 6, window.innerHeight - 260), left: Math.max(8, Math.min(at.left - 8, window.innerWidth - 288)) });
   }
 
   function accept(s: Suggestion) {
     const el = ref.current;
     if (!el || !trigger) return;
-    const before = value.slice(0, trigger.at);
-    const after = value.slice(el.selectionStart ?? value.length);
-    const insert =
-      s.kind === "mention" ? `${formatMention(s.candidate.name ?? s.candidate.email, s.candidate.userId)} ` : `${s.emoji} `;
+    const before = el.value.slice(0, trigger.at);
+    const after = el.value.slice(el.selectionStart ?? el.value.length);
+    const insert = s.kind === "mention" ? `@${s.candidate.name.replace(/[\[\]()]/g, "")} ` : `${s.emoji} `;
     if (s.kind === "emoji") rememberEmoji(s.emoji);
-    onChange(`${before}${insert}${after}`);
     close();
-    requestAnimationFrame(() => {
-      el.focus();
-      const caret = before.length + insert.length;
-      el.setSelectionRange(caret, caret);
-    });
+    editTo(`${before}${insert}${after}`, before.length + insert.length);
   }
 
   function setValueAndCaret(next: string, caret: number) {
-    onChange(next);
-    const el = ref.current;
-    if (!el) return;
-    requestAnimationFrame(() => el.setSelectionRange(caret, caret));
+    editTo(next, caret);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -207,6 +245,16 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
     const el = e.currentTarget;
 
     if (!open) {
+      // Backspace right after a pill takes the whole mention, like Linear.
+      if (e.key === "Backspace" && el.selectionStart === el.selectionEnd) {
+        const caret = el.selectionStart ?? 0;
+        const pill = spans.find((p) => p.end === caret);
+        if (pill) {
+          e.preventDefault();
+          setValueAndCaret(el.value.slice(0, pill.start) + el.value.slice(caret), pill.start);
+          return;
+        }
+      }
       if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
         const r = continueList(el.value, el.selectionStart ?? 0);
         if (r) {
@@ -226,11 +274,7 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
       if ((e.metaKey || e.ctrlKey) && (e.key === "b" || e.key === "i")) {
         e.preventDefault();
         const r = wrapSelection(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0, e.key === "b" ? "**" : "*");
-        onChange(r.value);
-        requestAnimationFrame(() => {
-          el.focus();
-          el.setSelectionRange(r.selStart, r.selEnd);
-        });
+        editTo(r.value, r.selStart, r.selEnd);
       }
       return;
     }
@@ -250,7 +294,10 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
   }
 
   return (
-    <>
+    <div className="relative">
+      <div ref={backdropRef} aria-hidden className="pointer-events-none absolute overflow-hidden whitespace-pre-wrap break-words text-ink border-transparent">
+        {pills && pieces(display, spans)}
+      </div>
       <textarea
         ref={ref}
         id={id}
@@ -258,9 +305,15 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
         aria-describedby={ariaDescribedBy}
         aria-autocomplete="list"
         data-mention-open={open ? "true" : undefined}
-        value={value}
+        value={display}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
+        onScroll={(e) => {
+          if (backdropRef.current) backdropRef.current.scrollTop = e.currentTarget.scrollTop;
+        }}
+        // The text is drawn by the pill layer underneath; the textarea keeps
+        // the caret, selection and input.
+        style={pills ? { color: "transparent", caretColor: "var(--ink)" } : undefined}
         onBlur={() => {
           setTimeout(() => setPos(null), 120);
           onBlur?.();
@@ -269,12 +322,14 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
         autoFocus={autoFocus}
         rows={rows}
         maxLength={maxLength}
-        className={className}
+        className={`relative ${className}`}
       />
-      {open && (
+      {/* On <body>: a transformed ancestor (the step's entrance animation)
+          would otherwise turn position:fixed into position:absolute. */}
+      {open && createPortal(
         <div
           style={{ position: "fixed", top: pos.top, left: pos.left }}
-          className="z-50 min-w-[240px] rounded-xl border border-line bg-popover/95 backdrop-blur-xl shadow-[0_24px_60px_-20px_oklch(0_0_0/0.7)] overflow-hidden p-1"
+          className="z-50 w-[280px] rounded-xl border border-line bg-popover/95 backdrop-blur-xl shadow-[0_24px_60px_-20px_oklch(0_0_0/0.7)] overflow-hidden p-1"
         >
           <ul className="text-sm" role="listbox" aria-label={trigger?.kind === "emoji" ? "Emoji" : "Teammates"}>
             {suggestions.map((s, i) => (
@@ -284,7 +339,9 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
                   e.preventDefault();
                   accept(s);
                 }}
-                onMouseEnter={() => setHighlight(i)}
+                // Move, not enter: a list re-filtering under a resting pointer
+                // mustn't steal the highlight from the keyboard.
+                onMouseMove={() => i !== active && setHighlight(i)}
                 role="option"
                 aria-selected={i === active}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer text-ink ${
@@ -297,10 +354,13 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
                     <span className="truncate text-soft">{s.label}</span>
                   </>
                 ) : (
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{s.label}</div>
-                    {s.detail && <div className="text-[11px] text-soft truncate">{s.detail}</div>}
-                  </div>
+                  <>
+                    <Avatar name={s.candidate.name} email={s.candidate.email} size={24} />
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{s.label}</div>
+                      {s.detail && <div className="text-[11px] text-soft truncate">{s.detail}</div>}
+                    </div>
+                  </>
                 )}
               </li>
             ))}
@@ -308,8 +368,64 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
           <div className="px-3 pt-2 pb-1.5 text-[10px] uppercase tracking-wider text-faint border-t border-line mt-1">
             ↑↓ navigate · ↵ accept · esc close
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
-    </>
+    </div>
   );
 });
+
+// What the pill layer needs to match the textarea's text box.
+const MIRROR_PROPS = [
+  "box-sizing", "font-family", "font-size", "font-weight", "font-style", "line-height", "letter-spacing",
+  "word-spacing", "text-indent", "text-transform", "tab-size", "padding-top", "padding-bottom",
+  "padding-left", "border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
+  "border-style", "border-radius",
+];
+
+function pieces(text: string, spans: { start: number; end: number; userId: string }[]) {
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  for (const s of spans) {
+    out.push(text.slice(last, s.start));
+    out.push(
+      <span key={`${s.userId}-${s.start}`} className="rounded-[5px] bg-amber/15 text-amber shadow-[0_0_0_2px_color-mix(in_oklch,var(--amber)_15%,transparent)]">
+        {text.slice(s.start, s.end)}
+      </span>,
+    );
+    last = s.end;
+  }
+  // A trailing newline needs a character after it to take up its line.
+  out.push(text.slice(last) + (text.endsWith("\n") ? " " : ""));
+  return out;
+}
+
+// Names starting with the query first (any word of the name, or the email),
+// then names that merely contain it.
+function rankCandidates(candidates: MentionCandidate[], query: string): MentionCandidate[] {
+  const q = query.toLowerCase();
+  if (!q) return [...candidates].sort((a, b) => a.name.localeCompare(b.name));
+  const starts = (c: MentionCandidate) =>
+    c.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)) || c.email.toLowerCase().startsWith(q);
+  const contains = (c: MentionCandidate) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
+  return [...candidates.filter(starts), ...candidates.filter((c) => !starts(c) && contains(c))];
+}
+
+// Viewport position of character `index`, measured on a throwaway copy of
+// the pill layer (same box, font and wrapping as the textarea).
+function caretPoint(layer: HTMLElement | null, el: HTMLTextAreaElement, index: number): { left: number; bottom: number } {
+  const box = el.getBoundingClientRect();
+  if (!layer?.parentElement) return { left: box.left + 12, bottom: box.top + 24 };
+  const copy = layer.cloneNode(false) as HTMLElement;
+  copy.style.visibility = "hidden";
+  const text = document.createTextNode(el.value + " ");
+  copy.appendChild(text);
+  layer.parentElement.appendChild(copy);
+  copy.scrollTop = el.scrollTop;
+  const range = document.createRange();
+  range.setStart(text, index);
+  range.setEnd(text, index + 1);
+  const r = range.getBoundingClientRect();
+  copy.remove();
+  return { left: r.left, bottom: r.bottom };
+}

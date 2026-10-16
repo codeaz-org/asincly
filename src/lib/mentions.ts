@@ -73,3 +73,45 @@ export function linkAtMentions(md: string, roster: MentionCandidate[]): string {
   }
   return out + linkPlain(md.slice(last));
 }
+
+// ────────── Editor view ──────────
+// The editor shows a mention as "@Name" (styled as a pill) while the stored
+// text keeps the full link. Both directions are lossless for any name a
+// teammate is known by, so the textarea never shows "(mention:…)".
+
+const cleanName = (name: string) => name.replace(/[\[\]()]/g, "");
+
+export function toDisplay(md: string): string {
+  return md.replace(MENTION_RE, (_all, name: string) => `@${name}`);
+}
+
+export type MentionSpan = { start: number; end: number; userId: string; name: string };
+
+// Where "@Name" for a known person sits in editor text. Longest names first,
+// so "@Sam Miller" wins over a "@Sam".
+export function mentionSpans(display: string, known: Array<{ userId: string; name: string }>): MentionSpan[] {
+  const byName = new Map<string, string>();
+  for (const k of known) {
+    const n = cleanName(k.name).trim();
+    if (n && !byName.has(n)) byName.set(n, k.userId);
+  }
+  if (byName.size === 0 || !display.includes("@")) return [];
+  const names = [...byName.keys()].sort((a, b) => b.length - a.length);
+  const re = new RegExp(`(?<![\\p{L}\\p{N}_@])@(${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?![\\p{L}\\p{N}])`, "gu");
+  return [...display.matchAll(re)].map((m) => ({
+    start: m.index ?? 0,
+    end: (m.index ?? 0) + m[0].length,
+    userId: byName.get(m[1])!,
+    name: m[1],
+  }));
+}
+
+export function toMarkup(display: string, known: Array<{ userId: string; name: string }>): string {
+  let out = "";
+  let last = 0;
+  for (const s of mentionSpans(display, known)) {
+    out += display.slice(last, s.start) + formatMention(s.name, s.userId);
+    last = s.end;
+  }
+  return out + display.slice(last);
+}

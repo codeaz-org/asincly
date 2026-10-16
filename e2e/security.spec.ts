@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test";
+import { like } from "drizzle-orm";
+import { rateLimits } from "../src/db/schema";
 import { totp } from "../src/lib/totp";
-import { cleanup, newSessionFor, seedOrgWithTeam, seedUserWithSession, setOrgSecurity, signInAs } from "./fixtures";
+import { cleanup, newSessionFor, seedOrgWithTeam, seedUserWithSession, setOrgSecurity, signInAs, testDb } from "./fixtures";
+
+// The per-client sign-in limit is shared by every run from this machine;
+// start each run with a clean budget.
+test.beforeAll(async () => {
+  await testDb.delete(rateLimits).where(like(rateLimits.key, "sign-in:%"));
+});
 
 test.afterAll(async () => {
   await cleanup();
