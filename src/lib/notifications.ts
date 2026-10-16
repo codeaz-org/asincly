@@ -27,6 +27,17 @@ type Enqueue = {
   sendEmail?: boolean;
 };
 
+const ACTION_LABEL: Record<Enqueue["type"], string> = {
+  window_open: "Check in",
+  digest_ready: "Read the digest",
+  mentioned: "Open the check-in",
+  blocker_on_your_item: "See the blocker",
+  commented: "Read the reply",
+  help_offered: "See the offer",
+  blocker_resolved: "Open the check-in",
+  nudged: "Check in",
+};
+
 // Create a notification + optionally send an email. All fields flow through
 // the admin db (this is server-only) since these are peer-triggered writes.
 export async function notify(input: Enqueue): Promise<void> {
@@ -53,12 +64,12 @@ export async function notify(input: Enqueue): Promise<void> {
   const kind = emailKindFor(input.type);
   if (!u[kind]) return;
   const url = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}${input.linkPath ?? "/"}`;
-  const body = `${input.body ?? ""}\n\n${url}`.trim();
   try {
     await sendEmail({
       to: u.email,
       subject: input.title,
-      text: body,
+      text: input.body ?? "",
+      action: { label: ACTION_LABEL[input.type], url },
       unsubscribe: { url: unsubscribeUrl(input.userId, kind), what: EMAIL_KIND_LABEL[kind] },
     });
     await db

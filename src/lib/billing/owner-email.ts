@@ -18,7 +18,8 @@ export async function emailOrgOwner(orgId: string, subject: string, text: string
     await sendEmail({
       to: row.email,
       subject: `${subject} · ${row.org}`,
-      text: `${text}\n\nPlan & billing: open ${app} → Settings → Plan & billing.`,
+      text: `${text}\n\nYou'll find it under Settings → Plan & billing.`,
+      action: { label: "Open Asincly", url: app },
     });
   } catch (e) {
     console.error("[billing] owner email failed", { orgId, error: e instanceof Error ? e.message : "unknown error" });

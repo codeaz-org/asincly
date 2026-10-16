@@ -5,8 +5,11 @@ import Resend from "next-auth/providers/resend";
 import { db } from "@/db";
 import { and, eq, sql } from "drizzle-orm";
 import { accounts, organizations, sessions, users, verificationTokens } from "@/db/schema";
-import { emailFrom } from "@/lib/email";
+import { emailFrom, renderEmail } from "@/lib/email";
 import { rateLimit } from "@/lib/rate-limit";
+
+const SIGN_IN_TEXT =
+  "This link expires in 1 hour and works once.\n\nIf you didn't ask to sign in, ignore this email; nobody can use your account without this link.";
 
 const providers = [];
 
@@ -38,7 +41,8 @@ providers.push(
         from: emailFrom(),
         to: identifier,
         subject: "Sign in to Asincly",
-        text: `Sign in to Asincly:\n${url}\n\nThis link expires in 1 hour and works once.\n\nIf you didn't ask to sign in, ignore this email; nobody can use your account without this link.`,
+        text: `Sign in to Asincly:\n${url}\n\n${SIGN_IN_TEXT}`,
+        html: renderEmail({ heading: "Sign in to Asincly", text: SIGN_IN_TEXT, action: { label: "Sign in", url } }),
       });
       if (error) throw new Error(`Resend: ${error.message}`);
     },
