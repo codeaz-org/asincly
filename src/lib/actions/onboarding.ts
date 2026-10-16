@@ -6,11 +6,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
-import { members, organizations, schedules, teams, users } from "@/db/schema";
+import { invitations, members, organizations, schedules, teams, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { assertCanAddMembers, assertFeature, ensureOrgBilling, limitResult } from "@/lib/billing/entitlements";
-import { syncSeats } from "@/lib/billing/seats";
 import { isBillingEnabled } from "@/lib/billing/plans";
+import { displayName } from "@/lib/display";
+import { sendEmail } from "@/lib/email";
 import { rateLimit } from "@/lib/rate-limit";
 import { PRESET_RRULES, isValidTimeZone, type PresetKey } from "@/lib/time";
 import { customRrule, hhmm, withWindowLength } from "@/lib/validation/schedule";
@@ -121,6 +122,8 @@ export type InviteResult =
   | { ok: true; added: string[]; alreadyIn: string[]; invalid: string[] }
   | { ok: false; error: string; upgrade?: boolean };
 
+const INVITE_TTL_MS = 14 * 24 * 3600 * 1000;
+
 const InviteSchema = z.object({
   teamId: z.string().uuid(),
   raw: z.string().min(1).max(2000),
@@ -195,57 +198,71 @@ export async function inviteMembers(
       throw e;
     }
 
+    const [inviter] = await db
+      .select({ name: users.name, email: users.email, team: teams.name })
+      .from(users)
+      .innerJoin(teams, eq(teams.id, parsed.teamId))
+      .where(eq(users.id, user.id));
+    const app = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+
     const added: string[] = [];
     const alreadyIn: string[] = [];
 
     for (const email of emails) {
-      const existing = await db.select().from(users).where(eq(users.email, email));
-      const invitee =
-        existing[0] ?? (await db.insert(users).values({ email }).returning())[0];
-
       const already = await db
         .select({ id: members.id })
         .from(members)
-        .where(and(eq(members.teamId, parsed.teamId), eq(members.userId, invitee.id)));
+        .innerJoin(users, eq(users.id, members.userId))
+        .where(and(eq(members.teamId, parsed.teamId), eq(users.email, email)));
       if (already.length > 0) {
         alreadyIn.push(email);
         continue;
       }
 
+      // Nobody joins a team without saying yes: the invite waits until they
+      // sign in with this address and accept. A pending invite isn't mailed
+      // again, so re-inviting can't be used to flood an inbox.
+      const [pending] = await db
+        .select({ expiresAt: invitations.expiresAt })
+        .from(invitations)
+        .where(and(eq(invitations.teamId, parsed.teamId), eq(invitations.email, email)));
+      const fresh = !pending || pending.expiresAt < new Date();
       await db
-        .insert(members)
-        .values({ teamId: parsed.teamId, userId: invitee.id, role: parsed.role });
+        .insert(invitations)
+        .values({ teamId: parsed.teamId, email, role: parsed.role, invitedByUserId: user.id, expiresAt: new Date(Date.now() + INVITE_TTL_MS) })
+        .onConflictDoUpdate({
+          target: [invitations.teamId, invitations.email],
+          set: { role: parsed.role, invitedByUserId: user.id, expiresAt: new Date(Date.now() + INVITE_TTL_MS) },
+        });
       added.push(email);
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`[invite] added ${email} to team ${parsed.teamId}`);
+      if (fresh && inviter) {
+        const who = displayName(inviter.name, inviter.email);
+        await sendEmail({
+          to: email,
+          subject: `${who} invited you to ${inviter.team} on Asincly`,
+          text: `Asincly is where ${inviter.team} posts short async check-ins instead of meeting.\n\nSign in with ${email} to accept. The invite is open for 14 days; if you weren't expecting it, ignore this email.`,
+          action: { label: "See the invite", url: `${app}/invites` },
+        }).catch((e) => console.error("[invite] email failed", e instanceof Error ? e.message : "unknown error"));
       }
     }
 
     if (added.length > 0) {
-      // Look up orgId from the caller side (single row already fetched).
-      const [orgRow] = await db
-        .select({ orgId: teams.orgId })
-        .from(teams)
-        .where(eq(teams.id, parsed.teamId));
-      if (orgRow) {
-        await audit({
-          orgId: orgRow.orgId,
-          actorUserId: user.id,
-          action: "member.invite",
-          resourceType: "team",
-          resourceId: parsed.teamId,
-          meta: { added, alreadyIn, invalid, role: parsed.role },
-        });
-      }
-      await syncSeats(caller.orgId);
+      await audit({
+        orgId: caller.orgId,
+        actorUserId: user.id,
+        action: "member.invite",
+        resourceType: "team",
+        resourceId: parsed.teamId,
+        meta: { invited: added, alreadyIn, invalid, role: parsed.role },
+      });
     }
 
     revalidatePath(`/${caller.orgSlug}/${caller.teamSlug}`);
     return { ok: true, added, alreadyIn, invalid };
   } catch (e) {
+    // The message stays in the log: database errors carry SQL and values.
     console.error("[invite] failed", e instanceof Error ? e.message : "unknown error");
-    const msg = e instanceof Error ? e.message : "Something went wrong.";
-    return { ok: false, error: msg };
+    return { ok: false, error: "Something went wrong. Try again." };
   }
 }
 

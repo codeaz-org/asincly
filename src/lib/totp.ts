@@ -59,13 +59,19 @@ export function totp(secret: string, at: Date, digits = 6): string {
 }
 
 // Accepts the current step and one on either side (clock drift, a code
-// typed as it rolls over).
-export function verifyTotp(secret: string, code: string, at: Date): boolean {
+// typed as it rolls over). Returns the step that matched, so the caller can
+// refuse the same code a second time.
+export function matchTotpStep(secret: string, code: string, at: Date): number | null {
   const clean = code.replace(/\s/g, "");
-  if (!/^\d{6}$/.test(clean)) return false;
+  if (!/^\d{6}$/.test(clean)) return null;
   const key = base32Decode(secret);
   const step = Math.floor(at.getTime() / 1000 / STEP);
-  return [-1, 0, 1].some((d) => timingSafeEqual(Buffer.from(hotp(key, step + d)), Buffer.from(clean)));
+  const d = [-1, 0, 1].find((d) => timingSafeEqual(Buffer.from(hotp(key, step + d)), Buffer.from(clean)));
+  return d === undefined ? null : step + d;
+}
+
+export function verifyTotp(secret: string, code: string, at: Date): boolean {
+  return matchTotpStep(secret, code, at) !== null;
 }
 
 export function otpauthUri(secret: string, account: string, issuer = "Asincly"): string {

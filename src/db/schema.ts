@@ -83,6 +83,8 @@ export const userTotp = pgTable("user_totp", {
   backupCodeHashes: jsonb("backup_code_hashes").$type<string[]>().notNull().default([]),
   // Null until the first code is verified; an unconfirmed row isn't enforced.
   confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  // The 30-second step of the last code accepted: a code works once.
+  lastStep: integer("last_step"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -158,6 +160,24 @@ export const members = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("member_team_user_uq").on(t.teamId, t.userId)],
+);
+
+// An invite waits here until the invitee signs in with that email and accepts,
+// so nobody is added to a team (and given to its admins) without saying yes.
+export const invitations = pgTable(
+  "invitation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: memberRole("role").notNull().default("member"),
+    invitedByUserId: text("invited_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [uniqueIndex("invitation_team_email_uq").on(t.teamId, t.email)],
 );
 
 export const schedules = pgTable("schedule", {

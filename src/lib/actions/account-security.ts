@@ -1,7 +1,7 @@
 "use server";
 
 import { createHash } from "node:crypto";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { renderSVG } from "uqr";
@@ -10,9 +10,10 @@ import { db } from "@/db";
 import { accounts, members, organizations, sessions, teams, users, userTotp } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { decrypt, encrypt } from "@/lib/crypto";
+import { sendEmail } from "@/lib/email";
 import { rateLimit } from "@/lib/rate-limit";
 import { requireUser, requireUserBeforeMfa } from "@/lib/session";
-import { generateBackupCodes, generateSecret, hashBackupCode, otpauthUri, verifyTotp } from "@/lib/totp";
+import { generateBackupCodes, generateSecret, hashBackupCode, matchTotpStep, otpauthUri } from "@/lib/totp";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -21,6 +22,25 @@ const Code = z.string().trim().min(6).max(12);
 // Sessions are listed and revoked by a hash of their token: the token itself
 // is a bearer credential and never goes to the browser.
 const sessionId = (token: string) => createHash("sha256").update(token).digest("hex").slice(0, 24);
+
+// A code is spent once it's used: the step is recorded atomically, so a code
+// someone watched you type (or two requests racing) can't be used again.
+async function spendTotp(userId: string, secretCipher: string, code: string): Promise<boolean> {
+  const step = matchTotpStep(decrypt(secretCipher, `totp:${userId}`), code, new Date());
+  if (step === null) return false;
+  const spent = await db
+    .update(userTotp)
+    .set({ lastStep: step })
+    .where(and(eq(userTotp.userId, userId), or(isNull(userTotp.lastStep), lt(userTotp.lastStep, step))))
+    .returning({ userId: userTotp.userId });
+  return spent.length > 0;
+}
+
+// Beyond the 15-minute limit: 30 wrong-or-right tries a day, so guessing a
+// 6-digit code would take decades instead of months.
+async function underDailyCap(userId: string): Promise<boolean> {
+  return (await rateLimit(`totp-day:${userId}`, 30, 24 * 3600_000)).allowed;
+}
 
 async function confirmedTotp(userId: string) {
   const [row] = await db.select().from(userTotp).where(eq(userTotp.userId, userId));
@@ -36,7 +56,7 @@ export async function startTotpEnrolment(): Promise<Result<{ secret: string; svg
   await db
     .insert(userTotp)
     .values({ userId: user.id, secretCipher: encrypt(secret, `totp:${user.id}`) })
-    .onConflictDoUpdate({ target: userTotp.userId, set: { secretCipher: encrypt(secret, `totp:${user.id}`), confirmedAt: null, backupCodeHashes: [] } });
+    .onConflictDoUpdate({ target: userTotp.userId, set: { secretCipher: encrypt(secret, `totp:${user.id}`), confirmedAt: null, backupCodeHashes: [], lastStep: null } });
   return { ok: true, secret, svg: renderSVG(otpauthUri(secret, user.email), { border: 1 }) };
 }
 
@@ -49,7 +69,7 @@ export async function confirmTotpEnrolment(code: unknown): Promise<Result<{ back
   if (!(await rateLimit(`totp-confirm:${user.id}`, 10, 15 * 60_000)).allowed) return { ok: false, error: "Too many tries — wait a few minutes" };
   const [row] = await db.select().from(userTotp).where(eq(userTotp.userId, user.id));
   if (!row || row.confirmedAt) return { ok: false, error: "Start again" };
-  if (!verifyTotp(decrypt(row.secretCipher, `totp:${user.id}`), parsed.data, new Date())) return { ok: false, error: "That code didn't match — check the time on your phone" };
+  if (!(await spendTotp(user.id, row.secretCipher, parsed.data))) return { ok: false, error: "That code didn't match — check the time on your phone" };
 
   const backupCodes = generateBackupCodes();
   const now = new Date();
@@ -70,20 +90,21 @@ export async function verifySecondFactor(_prev: unknown, formData: FormData): Pr
   const parsed = Code.safeParse(formData.get("code"));
   if (!parsed.success) return { ok: false, error: "Enter a 6-digit code or a backup code" };
   if (!(await rateLimit(`totp-verify:${user.id}`, 10, 15 * 60_000)).allowed) return { ok: false, error: "Too many tries — wait a few minutes" };
+  if (!(await underDailyCap(user.id))) return { ok: false, error: "Too many tries today — use a backup code tomorrow, or ask your organization's owner" };
   const row = await confirmedTotp(user.id);
   if (!row) redirect("/");
 
-  let passed = verifyTotp(decrypt(row.secretCipher, `totp:${user.id}`), parsed.data, new Date());
+  let passed = await spendTotp(user.id, row.secretCipher, parsed.data);
   if (!passed) {
-    // A backup code works once.
+    // A backup code works once: removed in the same statement that checks
+    // it, so two requests can't both use it or bring a used one back.
     const h = hashBackupCode(parsed.data);
-    if (row.backupCodeHashes.includes(h)) {
-      await db
-        .update(userTotp)
-        .set({ backupCodeHashes: row.backupCodeHashes.filter((x) => x !== h) })
-        .where(eq(userTotp.userId, user.id));
-      passed = true;
-    }
+    const used = await db
+      .update(userTotp)
+      .set({ backupCodeHashes: sql`${userTotp.backupCodeHashes} - ${h}::text` })
+      .where(and(eq(userTotp.userId, user.id), sql`${userTotp.backupCodeHashes} @> ${JSON.stringify([h])}::jsonb`))
+      .returning({ userId: userTotp.userId });
+    passed = used.length > 0;
   }
   if (!passed) return { ok: false, error: "That code didn't work" };
   await db.update(sessions).set({ mfaAt: new Date() }).where(eq(sessions.sessionToken, user.sessionToken));
@@ -97,9 +118,10 @@ export async function disableTotp(code: unknown): Promise<Result> {
   const parsed = Code.safeParse(code);
   if (!parsed.success) return { ok: false, error: "Enter a current code to turn it off" };
   if (!(await rateLimit(`totp-disable:${user.id}`, 10, 15 * 60_000)).allowed) return { ok: false, error: "Too many tries — wait a few minutes" };
+  if (!(await underDailyCap(user.id))) return { ok: false, error: "Too many tries today — try again tomorrow" };
   const row = await confirmedTotp(user.id);
   if (!row) return { ok: true };
-  if (!verifyTotp(decrypt(row.secretCipher, `totp:${user.id}`), parsed.data, new Date())) return { ok: false, error: "That code didn't match" };
+  if (!(await spendTotp(user.id, row.secretCipher, parsed.data))) return { ok: false, error: "That code didn't match" };
   const [required] = await db
     .select({ name: organizations.name })
     .from(members)
@@ -172,7 +194,7 @@ export async function revokeOtherSessions(): Promise<Result> {
 
 async function requireOrgOwner(orgId: string, userId: string) {
   const [org] = await db
-    .select({ id: organizations.id, slug: organizations.slug })
+    .select({ id: organizations.id, slug: organizations.slug, name: organizations.name })
     .from(organizations)
     .where(and(eq(organizations.id, orgId), eq(organizations.ownerUserId, userId)));
   return org ?? null;
@@ -217,6 +239,16 @@ export async function resetMemberTotp(input: unknown): Promise<Result> {
     .limit(1);
   if (!target) return { ok: false, error: "Nobody with that email is in this organization" };
   if (target.userId === user.id) return { ok: false, error: "Use a backup code, or ask the new owner after a transfer" };
+  // 2FA belongs to the person, not the org: an owner can only reset someone
+  // whose every team is in this org, or any owner who got them onto a team
+  // could strip anyone's second factor.
+  const [elsewhere] = await db
+    .select({ id: members.id })
+    .from(members)
+    .innerJoin(teams, eq(teams.id, members.teamId))
+    .where(and(eq(members.userId, target.userId), ne(teams.orgId, org.id)))
+    .limit(1);
+  if (elsewhere) return { ok: false, error: "They're in another organization too, so only they can reset it (with a backup code)" };
   await db.delete(userTotp).where(eq(userTotp.userId, target.userId));
   await db.delete(sessions).where(eq(sessions.userId, target.userId));
   await audit({
@@ -226,6 +258,11 @@ export async function resetMemberTotp(input: unknown): Promise<Result> {
     resourceType: "user",
     resourceId: target.userId,
   });
+  await sendEmail({
+    to: parsed.data.email,
+    subject: "Your two-factor sign-in was reset",
+    text: `The owner of ${org.name} turned off two-factor for your Asincly account and signed you out everywhere. Sign in again and set it up from your account page.\n\nIf you didn't ask for this, contact your organization's owner straight away.`,
+  }).catch((e) => console.error("[2fa-reset] email failed", e instanceof Error ? e.message : "unknown error"));
   return { ok: true };
 }
 

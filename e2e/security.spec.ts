@@ -21,7 +21,8 @@ test("admin 2FA: required by the org → enrol → new sign-in is challenged →
 
   await page.getByRole("button", { name: /set up two-factor/i }).click();
   const key = (await page.locator("code").innerText()).replace(/\s/g, "");
-  await page.getByPlaceholder("123456").fill(totp(key, new Date()));
+  const enrolCode = totp(key, new Date());
+  await page.getByPlaceholder("123456").fill(enrolCode);
   await page.getByRole("button", { name: /turn on/i }).click();
   await expect(page.locator("ul li")).toHaveCount(10);
   const codes = await page.locator("ul li").allInnerTexts();
@@ -52,6 +53,14 @@ test("admin 2FA: required by the org → enrol → new sign-in is challenged →
   await page3.getByPlaceholder(/backup code/i).fill(codes[0]);
   await page3.getByRole("button", { name: /continue/i }).click();
   await expect(page3.getByText(/that code didn't work/i)).toBeVisible();
+  // An authenticator code works once, too.
+  await page3.goto("/account/2fa");
+  await page3.getByPlaceholder(/backup code/i).fill(enrolCode);
+  await page3.getByRole("button", { name: /continue/i }).click();
+  await expect(page3.getByText(/that code didn't work/i)).toBeVisible();
+  // Nothing else is reachable before the second factor, Slack connect included.
+  await page3.goto(`/api/slack/install?teamId=${team.id}`);
+  await page3.waitForURL(/\/account\/2fa/);
 
   // Signing the second browser out from the first.
   await page.goto("/account/security");

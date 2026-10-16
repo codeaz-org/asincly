@@ -41,6 +41,9 @@ const eslintConfig = defineConfig([
       // Admin flows that create users (invites), orgs (onboarding) or delete
       // across tables by cascade; each checks the caller's role first.
       "src/lib/actions/onboarding.ts",
+      // Invites live in a table the app role can't read; matched by the
+      // signed-in email.
+      "src/lib/actions/invitations.ts",
       "src/lib/actions/team-admin.ts",
       "src/lib/actions/schedule.ts",
       "src/lib/actions/social.ts",

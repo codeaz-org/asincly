@@ -74,7 +74,7 @@ export function InviteForm({
       <p className="text-xs text-soft">
         {role === "guest"
           ? "Guests can read check-ins, react and reply. They don't check in and don't count as members."
-          : "Separate with commas or spaces. They sign in with that email and land straight in this team."}
+          : "Separate with commas or spaces. They get an email and join once they sign in with that address and accept."}
         {seatNote && <span className="text-faint"> · {seatNote}</span>}
       </p>
       {state && <Result state={state} billingHref={billingHref} />}
@@ -108,7 +108,7 @@ function Result({ state, billingHref }: { state: InviteResult; billingHref: stri
     );
   }
   const bits: string[] = [];
-  if (state.added.length) bits.push(`Added ${state.added.length}`);
+  if (state.added.length) bits.push(`Invited ${state.added.length}`);
   if (state.alreadyIn.length) bits.push(`${state.alreadyIn.length} already in the team`);
   if (state.invalid.length) bits.push(`${state.invalid.length} invalid`);
   if (bits.length === 0) return null;

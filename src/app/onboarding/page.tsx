@@ -1,17 +1,20 @@
 import { redirect } from "next/navigation";
 import { OnboardingWizard } from "@/components/onboarding/wizard";
 import { TzDetector } from "@/components/tz-detector";
+import { listMyInvitations } from "@/lib/actions/invitations";
 import { getMemberships, requireUser } from "@/lib/session";
 
 export const metadata = { title: "Set up your team" };
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({ searchParams }: { searchParams: Promise<{ fresh?: string }> }) {
   const user = await requireUser();
   const memberships = await getMemberships(user.id);
   if (memberships.length > 0) {
     const m = memberships[0];
     redirect(`/${m.orgSlug}/${m.teamSlug}`);
   }
+  // Invited people join a team rather than set one up.
+  if (!(await searchParams).fresh && (await listMyInvitations()).length > 0) redirect("/invites");
 
   return (
     <>
