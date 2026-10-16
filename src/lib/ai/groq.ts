@@ -21,6 +21,14 @@ async function errorCode(res: Response): Promise<string> {
   }
 }
 
+// The JSON object in a reply, ignoring any prose or code fence around it.
+export function jsonObjectIn(text: string): unknown {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end < start) throw new Error("no JSON object");
+  return JSON.parse(text.slice(start, end + 1));
+}
+
 function key(): string {
   const k = process.env.GROQ_API_KEY;
   if (!k) throw new Error("GROQ_API_KEY is not set");
@@ -176,11 +184,15 @@ export const groqDrafter: Drafter = {
         signal: AbortSignal.timeout(60_000),
         body: JSON.stringify({
           model,
-          response_format: { type: "json_object" },
           temperature: 0.2,
           max_tokens: 1500,
           // gpt-oss reasons before answering; keep that short so the draft fits.
-          ...(model.startsWith("openai/gpt-oss") && { reasoning_effort: "low", max_tokens: 4000 }),
+          // Groq's JSON mode rejects its replies (json_validate_failed) more
+          // often than they're actually wrong, so it answers freely and the
+          // object is pulled out and validated here.
+          ...(model.startsWith("openai/gpt-oss")
+            ? { reasoning_effort: "low", max_tokens: 4000 }
+            : { response_format: { type: "json_object" } }),
           messages: [
             { role: "system", content: DRAFT_PROMPT },
             { role: "user", content: payload },
@@ -192,10 +204,15 @@ export const groqDrafter: Drafter = {
         attempt--;
         continue;
       }
-      if (!res.ok) throw new Error(`groq draft ${res.status}${await errorCode(res)} (${model})`);
+      if (!res.ok) {
+        const code = await errorCode(res);
+        // The model's JSON didn't validate: the same as a bad draft, retry once.
+        if (code.includes("json_validate_failed")) continue;
+        throw new Error(`groq draft ${res.status}${code} (${model})`);
+      }
       const j = (await res.json()) as { choices: Array<{ message: { content: string } }> };
       try {
-        const parsed = CheckInDraftSchema.safeParse(JSON.parse(j.choices[0]?.message?.content ?? "{}"));
+        const parsed = CheckInDraftSchema.safeParse(jsonObjectIn(j.choices[0]?.message?.content ?? "{}"));
         if (parsed.success) return parsed.data;
       } catch {
         // Invalid JSON: retry once.

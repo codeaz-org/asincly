@@ -73,3 +73,27 @@ describe("Groq drafter", () => {
     await expect(groqDrafter.draft(input)).rejects.toThrow("groq draft 429 rate_limit_exceeded (some/model)");
   });
 });
+
+describe("draft replies", () => {
+  it("finds the JSON object inside prose or a code fence", async () => {
+    const { jsonObjectIn } = await import("./groq");
+    expect(jsonObjectIn('Here you go:\n```json\n{"bullets":["a"]}\n```')).toEqual({ bullets: ["a"] });
+    expect(() => jsonObjectIn("no json here")).toThrow();
+  });
+
+  it("retries once when Groq rejects the model's JSON", async () => {
+    vi.stubEnv("GROQ_API_KEY", "gsk_test");
+    vi.stubEnv("GROQ_CHAT_MODEL", "openai/gpt-oss-120b");
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => {
+      calls++;
+      if (calls === 1) return new Response(JSON.stringify({ error: { code: "json_validate_failed" } }), { status: 400 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"today":[{"text":"Ship it"}]}' } }] }));
+    });
+    const { groqDrafter } = await import("./groq");
+    const draft = await groqDrafter.draft({ previous: [], openBlockers: [], roster: [], typed: { yesterday: "", today: "", blockers: "" }, authorTz: "UTC", hints: {}, notes: "", transcript: "x" });
+    expect(calls).toBe(2);
+    expect(draft.today[0].text).toBe("Ship it");
+    vi.unstubAllGlobals();
+  });
+});
