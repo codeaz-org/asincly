@@ -52,6 +52,9 @@ export const accounts = pgTable(
     scope: text("scope"),
     id_token: text("id_token"),
     session_state: text("session_state"),
+    // Google Workspace domain of this account at its last sign-in (the
+    // `hd` claim); null for consumer Google accounts. SSO needs it.
+    hd: text("hd"),
   },
   (t) => [primaryKey({ columns: [t.provider, t.providerAccountId] })],
 );

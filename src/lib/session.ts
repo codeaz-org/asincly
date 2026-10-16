@@ -1,3 +1,4 @@
+import { clientIp } from "@/lib/rate-limit";
 import { and, eq, sql } from "drizzle-orm";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -88,8 +89,8 @@ const currentSession = cache(async () => {
 // The client's network, not their address: enough to tell "office" from
 // "somewhere else" on the sessions page.
 function ipPrefix(h: Headers): string | null {
-  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim();
-  if (!ip) return null;
+  const ip = clientIp(h);
+  if (ip === "unknown") return null;
   if (ip === "::1" || ip.startsWith("127.")) return "localhost";
   if (ip.includes(".")) return ip.split(".").slice(0, 3).join(".") + ".0";
   return ip.split(":").slice(0, 4).join(":") + "::";

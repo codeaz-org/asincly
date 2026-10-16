@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { MailCheck } from "lucide-react";
 import { auth, signIn } from "@/auth";
@@ -7,7 +6,6 @@ import { LogoMark } from "@/components/brand/mark";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
-import { rateLimit } from "@/lib/rate-limit";
 
 export const metadata = { title: "Sign in" };
 
@@ -78,7 +76,7 @@ export default async function SignInPage({
                 <div className="space-y-2">
                   <h1 className="display text-4xl text-ink">Check your inbox.</h1>
                   <p className="text-soft leading-relaxed">
-                    We sent a sign-in link. It works once and expires in 24 hours — you can close this tab.
+                    We sent a sign-in link. It works once and expires in an hour — you can close this tab.
                   </p>
                 </div>
                 <Link href="/sign-in" className="inline-block text-sm text-soft hover:text-ink underline-offset-4 hover:underline">
@@ -104,11 +102,7 @@ export default async function SignInPage({
                 <form
                   action={async (formData) => {
                     "use server";
-                    // Per client address, on top of the per-inbox cap in auth.ts.
-                    const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-                    if (!(await rateLimit(`sign-in:${ip}`, 20, 60 * 60 * 1000)).allowed) {
-                      redirect("/sign-in?error=RateLimited");
-                    }
+                    // Limits per inbox and per client address are in auth.ts.
                     await signIn("resend", { email: formData.get("email"), redirectTo: "/" });
                   }}
                   className="space-y-3"

@@ -6,7 +6,8 @@ import { db } from "@/db";
 import { and, eq, sql } from "drizzle-orm";
 import { accounts, organizations, sessions, users, verificationTokens } from "@/db/schema";
 import { emailFrom, renderEmail } from "@/lib/email";
-import { rateLimit } from "@/lib/rate-limit";
+import { headers } from "next/headers";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 const SIGN_IN_TEXT =
   "This link expires in 1 hour and works once.\n\nIf you didn't ask to sign in, ignore this email; nobody can use your account without this link.";
@@ -61,6 +62,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // Expired/invalid magic links land back on our sign-in page instead of
   // Auth.js's unstyled default error screen.
   pages: { signIn: "/sign-in", error: "/sign-in", verifyRequest: "/sign-in?sent=1" },
+  events: {
+    // Which Workspace domain vouches for this Google account, refreshed each
+    // sign-in: claiming a domain for SSO needs proof the owner is managed by it.
+    async signIn({ account, profile }) {
+      if (account?.provider !== "google") return;
+      const hd = typeof profile?.hd === "string" ? profile.hd.toLowerCase() : null;
+      await db
+        .update(accounts)
+        .set({ hd })
+        .where(and(eq(accounts.provider, "google"), eq(accounts.providerAccountId, account.providerAccountId)));
+    },
+  },
   callbacks: {
     async signIn({ user, account, profile, email: emailFlow }) {
       const email = (user.email ?? "").toLowerCase();
@@ -69,8 +82,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // sign-in form. Caps mail to one inbox (and the Resend bill). Checked
       // here, not in sendVerificationRequest: Auth.js reports anything thrown
       // there as "Configuration".
-      if (emailFlow?.verificationRequest && !(await rateLimit(`magic-link:${email}`, 5, 60 * 60 * 1000)).allowed) {
-        return "/sign-in?error=RateLimited";
+      if (emailFlow?.verificationRequest) {
+        const ip = clientIp(await headers());
+        const perInbox = await rateLimit(`magic-link:${email}`, 5, 60 * 60 * 1000);
+        const perClient = await rateLimit(`sign-in:${ip}`, 20, 60 * 60 * 1000);
+        if (!perInbox.allowed || !perClient.allowed) return "/sign-in?error=RateLimited";
       }
       if (account?.provider === "google" && profile?.email_verified !== true) return "/sign-in?error=AccessDenied";
       // An org that requires SSO for its domain: no magic links, and only a

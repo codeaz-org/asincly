@@ -225,6 +225,13 @@
       "when": 1792159291527,
       "tag": "0031_security_fixes",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792159843954,
+      "tag": "0032_google_workspace_domain",
+      "breakpoints": true
     }
   ]
 }

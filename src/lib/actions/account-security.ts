@@ -276,8 +276,9 @@ const PUBLIC_DOMAINS = new Set([
 
 // SSO for the org's email domain: people at that domain sign in with a Google
 // account managed by it, never a magic link. The domain must be the owner's
-// own, and the owner must already sign in with Google, so turning it on
-// can't lock the owner out.
+// own, and the owner must already sign in with a Google account that domain
+// manages, which proves the domain and means turning it on can't lock the
+// owner out.
 export async function setSsoPolicy(input: unknown): Promise<Result> {
   const user = await requireUser();
   const parsed = z
@@ -298,17 +299,32 @@ export async function setSsoPolicy(input: unknown): Promise<Result> {
     }
     const domain = user.email.toLowerCase().split("@")[1] ?? "";
     if (PUBLIC_DOMAINS.has(domain)) return { ok: false, error: `${domain} is a public email provider; SSO needs your company's own domain` };
+    // Proof of the domain: the owner's Google account is managed by that
+    // domain's Workspace (Google's `hd` claim). An email address alone isn't
+    // proof; anyone can make a consumer Google account for their work address
+    // and would otherwise lock every colleague out.
     const [google] = await db
       .select({ id: accounts.providerAccountId })
       .from(accounts)
-      .where(and(eq(accounts.userId, user.id), eq(accounts.provider, "google")))
+      .where(and(eq(accounts.userId, user.id), eq(accounts.provider, "google"), eq(accounts.hd, domain)))
       .limit(1);
-    if (!google) return { ok: false, error: "Sign in with Google once first, so you can't lock yourself out" };
+    if (!google) return { ok: false, error: `Sign in with your ${domain} Google Workspace account first, so we know the domain is yours` };
     try {
       await db.update(organizations).set({ requireSso: true, ssoDomain: domain }).where(eq(organizations.id, org.id));
     } catch {
       return { ok: false, error: `${domain} is already claimed by another organization` };
     }
+    // Sessions that came from magic links end now, not when they expire.
+    // The owner's own session stays.
+    const { sessionToken } = await requireUserBeforeMfa();
+    await db
+      .delete(sessions)
+      .where(
+        and(
+          ne(sessions.sessionToken, sessionToken),
+          inArray(sessions.userId, db.select({ id: users.id }).from(users).where(sql`split_part(lower(${users.email}), '@', 2) = ${domain}`)),
+        ),
+      );
   }
   await audit({
     orgId: org.id,

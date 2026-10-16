@@ -32,6 +32,13 @@ export async function rateLimit(key: string, limit: number, windowMs: number): P
   };
 }
 
+// The address the request came from, for per-client limits. The rightmost
+// X-Forwarded-For entry is the one our own proxy added (Vercel replaces the
+// header; Caddy and nginx append), so a client can't pick it by sending one.
+export function clientIp(h: Headers): string {
+  return h.get("x-forwarded-for")?.split(",").pop()?.trim() || "unknown";
+}
+
 // The longest window any caller uses is a day; anything older is dead.
 export async function purgeRateLimits(now: Date): Promise<number> {
   const gone = await db
