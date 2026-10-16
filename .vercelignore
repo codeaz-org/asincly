@@ -1,0 +1,3 @@
+# `vercel deploy` from a laptop uploads the working tree; never let a local
+# .env fill in production settings that are missing on Vercel.
+.env*
