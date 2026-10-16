@@ -38,9 +38,10 @@ const ACTION_LABEL: Record<Enqueue["type"], string> = {
   nudged: "Check in",
 };
 
-// Create a notification + optionally send an email. All fields flow through
+// Create a notification + optionally send an email. False when it already
+// existed (see notification_once_per_occurrence_uq). All fields flow through
 // the admin db (this is server-only) since these are peer-triggered writes.
-export async function notify(input: Enqueue): Promise<void> {
+export async function notify(input: Enqueue): Promise<boolean> {
   const [inserted] = await db
     .insert(notifications)
     .values({
@@ -52,17 +53,21 @@ export async function notify(input: Enqueue): Promise<void> {
       linkPath: input.linkPath,
       data: input.data,
     })
+    // A reminder or digest already sent for this occurrence (two cron runs
+    // overlapping) is a no-op, email and all.
+    .onConflictDoNothing()
     .returning();
+  if (!inserted) return false;
 
-  if (input.sendEmail === false) return;
+  if (input.sendEmail === false) return true;
 
   const [u] = await db
     .select({ email: users.email, reminders: users.emailReminders, activity: users.emailActivity })
     .from(users)
     .where(eq(users.id, input.userId));
-  if (!u) return;
+  if (!u) return true;
   const kind = emailKindFor(input.type);
-  if (!u[kind]) return;
+  if (!u[kind]) return true;
   const url = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}${input.linkPath ?? "/"}`;
   try {
     await sendEmail({
@@ -80,6 +85,7 @@ export async function notify(input: Enqueue): Promise<void> {
     // Message only: SDK errors can carry the serialized request, email text included.
     console.error("[notify:email]", e instanceof Error ? e.message : "unknown error");
   }
+  return true;
 }
 
 // Fire notifications for people mentioned in a submitted check-in.

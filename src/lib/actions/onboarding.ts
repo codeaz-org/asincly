@@ -52,6 +52,9 @@ export async function completeOnboarding(formData: FormData) {
   const user = await requireUser();
   const rl = await rateLimit(`onboarding:${user.id}`, 5, 60 * 60 * 1000);
   if (!rl.allowed) throw new Error("Too many onboarding attempts — try again later.");
+  // Each new org gets a Pro trial; owning a handful is plenty for anyone.
+  const owned = await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.ownerUserId, user.id));
+  if (owned.length >= 10) throw new Error("You already own 10 organizations. Delete one to create another.");
   const parsed = CompleteSchema.parse({
     yourName: formData.get("yourName"),
     orgName: formData.get("orgName"),

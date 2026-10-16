@@ -59,7 +59,10 @@ export async function GET(req: Request) {
     .from(schedules)
     .innerJoin(teams, eq(teams.id, schedules.teamId))
     .innerJoin(organizations, eq(organizations.id, teams.orgId))
-    .where(eq(schedules.active, true));
+    .where(eq(schedules.active, true))
+    // Random order: if a run ever hits maxDuration, the schedules it didn't
+    // reach are different ones each time rather than the same teams always.
+    .orderBy(sql`random()`);
 
   // One schedule failing (a bad rule, a member with a broken tz) must not
   // stop reminders for every other tenant.
@@ -170,7 +173,7 @@ async function tickSchedule(s: TickSchedule, now: Date, stats: Stats, appUrl: st
       .limit(1);
     if (alreadyForThis) continue;
 
-    await notify({
+    const fresh = await notify({
       userId: m.userId,
       teamId: s.teamId,
       type: "window_open",
@@ -179,6 +182,7 @@ async function tickSchedule(s: TickSchedule, now: Date, stats: Stats, appUrl: st
       linkPath: `/${s.orgSlug}/${s.teamSlug}/check-in`,
       data: { occurrenceId },
     });
+    if (!fresh) continue;
     stats.windowOpens++;
     const closesAt = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: m.tz }).format(w.closeAt);
     if (
@@ -245,8 +249,9 @@ async function tickSchedule(s: TickSchedule, now: Date, stats: Stats, appUrl: st
     if (alreadySent) continue;
 
     const linkPath = `/${s.orgSlug}/${s.teamSlug}`;
+    let fresh = false;
     for (const m of everyone) {
-      await notify({
+      const created = await notify({
         userId: m.userId,
         teamId: s.teamId,
         type: "digest_ready",
@@ -259,7 +264,10 @@ async function tickSchedule(s: TickSchedule, now: Date, stats: Stats, appUrl: st
         // (mentioned, blocker_on_your_item, window_open).
         sendEmail: false,
       });
+      fresh ||= created;
     }
+    // Another run got here first: it posts to Slack, not this one.
+    if (!fresh) continue;
     stats.digests++;
     if (
       await postDigestToSlack({

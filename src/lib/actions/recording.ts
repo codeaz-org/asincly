@@ -22,6 +22,9 @@ import { historyCutoff } from "@/lib/billing/plans";
 import { localDate } from "@/lib/time";
 import { presignedGetUrl, presignedPutUrl } from "@/lib/s3";
 
+// Ids arrive from the browser like any other input.
+const Id = z.string().uuid();
+
 // Only what the recorder produces: webm (Chrome/Firefox), mp4 (Safari), the
 // audio-only track for transcription and the jpeg poster frame. Anything else
 // never gets a signed PUT.
@@ -245,6 +248,7 @@ export async function getRecordingDraft(input: unknown): Promise<DraftStatus> {
 }
 
 export async function deleteRecording(recordingId: string) {
+  recordingId = Id.parse(recordingId);
   const user = await requireUser();
   const id = z.string().uuid().parse(recordingId);
   const [rec] = await withUser(user.id, (tx) =>

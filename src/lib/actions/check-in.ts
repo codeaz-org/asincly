@@ -14,6 +14,9 @@ import { requireUser } from "@/lib/session";
 import { localDate, nextOccurrenceDate, occursOn } from "@/lib/time";
 import { VideoSkipSchema } from "@/lib/validation/social";
 
+// Ids arrive from the browser like any other input.
+const Id = z.string().uuid();
+
 // Get (or lazily create) today's occurrence for the primary active schedule
 // of `teamId`, computed in the *caller's* tz. Returns the occurrence id +
 // their existing check-in row if any (also lazily created as a draft).
@@ -22,6 +25,8 @@ import { VideoSkipSchema } from "@/lib/validation/social";
 // `offDay`. Creating an occurrence there would put a day nobody was asked
 // about into the feed and make the digest chase absent check-ins.
 export async function getOrCreateTodayContext(teamId: string, scheduleId?: string) {
+  teamId = Id.parse(teamId);
+  scheduleId = Id.optional().parse(scheduleId);
   const user = await requireUser();
   return withUser(user.id, async (tx) => {
     const [membership] = await tx
@@ -240,6 +245,7 @@ export async function submitCheckIn(input: unknown): Promise<SubmitResult> {
 
 // Takes a sent check-in back to draft, out of teammates' feeds.
 export async function reopenCheckIn(checkInId: string) {
+  checkInId = Id.parse(checkInId);
   const user = await requireUser();
   const id = z.string().uuid().parse(checkInId);
   const ctx = await authorCheckIn(id, user.id);

@@ -7,16 +7,19 @@ import { z } from "zod";
 import { db } from "@/db";
 import { checkIns, members, occurrences, organizations, recordings, schedules, teams, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
-import { assertCanAddMembers, assertCanCreateTeam, assertFeature, limitResult } from "@/lib/billing/entitlements";
+import { assertCanAddMembers, assertCanCreateTeam, assertFeature, countTeams, limitResult } from "@/lib/billing/entitlements";
 import { cancelSubscriptionForDeletedOrg, syncSeats } from "@/lib/billing/seats";
 import { deleteRecordingObjects, recordingKeys } from "@/lib/recording-objects";
 import { revokeSlackFor } from "@/lib/slack/notify";
 import { TeamRulesSchema } from "@/lib/validation/social";
 import { requireUser } from "@/lib/session";
 
+// Ids arrive from the browser like any other input.
+const Id = z.string().uuid();
+
 async function membershipOf(teamId: string, userId: string) {
   const [row] = await db
-    .select({ role: members.role, orgId: teams.orgId, orgSlug: organizations.slug, teamSlug: teams.slug })
+    .select({ role: members.role, orgId: teams.orgId, orgSlug: organizations.slug, teamSlug: teams.slug, orgOwnerId: organizations.ownerUserId })
     .from(members)
     .innerJoin(teams, eq(teams.id, members.teamId))
     .innerJoin(organizations, eq(organizations.id, teams.orgId))
@@ -54,6 +57,7 @@ function checkInsWhere(where: SQL) {
 
 // Admins remove anyone below owner; anyone can remove themselves (leave).
 export async function removeMember(memberId: string) {
+  memberId = Id.parse(memberId);
   const user = await requireUser();
   const [target] = await db
     .select({ id: members.id, teamId: members.teamId, userId: members.userId, role: members.role })
@@ -67,6 +71,9 @@ export async function removeMember(memberId: string) {
     : await requireAdmin(target.teamId, user.id);
   if (!ctx) throw new Error("Not a member of this team");
   if (target.role === "owner") throw new Error("The owner can't be removed. Transfer or delete the team.");
+  // The organization's owner runs billing, SSO and deletion; a team admin
+  // can't push them out of the teams they pay for.
+  if (!self && target.userId === ctx.orgOwnerId) throw new Error("The organization's owner can't be removed by an admin.");
 
   await db.delete(members).where(eq(members.id, memberId));
   await audit({
@@ -211,11 +218,14 @@ export async function transferOrgOwnership(input: unknown): Promise<RoleResult> 
 // ────────── Teams ──────────
 
 const TeamNameSchema = z.string().min(1).max(80);
+const MAX_TEAMS_PER_ORG = 50;
+const MAX_SCHEDULES_PER_TEAM = 10;
 
 // Owners and admins of a team in the org can spin up a new team; they become
 // its owner and get a default weekday schedule so the team works immediately.
 // Members and guests can't: owning a team grants invites, retention and export.
 export async function createTeam(orgId: string, formData: FormData) {
+  orgId = Id.parse(orgId);
   const user = await requireUser();
   const name = TeamNameSchema.parse(formData.get("name"));
 
@@ -228,6 +238,9 @@ export async function createTeam(orgId: string, formData: FormData) {
     );
   if (!callerRow) throw new Error("Only team owners and admins can create teams");
   await assertCanCreateTeam(orgId);
+  // On every plan, trials included: each team adds work to the shared
+  // 5-minute reminder run, so one org can't flood it.
+  if ((await countTeams(orgId)) >= MAX_TEAMS_PER_ORG) throw new Error(`An organization can have up to ${MAX_TEAMS_PER_ORG} teams.`);
 
   const { slugify } = await import("@/lib/slug");
   const base = slugify(name);
@@ -268,6 +281,7 @@ export async function createTeam(orgId: string, formData: FormData) {
 }
 
 export async function renameTeam(teamId: string, formData: FormData) {
+  teamId = Id.parse(teamId);
   const user = await requireUser();
   const name = TeamNameSchema.parse(formData.get("name"));
   const ctx = await requireAdmin(teamId, user.id);
@@ -285,6 +299,7 @@ export async function renameTeam(teamId: string, formData: FormData) {
 
 // Owner-only. The last team in an org can't be deleted (delete the org instead).
 export async function deleteTeam(teamId: string) {
+  teamId = Id.parse(teamId);
   const user = await requireUser();
   const ctx = await requireOwner(teamId, user.id);
   const siblings = await db
@@ -314,10 +329,12 @@ export async function deleteTeam(teamId: string) {
 const HHMM = /^\d{2}:\d{2}$/;
 
 export async function createSchedule(teamId: string, formData: FormData) {
+  teamId = Id.parse(teamId);
   const user = await requireUser();
   const ctx = await requireAdmin(teamId, user.id);
   const existing = await db.select({ id: schedules.id }).from(schedules).where(eq(schedules.teamId, teamId));
   if (existing.length > 0) await assertFeature(ctx.orgId, "multipleSchedules");
+  if (existing.length >= MAX_SCHEDULES_PER_TEAM) throw new Error(`A team can run up to ${MAX_SCHEDULES_PER_TEAM} check-ins.`);
   const parsed = z
     .object({
       name: z.string().min(1).max(80),
@@ -351,6 +368,7 @@ export async function createSchedule(teamId: string, formData: FormData) {
 }
 
 export async function deleteSchedule(scheduleId: string) {
+  scheduleId = Id.parse(scheduleId);
   const user = await requireUser();
   const [sched] = await db
     .select({ id: schedules.id, teamId: schedules.teamId })
@@ -452,6 +470,7 @@ export async function setTeamAi(input: unknown): Promise<{ ok: true } | { ok: fa
 // enumerated after the row is gone, so we clean by scanning the bucket
 // prefix — Phase 5+ once we have a lot of teams).
 export async function deleteOrg(orgId: string) {
+  orgId = Id.parse(orgId);
   const user = await requireUser();
   const [org] = await db
     .select({ id: organizations.id })
