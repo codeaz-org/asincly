@@ -14,7 +14,7 @@ import { decrypt } from "@/lib/crypto";
 import { displayName } from "@/lib/display";
 import { composeDraft, type ComposedDraft } from "@/lib/draft";
 import { getEntitlements } from "@/lib/billing/entitlements";
-import { QUOTA_EXCEEDED, processRecording } from "@/lib/process-recording";
+import { MAX_TRANSCRIBE_BYTES, QUOTA_EXCEEDED, processRecording } from "@/lib/process-recording";
 import { rateLimit } from "@/lib/rate-limit";
 import { requireUser } from "@/lib/session";
 import { deleteRecordingObjects, recordingKeys } from "@/lib/recording-objects";
@@ -34,13 +34,22 @@ const MimeType = z
   .regex(/^((video|audio)\/(webm|mp4)(;\s*codecs="?[\w.,\s]+"?)?|image\/jpeg)$/i, "Unsupported file type");
 
 const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
+// The audio track goes to the transcriber (see MAX_TRANSCRIBE_BYTES); a
+// poster is one jpeg frame.
+const MAX_AUDIO_BYTES = MAX_TRANSCRIBE_BYTES;
+const MAX_POSTER_BYTES = 2 * 1024 * 1024;
 
-const PresignSchema = z.object({
-  checkInId: z.string().uuid(),
-  mimeType: MimeType,
-  // Signed into the upload URL, so the bucket refuses any other size.
-  sizeBytes: z.number().int().positive().max(MAX_UPLOAD_BYTES),
-});
+const maxBytesFor = (mime: string) =>
+  mime.startsWith("image/") ? MAX_POSTER_BYTES : mime.startsWith("audio/") ? MAX_AUDIO_BYTES : MAX_UPLOAD_BYTES;
+
+const PresignSchema = z
+  .object({
+    checkInId: z.string().uuid(),
+    mimeType: MimeType,
+    // Signed into the upload URL, so the bucket refuses any other size.
+    sizeBytes: z.number().int().positive(),
+  })
+  .refine((v) => v.sizeBytes <= maxBytesFor(v.mimeType.toLowerCase()), "Too large");
 
 export type PresignResult =
   | { ok: true; uploadUrl: string; objectKey: string }
@@ -62,6 +71,11 @@ export async function getUploadUrl(input: {
     const user = await requireUser();
     const rl = await rateLimit(`upload-url:${user.id}`, 15, 5 * 60 * 1000);
     if (!rl.allowed) return { ok: false, error: "Too many upload attempts — slow down." };
+    // Each recording is up to three uploads; a day's cap keeps one account
+    // from parking terabytes in the bucket before the orphan sweep runs.
+    if (!(await rateLimit(`upload-url-day:${user.id}`, 90, 24 * 3600_000)).allowed) {
+      return { ok: false, error: "That's a lot of uploads today — try again tomorrow." };
+    }
     const result = PresignSchema.safeParse(input);
     if (!result.success) return { ok: false, error: "Unsupported recording format" };
     const parsed = result.data;
@@ -77,7 +91,9 @@ export async function getUploadUrl(input: {
   }
 }
 
-const KEY = (checkInId: string) => new RegExp(`^check-ins/${checkInId}/[0-9a-f-]{36}\\.(webm|mp4|jpg|weba|m4a)$`);
+// Each slot takes only its own kind of file: a poster key pointing at the
+// video would put a signed video URL into every feed render.
+const KEY = (checkInId: string, ext: string) => new RegExp(`^check-ins/${checkInId}/[0-9a-f-]{36}\\.(${ext})$`);
 
 const RegisterSchema = z
   .object({
@@ -95,7 +111,13 @@ const RegisterSchema = z
   })
   // Keys must be ones we minted for *this* check-in in getUploadUrl, so a
   // caller can't attach another team's object and get a playback URL for it.
-  .refine((v) => [v.objectKey, v.posterKey, v.audioKey].every((k) => k == null || KEY(v.checkInId).test(k)), "Unknown upload");
+  .refine(
+    (v) =>
+      KEY(v.checkInId, "webm|mp4").test(v.objectKey) &&
+      (v.posterKey == null || KEY(v.checkInId, "jpg").test(v.posterKey)) &&
+      (v.audioKey == null || KEY(v.checkInId, "weba|m4a").test(v.audioKey)),
+    "Unknown upload",
+  );
 
 export type RegisterResult = { ok: true; recordingId: string } | { ok: false; error: string };
 
@@ -281,7 +303,7 @@ export async function getPlaybackUrl(recordingId: unknown): Promise<PlaybackResu
 
   const [rec] = await withUser(user.id, (tx) =>
     tx
-      .select({ objectKey: recordings.objectKey, date: occurrences.scheduleDate, orgId: teams.orgId })
+      .select({ objectKey: recordings.objectKey, date: occurrences.scheduleDate, orgId: teams.orgId, status: checkIns.status, authorId: checkIns.userId })
       .from(recordings)
       .innerJoin(checkIns, eq(checkIns.id, recordings.checkInId))
       .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
@@ -290,7 +312,8 @@ export async function getPlaybackUrl(recordingId: unknown): Promise<PlaybackResu
       .innerJoin(members, and(eq(members.teamId, teams.id), eq(members.userId, user.id)))
       .where(eq(recordings.id, id.data)),
   );
-  if (!rec) return { ok: false, error: "Video not found" };
+  // A reopened (or never sent) check-in is its author's draft again.
+  if (!rec || (rec.status !== "submitted" && rec.authorId !== user.id)) return { ok: false, error: "Video not found" };
   const cutoff = historyCutoff(await getEntitlements(rec.orgId), localDate(new Date(), user.tz));
   if (cutoff && rec.date < cutoff) return { ok: false, error: "Video not found" };
 

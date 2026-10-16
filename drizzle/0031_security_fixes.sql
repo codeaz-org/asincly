@@ -57,17 +57,22 @@ CREATE POLICY notification_insert ON notification FOR INSERT
 --> statement-breakpoint
 -- A team never changes organization and a membership never changes team or
 -- person; a policy can't compare old and new rows, a trigger can.
-CREATE OR REPLACE FUNCTION keep_row_owner() RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
+CREATE OR REPLACE FUNCTION keep_team_org() RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
 BEGIN
-  IF TG_TABLE_NAME = 'team' AND NEW.org_id IS DISTINCT FROM OLD.org_id THEN
+  IF NEW.org_id IS DISTINCT FROM OLD.org_id THEN
     RAISE EXCEPTION 'a team cannot move to another organization';
   END IF;
-  IF TG_TABLE_NAME = 'member' AND (NEW.team_id IS DISTINCT FROM OLD.team_id OR NEW.user_id IS DISTINCT FROM OLD.user_id) THEN
+  RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION keep_member_owner() RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  IF NEW.team_id IS DISTINCT FROM OLD.team_id OR NEW.user_id IS DISTINCT FROM OLD.user_id THEN
     RAISE EXCEPTION 'a membership cannot change team or person';
   END IF;
   RETURN NEW;
 END $$;
 --> statement-breakpoint
-CREATE TRIGGER team_keep_org BEFORE UPDATE ON team FOR EACH ROW EXECUTE FUNCTION keep_row_owner();
+CREATE TRIGGER team_keep_org BEFORE UPDATE ON team FOR EACH ROW EXECUTE FUNCTION keep_team_org();
 --> statement-breakpoint
-CREATE TRIGGER member_keep_owner BEFORE UPDATE ON member FOR EACH ROW EXECUTE FUNCTION keep_row_owner();
+CREATE TRIGGER member_keep_owner BEFORE UPDATE ON member FOR EACH ROW EXECUTE FUNCTION keep_member_owner();

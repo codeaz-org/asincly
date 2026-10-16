@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { checkIns, members, recordings, schedules, occurrences, teams, users } from "@/db/schema";
 import { getAI, type Summary } from "@/lib/ai";
-import { aiSecondsRemaining, recordAiUsage } from "@/lib/billing/entitlements";
+import { aiSecondsRemaining, getEntitlements, recordAiUsage } from "@/lib/billing/entitlements";
 import { getPreviousContext } from "@/lib/check-in-context";
 import { encrypt } from "@/lib/crypto";
 import { displayName } from "@/lib/display";
@@ -12,6 +12,10 @@ export type DraftHints = Record<string, "done" | "not_done">;
 
 // processingError marker for "the org's AI minutes are used up this month".
 export const QUOTA_EXCEEDED = "quota_exceeded";
+
+// The transcriber's upload limit (Groq: 25 MB). At the recorder's 32 kbit/s
+// audio that's well over an hour, so a real take never gets near it.
+export const MAX_TRANSCRIBE_BYTES = 25 * 1024 * 1024;
 
 // One recording end to end: transcribe the audio track → draft the check-in
 // against the author's previous plan and team roster → encrypt → persist.
@@ -51,10 +55,11 @@ export async function processRecording(recordingId: string, hints: DraftHints = 
     }
 
     // Hosted plans meter transcription. Over quota, the video stays attached
-    // and the author writes the check-in by hand.
-    const seconds = rec.durationMs ? rec.durationMs / 1000 : 60;
+    // and the author writes the check-in by hand. The browser's duration is
+    // only a first guess; what's charged is the length the transcriber reports.
+    const claimed = rec.durationMs ? rec.durationMs / 1000 : 0;
     const remaining = await aiSecondsRemaining(ctx.orgId);
-    if (remaining !== null && remaining < seconds) {
+    if (remaining !== null && remaining < Math.max(claimed, 1)) {
       await db
         .update(recordings)
         .set({ status: "failed", processingError: QUOTA_EXCEEDED })
@@ -62,17 +67,33 @@ export async function processRecording(recordingId: string, hints: DraftHints = 
       return;
     }
 
+    // No separate audio track: the video itself, only if it's small enough
+    // for the transcriber (the audio slot is capped at upload).
+    if (!rec.audioKey && (rec.sizeBytes ?? Infinity) > MAX_TRANSCRIBE_BYTES) throw new Error("No audio track, and the video is too large to transcribe");
+
     await setStatus("transcribing");
     const ai = await getAI();
 
     const audioKey = rec.audioKey ?? rec.objectKey;
     // The transcriber fetches it once, right away.
     const audioUrl = await presignedGetUrl(audioKey, 15 * 60);
-    const { text: transcript } = await ai.transcriber.transcribe({
+    const { text: transcript, durationSec } = await ai.transcriber.transcribe({
       audioUrl,
       mimeType: rec.audioKey ? audioMime(rec.audioKey) : rec.mimeType,
+      maxBytes: MAX_TRANSCRIBE_BYTES,
     });
+    const seconds = Math.max(durationSec ?? 0, claimed) || 60;
     await recordAiUsage(ctx.orgId, seconds);
+    // The plan's length limit, checked against the real length: a take that
+    // claimed to be short is charged in full and gets no draft.
+    const { maxVideoSeconds } = await getEntitlements(ctx.orgId);
+    if (seconds > maxVideoSeconds + 10) {
+      await db
+        .update(recordings)
+        .set({ status: "failed", durationMs: Math.round(seconds * 1000), processingError: "Longer than your plan allows" })
+        .where(eq(recordings.id, recordingId));
+      return;
+    }
 
     await setStatus("drafting");
     const [previous, roster] = await Promise.all([

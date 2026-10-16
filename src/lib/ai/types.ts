@@ -8,6 +8,8 @@ export type TranscribeInput = {
   audioUrl?: string;
   audioBytes?: Uint8Array;
   mimeType: string;
+  /** Refuse anything larger than this before reading it into memory. */
+  maxBytes?: number;
 };
 
 export type TranscribeResult = {

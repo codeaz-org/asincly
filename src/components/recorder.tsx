@@ -328,7 +328,8 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
     setPhase("uploading");
     try {
       const dur = previewRef.current?.duration;
-      const durationMs = dur && Number.isFinite(dur) ? Math.round(dur * 1000) : null;
+      // Chrome's webm often reports Infinity; the recording clock is next best.
+      const durationMs = dur && Number.isFinite(dur) ? Math.round(dur * 1000) : elapsed > 0 ? elapsed * 1000 : null;
       const poster = await capturePoster();
       const mimeType = video.type || "video/webm";
       const audio = audioBlobRef.current;

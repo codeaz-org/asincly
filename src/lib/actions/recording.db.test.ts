@@ -17,7 +17,7 @@ vi.mock("next/navigation", () => ({
   },
 }));
 vi.mock("next/server", async (orig) => ({ ...(await orig<typeof import("next/server")>()), after: () => {} }));
-vi.mock("@/lib/process-recording", () => ({ processRecording: async () => {}, QUOTA_EXCEEDED: "quota_exceeded" }));
+vi.mock("@/lib/process-recording", () => ({ processRecording: async () => {}, QUOTA_EXCEEDED: "quota_exceeded", MAX_TRANSCRIBE_BYTES: 25 * 1024 * 1024 }));
 
 const { getUploadUrl, registerRecording } = await import("./recording");
 const { deleteTeam } = await import("./team-admin");
@@ -73,6 +73,9 @@ describe("recording uploads", () => {
     expect(await getUploadUrl({ checkInId, mimeType: "video/webm", sizeBytes: 1000 })).toMatchObject({ ok: true });
     expect(await getUploadUrl({ checkInId, mimeType: "text/html", sizeBytes: 1000 })).toMatchObject({ ok: false });
     expect(await getUploadUrl({ checkInId, mimeType: "video/webm", sizeBytes: 501 * 1024 * 1024 })).toMatchObject({ ok: false });
+    // The audio track has to fit the transcriber; a poster is one frame.
+    expect(await getUploadUrl({ checkInId, mimeType: "audio/webm", sizeBytes: 26 * 1024 * 1024 })).toMatchObject({ ok: false });
+    expect(await getUploadUrl({ checkInId, mimeType: "image/jpeg", sizeBytes: 3 * 1024 * 1024 })).toMatchObject({ ok: false });
     currentUserId = ids.other;
     expect(await getUploadUrl({ checkInId, mimeType: "video/webm", sizeBytes: 1000 })).toEqual({ ok: false, error: "Not your check-in" });
   });
@@ -82,6 +85,10 @@ describe("recording uploads", () => {
     const foreign = `check-ins/${crypto.randomUUID()}/${crypto.randomUUID()}.webm`;
     const res = await registerRecording({ checkInId, objectKey: foreign, mimeType: "video/webm", sizeBytes: 1, durationMs: 1000 });
     expect(res).toEqual({ ok: false, error: "Unknown upload" });
+    // Each slot takes its own kind of file: no video behind the poster.
+    const video = `check-ins/${checkInId}/${crypto.randomUUID()}.webm`;
+    const swapped = await registerRecording({ checkInId, objectKey: video, posterKey: video, mimeType: "video/webm", sizeBytes: 1, durationMs: 1000 });
+    expect(swapped).toEqual({ ok: false, error: "Unknown upload" });
   });
 
   it("deleting the team deletes its recordings' files, not just the rows", async () => {
