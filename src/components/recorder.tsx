@@ -365,7 +365,7 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
   const hasPlan = !!context && (context.previous.length > 0 || context.openBlockers.length > 0);
   const showPanel = live || phase === "idle";
   const panel = (
-    <WhileYouTalk context={context} hints={hints} onHint={setHints} notes={notes} onNotes={changeNotes} />
+    <WhileYouTalk context={context} hints={hints} onHint={setHints} notes={notes} onNotes={changeNotes} fill={phase === "idle"} />
   );
 
   return (
@@ -374,20 +374,22 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
       <video ref={camElRef} className="hidden" playsInline />
       <video ref={screenElRef} className="hidden" playsInline />
 
-      <div className={cn("grid gap-4", showPanel && "lg:grid-cols-[1fr_300px]")}>
+      {/* Before recording: camera and prep side by side, one height. While
+          live, the camera gets the room and the prep panel narrows. */}
+      <div className={cn("grid gap-4", showPanel && (phase === "idle" ? "lg:grid-cols-2" : "lg:grid-cols-[1fr_300px]"))}>
         <div className="space-y-4 min-w-0">
           {phase === "idle" && (
-            <div className="space-y-4">
+            <div className="flex h-full flex-col gap-4">
               {canShareScreen && (
                 <div role="radiogroup" aria-label="What to record" className="grid grid-cols-2 gap-2">
                   <ModeOption active={mode === "camera"} onClick={() => setMode("camera")} icon={<Camera />} label="Camera" hint="Just you" />
-                  <ModeOption active={mode === "screen"} onClick={() => setMode("screen")} icon={<MonitorUp />} label="Screen + camera" hint="Show your work" />
+                  <ModeOption active={mode === "screen"} onClick={() => setMode("screen")} icon={<MonitorUp />} label="Screen" hint="With your camera" />
                 </div>
               )}
               <button
                 type="button"
                 onClick={requestStreams}
-                className="group w-full rounded-2xl border border-dashed border-line-strong hover:border-amber/60 hover:bg-amber/[0.04] transition px-6 py-12 flex flex-col items-center gap-3 text-center"
+                className="group w-full flex-1 min-h-64 rounded-2xl border border-dashed border-line-strong hover:border-amber/60 hover:bg-amber/[0.04] transition px-6 py-12 flex flex-col items-center justify-center gap-3 text-center"
               >
                 <span className="grid place-items-center size-20 rounded-full border-2 border-ink/25 group-hover:border-amber group-hover:scale-105 transition">
                   <span className="size-8 rounded-full bg-danger" />
@@ -397,7 +399,6 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
                   Up to {Math.round(maxSeconds / 60)} min{existingCount > 0 ? " · replaces your current video" : ""}
                 </span>
               </button>
-              {aiNotice && <p className="text-xs leading-relaxed text-soft">{aiNotice}</p>}
               {/* Phones: prepare below the camera button before starting. */}
               <div className="lg:hidden">{panel}</div>
             </div>
@@ -516,6 +517,8 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
         )}
       </div>
 
+      {phase === "idle" && aiNotice && <p className="text-xs leading-relaxed text-soft max-w-2xl">{aiNotice}</p>}
+
       {error && (
         <p className="text-sm text-danger text-center" role="alert">
           {error}
@@ -550,19 +553,37 @@ function WhileYouTalk({
   onHint,
   notes,
   onNotes,
+  fill,
 }: {
   context?: RecorderContext;
   hints: Record<string, Hint>;
   onHint: (h: Record<string, Hint>) => void;
   notes: string;
   onNotes: (value: string) => void;
+  /** Stretch to the camera card's height (before recording, on desktop). */
+  fill?: boolean;
 }) {
   const previous = context?.previous ?? [];
   const blockers = context?.openBlockers ?? [];
   const notesId = useId();
   return (
-    <div className="lg:sticky lg:top-24 rounded-2xl border border-line bg-ground-raised/70 p-4 space-y-4">
-      <p className="text-xs text-soft">What got done · what&rsquo;s next · anything blocking · who you need</p>
+    <div
+      className={cn(
+        "rounded-2xl border border-line bg-ground-raised/70 p-5 space-y-5",
+        fill ? "lg:h-full lg:flex lg:flex-col lg:space-y-0 lg:gap-5" : "lg:sticky lg:top-24",
+      )}
+    >
+      <div className="space-y-2">
+        <p className="kicker text-[10px]">Talk about</p>
+        <ul className="grid grid-cols-2 gap-1.5 text-xs text-ink">
+          {["What got done", "What’s next", "Anything blocking", "Who you need"].map((t) => (
+            <li key={t} className="flex items-center gap-2 rounded-lg bg-ink/[0.04] px-2.5 py-1.5">
+              <span className="size-1 rounded-full bg-amber shrink-0" />
+              {t}
+            </li>
+          ))}
+        </ul>
+      </div>
       {previous.length > 0 && (
         <div className="space-y-1.5">
           <p className="kicker text-[10px]">
@@ -604,7 +625,7 @@ function WhileYouTalk({
           </ul>
         </div>
       )}
-      <div className="space-y-1.5">
+      <div className={cn("space-y-1.5", fill && "lg:flex-1 lg:flex lg:flex-col")}>
         <label htmlFor={notesId} className="kicker text-[10px] block">
           Your notes
         </label>
@@ -615,7 +636,10 @@ function WhileYouTalk({
           maxLength={2000}
           rows={4}
           placeholder={"Jot what you want to mention…\n- demo went well\n- ask Lena about the keys"}
-          className="w-full resize-y rounded-xl bg-ink/[0.04] border border-line px-3 py-2 text-sm leading-relaxed text-ink placeholder:text-faint focus:outline-none focus:border-amber/50"
+          className={cn(
+            "w-full resize-y rounded-xl bg-ink/[0.04] border border-line px-3 py-2 text-sm leading-relaxed text-ink placeholder:text-faint focus:outline-none focus:border-amber/50",
+            fill && "lg:flex-1 lg:resize-none lg:min-h-28",
+          )}
         />
         <p className="text-[11px] text-faint">
           Only you see these. They go to the AI with your recording to help it catch anything you meant to say.
@@ -663,12 +687,12 @@ function ModeOption({
       aria-checked={active}
       onClick={onClick}
       className={cn(
-        "flex items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition [&_svg]:size-5",
+        "flex min-w-0 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition [&_svg]:size-5 [&_svg]:shrink-0",
         active ? "border-amber/50 bg-amber/[0.08] text-ink" : "border-line text-soft hover:text-ink hover:border-line-strong",
       )}
     >
       {icon}
-      <span>
+      <span className="min-w-0">
         <span className="block text-sm font-medium">{label}</span>
         <span className="block text-xs text-soft">{hint}</span>
       </span>
