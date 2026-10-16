@@ -1,11 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/auth";
 import { db } from "@/db";
 import { members, teams } from "@/db/schema";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { rateLimit } from "@/lib/rate-limit";
+import { requireUser } from "@/lib/session";
 import { authorizeUrl, slackConfigured } from "@/lib/slack/api";
 import { createState } from "@/lib/slack/state";
 
@@ -15,9 +15,8 @@ const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
 
 // Owner/admin starts "Add to Slack" for one team.
 export async function GET(req: Request) {
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) return NextResponse.redirect(`${appUrl()}/sign-in`);
+  // requireUser, not auth(): a session that hasn't passed 2FA can't connect Slack.
+  const userId = (await requireUser()).id;
   if (!slackConfigured() || !process.env.AUTH_SECRET) {
     return NextResponse.json({ ok: false, error: "Slack isn't configured on this server" }, { status: 404 });
   }

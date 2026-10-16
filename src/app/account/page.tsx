@@ -3,7 +3,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { z } from "zod";
-import { auth, signOut } from "@/auth";
+import { signOut } from "@/auth";
 import { Footer } from "@/components/footer";
 import { Logo } from "@/components/logo";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -253,9 +253,8 @@ async function updateAiPref(formData: FormData) {
 
 async function deleteAccount(formData: FormData) {
   "use server";
-  const session = await auth();
-  if (!session?.user?.id) return;
-  const [u] = await db.select().from(users).where(eq(users.id, session.user.id));
+  // requireUser, not auth(): deleting the account needs the second factor too.
+  const [u] = await db.select().from(users).where(eq(users.id, (await requireUser()).id));
   const confirm = String(formData.get("confirm") ?? "");
   if (!u || confirm !== u.email) throw new Error("Confirmation did not match.");
   if (!(await rateLimit(`account-delete:${u.id}`, 3, 60 * 60 * 1000)).allowed) {

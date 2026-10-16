@@ -1,12 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { db } from "@/db";
 import { members, organizations, slackInstalls, teams } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { encrypt } from "@/lib/crypto";
 import { exchangeCode, SlackError, slackConfigured } from "@/lib/slack/api";
 import { readState } from "@/lib/slack/state";
+import { requireUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +19,8 @@ export async function GET(req: Request) {
   if (!slackConfigured() || !secret) return NextResponse.json({ ok: false }, { status: 404 });
 
   const state = readState(url.searchParams.get("state") ?? "", secret);
-  const session = await auth();
-  if (!state || session?.user?.id !== state.userId) {
+  const user = await requireUser();
+  if (!state || user.id !== state.userId) {
     return NextResponse.json({ ok: false, error: "This Slack link expired. Start again from settings." }, { status: 400 });
   }
 
