@@ -8,7 +8,8 @@ services:
       POSTGRES_PASSWORD: asincly
       POSTGRES_DB: asincly
     ports:
-      - "5433:5432"
+      # Loopback only: these are throwaway dev passwords.
+      - "127.0.0.1:5433:5432"
     volumes:
       - asincly_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -27,8 +28,8 @@ services:
       MINIO_ROOT_USER: asincly
       MINIO_ROOT_PASSWORD: asincly-dev-secret
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - asincly_miniodata:/data
     healthcheck:

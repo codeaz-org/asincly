@@ -49,3 +49,6 @@ backups/
 # Design-lab output (kept locally, not part of the product)
 scrollcraft/
 .env
+
+# Supabase CLI link state (project and org ids)
+supabase/.temp/

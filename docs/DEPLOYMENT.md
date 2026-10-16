@@ -199,8 +199,10 @@ APP_DOMAIN=standup.example.com
 S3_DOMAIN=files.standup.example.com
 S3_ENDPOINT=https://files.standup.example.com
 S3_FORCE_PATH_STYLE=true
-S3_ACCESS_KEY_ID=asincly                 # MinIO root user
+S3_ACCESS_KEY_ID=asincly-app             # the app's MinIO user (bucket only)
 S3_SECRET_ACCESS_KEY=<long random string>
+MINIO_ROOT_USER=admin                    # MinIO admin; the app never sees it
+MINIO_ROOT_PASSWORD=<another long random string>
 POSTGRES_PASSWORD=<long random string>
 APP_DB_PASSWORD=<long random string>
 AUTH_SECRET=…  DATA_ENCRYPTION_KEY=…  CRON_SECRET=…

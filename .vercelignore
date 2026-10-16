@@ -1,3 +1,11 @@
 # `vercel deploy` from a laptop uploads the working tree; never let a local
 # .env fill in production settings that are missing on Vercel.
 .env*
+# Once this file exists the CLI stops reading .gitignore, so list the rest of
+# what must never be uploaded: database dumps, local tool state, test output.
+backups/
+supabase/.temp/
+scrollcraft/
+test-results/
+playwright-report/
+coverage/

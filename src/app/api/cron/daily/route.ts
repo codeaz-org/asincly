@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import {
   checkIns,
+  invitations,
   notifications,
   occurrences,
   orgBilling,
@@ -14,6 +15,7 @@ import {
 } from "@/db/schema";
 import { billingState } from "@/lib/billing/entitlements";
 import { emailOrgOwner } from "@/lib/billing/owner-email";
+import { syncSeats } from "@/lib/billing/seats";
 import {
   effectiveRetentionDays,
   entitlementsFor,
@@ -70,7 +72,22 @@ export async function GET(req: Request) {
   });
 
   await run("purgedRateLimits", () => purgeRateLimits(now));
+  await run("purgedInvitations", async () => {
+    const gone = await db.delete(invitations).where(lt(invitations.expiresAt, now)).returning({ id: invitations.id });
+    return gone.length;
+  });
   if (isBillingEnabled()) await run("trialEmails", () => emailTrialOwners(now));
+  // A seat update that failed (Stripe down) is retried here at the latest.
+  if (isBillingEnabled()) {
+    await run("seatSyncs", async () => {
+      const paying = await db
+        .select({ orgId: orgBilling.orgId })
+        .from(orgBilling)
+        .where(inArray(orgBilling.status, ["active", "past_due"]));
+      for (const o of paying) await syncSeats(o.orgId);
+      return paying.length;
+    });
+  }
 
   const ok = !Object.values(stats).includes("failed");
   return NextResponse.json({ ok, ...stats }, { status: ok ? 200 : 500 });

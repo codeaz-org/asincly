@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Q } from "@/db/with-user";
 import {
   blockerActions,
@@ -47,7 +47,9 @@ export async function buildExportBundle(q: Q, teamId: string) {
   const occIds = teamOccs.map((o) => o.id);
 
   const teamCheckIns = occIds.length
-    ? await q.select().from(checkIns).where(inArray(checkIns.occurrenceId, occIds))
+    ? // Sent check-ins only: an unsent draft (and its video and transcript) is
+      // its author's alone, and is in their personal export instead.
+      await q.select().from(checkIns).where(and(inArray(checkIns.occurrenceId, occIds), eq(checkIns.status, "submitted")))
     : [];
   const ciIds = teamCheckIns.map((c) => c.id);
 

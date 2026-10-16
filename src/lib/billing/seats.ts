@@ -6,15 +6,16 @@ import { isBillingEnabled } from "@/lib/billing/plans";
 import { getStripe, stripeConfigured } from "@/lib/billing/stripe";
 
 // Keeps the Stripe subscription quantity equal to the org's billable members.
-// Call after any change to membership or roles. Never throws: a Stripe outage
-// must not undo an invite; the next change (or webhook) re-syncs.
+// Call after any change to membership or roles, and daily. Compares against
+// Stripe's quantity, not our copy, so a failed update is retried next time.
+// Never throws: a Stripe outage must not undo an invite.
 export async function syncSeats(orgId: string): Promise<void> {
   if (!isBillingEnabled()) return;
   try {
     const seats = Math.max(1, await countBillableSeats(orgId));
     const [row] = await db.select().from(orgBilling).where(eq(orgBilling.orgId, orgId));
-    if (!row || row.seats === seats) return;
-    await db.update(orgBilling).set({ seats, updatedAt: new Date() }).where(eq(orgBilling.orgId, orgId));
+    if (!row) return;
+    if (row.seats !== seats) await db.update(orgBilling).set({ seats, updatedAt: new Date() }).where(eq(orgBilling.orgId, orgId));
 
     const subscribed = row.stripeSubscriptionId && (row.status === "active" || row.status === "past_due");
     if (!subscribed || !stripeConfigured()) return;
