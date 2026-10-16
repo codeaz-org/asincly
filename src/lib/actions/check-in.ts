@@ -4,11 +4,11 @@ import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { withUser, type Q } from "@/db/with-user";
-import { checkIns, members, occurrences, recordings, schedules } from "@/db/schema";
+import { checkIns, members, occurrences, recordings, schedules, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { carryOver } from "@/lib/carry-over";
 import { authorCheckIn } from "@/lib/check-in-access";
-import { extractMentions } from "@/lib/mentions";
+import { extractMentions, linkAtMentions } from "@/lib/mentions";
 import { fireMentionEvents } from "@/lib/notifications";
 import { requireUser } from "@/lib/session";
 import { localDate, nextOccurrenceDate, occursOn } from "@/lib/time";
@@ -167,11 +167,24 @@ export async function submitCheckIn(input: unknown): Promise<SubmitResult> {
     const user = await requireUser();
     const parsed = SubmitSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "That check-in is too long to send." };
-    const { checkInId, yesterday, today, blockers, videoSkip } = parsed.data;
+    const { checkInId, videoSkip } = parsed.data;
 
     const ctx = await authorCheckIn(checkInId, user.id);
     if (!ctx) return { ok: false, error: "Not your check-in" };
     const ci = ctx.ci;
+
+    // A typed "@anton" becomes a real mention (and a notification) when it
+    // names exactly one teammate; the picker isn't the only way to tag.
+    const roster = await withUser(user.id, (tx) =>
+      tx
+        .select({ userId: users.id, name: users.name, email: users.email })
+        .from(members)
+        .innerJoin(users, eq(users.id, members.userId))
+        .where(eq(members.teamId, ctx.teamId)),
+    );
+    const [yesterday, today, blockers] = [parsed.data.yesterday, parsed.data.today, parsed.data.blockers].map((md) =>
+      linkAtMentions(md, roster),
+    );
 
     // Mandatory video: a recording, or a stated reason for skipping it.
     const [recording] = await withUser(user.id, (tx) =>

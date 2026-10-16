@@ -1,10 +1,14 @@
 import { expect, test } from "@playwright/test";
+import { and, eq } from "drizzle-orm";
+import { notifications } from "../src/db/schema";
 import {
   addToTeam,
   cleanup,
   seedOrgWithTeam,
   seedUserWithSession,
+  setUserName,
   signInAs,
+  testDb,
 } from "./fixtures";
 
 test.afterAll(async () => {
@@ -16,6 +20,7 @@ test("write a check-in instead of recording → appears in teammate's feed", asy
   const bob = await seedUserWithSession("bob");
   const { org, team } = await seedOrgWithTeam(alice.user.id);
   await addToTeam(team.id, bob.user.id);
+  await setUserName(bob.user.id, "Bob Builder");
 
   const teamUrl = `/${org.slug}/${team.slug}`;
 
@@ -33,7 +38,8 @@ test("write a check-in instead of recording → appears in teammate's feed", asy
   await alicePage.getByRole("button", { name: /next: today/i }).click();
 
   await expect(alicePage.getByRole("heading", { name: /what's on today/i })).toBeVisible();
-  await alicePage.getByRole("textbox", { name: "Today" }).fill("- [ ] Shipped the e2e harness");
+  // A plain typed @handle, no picker: still a mention when it's one teammate.
+  await alicePage.getByRole("textbox", { name: "Today" }).fill("- [ ] Shipped the e2e harness\n- [ ] Need @bob to review it");
   await alicePage.getByRole("button", { name: /next: blockers/i }).click();
 
   await alicePage.getByRole("button", { name: /nothing blocking me/i }).click();
@@ -53,6 +59,12 @@ test("write a check-in instead of recording → appears in teammate's feed", asy
   await bobPage.goto(teamUrl);
   await expect(bobPage.getByText("Shipped the e2e harness").first()).toBeVisible();
   await expect(bobPage.getByRole("heading", { name: /1 of 2 checked in/i })).toBeVisible();
+  await expect(bobPage.getByText("@Bob Builder").first()).toBeVisible();
+  await expect
+    .poll(async () =>
+      (await testDb.select().from(notifications).where(and(eq(notifications.userId, bob.user.id), eq(notifications.type, "mentioned")))).length,
+    )
+    .toBe(1);
 
   await aliceCtx.close();
   await bobCtx.close();
