@@ -45,6 +45,15 @@ describe("content security policy", () => {
     expect(prod["connect-src"]).toEqual(["'self'", "https://bucket.example.com"]);
   });
 
+  it("allows the bucket's own subdomain when URLs are virtual-hosted (R2, S3)", () => {
+    const r2 = directives(
+      buildCsp("n", { dev: false, s3Endpoint: "https://acct.r2.cloudflarestorage.com", s3Bucket: "rec", s3PathStyle: false }),
+    );
+    expect(r2["connect-src"]).toEqual(["'self'", "https://rec.acct.r2.cloudflarestorage.com"]);
+    const minio = directives(buildCsp("n", { dev: false, s3Endpoint: "http://minio:9000", s3Bucket: "rec", s3PathStyle: true }));
+    expect(minio["connect-src"]).toEqual(["'self'", "http://minio:9000"]);
+  });
+
   it("locks down framing, plugins, base and forms", () => {
     expect(prod["default-src"]).toEqual(["'self'"]);
     expect(prod["frame-ancestors"]).toEqual(["'none'"]);

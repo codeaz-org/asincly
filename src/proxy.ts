@@ -6,6 +6,8 @@ export function proxy(request: NextRequest) {
   const csp = buildCsp(nonce, {
     dev: process.env.NODE_ENV !== "production",
     s3Endpoint: process.env.S3_ENDPOINT,
+    s3Bucket: process.env.S3_BUCKET_RECORDINGS,
+    s3PathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
     appUrl: process.env.NEXT_PUBLIC_APP_URL,
   });
   const requestHeaders = new Headers(request.headers);

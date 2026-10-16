@@ -7,8 +7,11 @@
 // (never through our API), so the S3 origin is allowed for fetch (PUT),
 // media (signed-GET playback) and images (poster frames). Nothing else
 // off-origin: user markdown can't pull in tracking pixels.
-export function buildCsp(nonce: string, env: { dev: boolean; s3Endpoint?: string; appUrl?: string }): string {
-  const s3 = originOf(env.s3Endpoint);
+export function buildCsp(
+  nonce: string,
+  env: { dev: boolean; s3Endpoint?: string; s3Bucket?: string; s3PathStyle?: boolean; appUrl?: string },
+): string {
+  const s3 = bucketOrigin(env.s3Endpoint, env.s3Bucket, env.s3PathStyle);
   const extra = s3 ? ` ${s3}` : "";
   return [
     "default-src 'self'",
@@ -30,9 +33,15 @@ export function buildCsp(nonce: string, env: { dev: boolean; s3Endpoint?: string
   ].join("; ");
 }
 
-function originOf(url: string | undefined): string {
+// Where presigned URLs point: the endpoint itself in path style (MinIO), or
+// the bucket's subdomain of it in virtual-hosted style (R2, S3), matching how
+// src/lib/s3.ts signs them.
+function bucketOrigin(endpoint: string | undefined, bucket: string | undefined, pathStyle = true): string {
   try {
-    return url ? new URL(url).origin : "";
+    if (!endpoint) return "";
+    const u = new URL(endpoint);
+    if (!pathStyle && bucket) u.hostname = `${bucket}.${u.hostname}`;
+    return u.origin;
   } catch {
     return "";
   }
