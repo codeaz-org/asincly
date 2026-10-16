@@ -41,3 +41,35 @@ describe("model output is untrusted", () => {
     expect(parsed).toEqual({ previous: [], yesterday: [], today: [], blockers: [], mentions: [], bullets: [] });
   });
 });
+
+describe("Groq drafter", () => {
+  const input = { previous: [], openBlockers: [], roster: [], typed: { yesterday: "", today: "", blockers: "" }, authorTz: "UTC", hints: {}, notes: "", transcript: "shipped it" };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("falls back to another model when the account can't use the default", async () => {
+    vi.stubEnv("GROQ_API_KEY", "gsk_test");
+    vi.stubEnv("GROQ_CHAT_MODEL", "");
+    const models: string[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      const { model } = JSON.parse(String(init.body)) as { model: string };
+      models.push(model);
+      if (models.length === 1) return new Response(JSON.stringify({ error: { code: "model_not_found" } }), { status: 404 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ yesterday: [{ text: "Shipped it" }] }) } }] }));
+    });
+    const { groqDrafter } = await import("./groq");
+    const draft = await groqDrafter.draft(input);
+    expect(models).toEqual(["llama-3.3-70b-versatile", "openai/gpt-oss-120b"]);
+    expect(draft.yesterday[0].text).toBe("Shipped it");
+  });
+
+  it("reports Groq's error code, never the response body", async () => {
+    vi.stubEnv("GROQ_API_KEY", "gsk_test");
+    vi.stubEnv("GROQ_CHAT_MODEL", "some/model");
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: { code: "rate_limit_exceeded", message: "secret transcript" } }), { status: 429 }));
+    const { groqDrafter } = await import("./groq");
+    await expect(groqDrafter.draft(input)).rejects.toThrow("groq draft 429 rate_limit_exceeded (some/model)");
+  });
+});

@@ -4,6 +4,22 @@ import type { Drafter, Summarizer, Summary, Transcriber } from "./types";
 const BASE = "https://api.groq.com/openai/v1";
 const TRANSCRIBE_MODEL = "whisper-large-v3-turbo";
 const CHAT_MODEL = "llama-3.3-70b-versatile";
+// Used when the account can't use CHAT_MODEL (Groq answers 404 for a model a
+// project isn't allowed, or one it retired). GROQ_CHAT_MODEL overrides both.
+const FALLBACK_CHAT_MODEL = "openai/gpt-oss-120b";
+
+const chatModels = () => (process.env.GROQ_CHAT_MODEL ? [process.env.GROQ_CHAT_MODEL] : [CHAT_MODEL, FALLBACK_CHAT_MODEL]);
+
+// Groq's error code ("model_not_found", "rate_limit_exceeded"…), never any
+// body text: the request carried the transcript.
+async function errorCode(res: Response): Promise<string> {
+  try {
+    const j = (await res.json()) as { error?: { code?: unknown } };
+    return typeof j.error?.code === "string" ? ` ${j.error.code.slice(0, 40)}` : "";
+  } catch {
+    return "";
+  }
+}
 
 function key(): string {
   const k = process.env.GROQ_API_KEY;
@@ -38,7 +54,7 @@ export const groqTranscriber: Transcriber = {
       body: form,
       signal: AbortSignal.timeout(120_000),
     });
-    if (!res.ok) throw new Error(`groq transcribe ${res.status}`);
+    if (!res.ok) throw new Error(`groq transcribe ${res.status}${await errorCode(res)}`);
     const j = (await res.json()) as { text?: string; duration?: number };
     return { text: j.text ?? "", durationSec: typeof j.duration === "number" ? j.duration : undefined };
   },
@@ -151,23 +167,32 @@ export const groqDrafter: Drafter = {
       transcript: input.transcript.slice(0, 30_000),
     });
 
+    const models = chatModels();
     for (let attempt = 0; attempt < 2; attempt++) {
+      const model = models[0];
       const res = await fetch(`${BASE}/chat/completions`, {
         method: "POST",
         headers: { Authorization: `Bearer ${key()}`, "content-type": "application/json" },
         signal: AbortSignal.timeout(60_000),
         body: JSON.stringify({
-          model: CHAT_MODEL,
+          model,
           response_format: { type: "json_object" },
           temperature: 0.2,
           max_tokens: 1500,
+          // gpt-oss reasons before answering; keep that short so the draft fits.
+          ...(model.startsWith("openai/gpt-oss") && { reasoning_effort: "low", max_tokens: 4000 }),
           messages: [
             { role: "system", content: DRAFT_PROMPT },
             { role: "user", content: payload },
           ],
         }),
       });
-      if (!res.ok) throw new Error(`groq draft ${res.status}`);
+      if (res.status === 404 && models.length > 1) {
+        models.shift();
+        attempt--;
+        continue;
+      }
+      if (!res.ok) throw new Error(`groq draft ${res.status}${await errorCode(res)} (${model})`);
       const j = (await res.json()) as { choices: Array<{ message: { content: string } }> };
       try {
         const parsed = CheckInDraftSchema.safeParse(JSON.parse(j.choices[0]?.message?.content ?? "{}"));
