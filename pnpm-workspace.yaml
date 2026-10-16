@@ -14,3 +14,11 @@ overrides:
   brace-expansion@>=2 <3: ">=2.1.7 <3"
   brace-expansion@>=4 <6: ">=5.0.12 <6"
   "@esbuild-kit/core-utils>esbuild": ">=0.25.0 <0.26"
+
+auditConfig:
+  ignoreGhsas:
+    # braces <=3.0.3, stack exhaustion on deeply nested *patterns*. No fixed
+    # release exists. It's reached only through dev tooling (eslint-config-next,
+    # the shadcn CLI) whose glob patterns are ours, never user input, and it
+    # isn't in the production bundle. Remove once braces ships a fix.
+    - GHSA-vfj7-8cjw-p6xm

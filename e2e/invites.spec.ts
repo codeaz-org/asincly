@@ -16,8 +16,20 @@ test("an invite waits until the invitee accepts it", async ({ browser }) => {
   const page = await ownerCtx.newPage();
   await page.goto(`${teamUrl}/people`, { waitUntil: "networkidle" });
   await page.getByLabel("Email addresses").fill(invitee.user.email);
-  await page.getByRole("button", { name: "Invite" }).click();
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
   await expect(page.getByText("Invited 1")).toBeVisible();
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.getByText("Waiting to accept · 1")).toBeVisible();
+
+  // A second invite, taken back before it's used.
+  const stray = `stray-${Date.now()}@e2e.local`;
+  await page.getByLabel("Email addresses").fill(stray);
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
+  await expect(page.getByText("Invited 1")).toBeVisible();
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("button", { name: `Revoke invite for ${stray}` }).click();
+  await expect(page.getByText(stray)).toHaveCount(0);
+  await expect(page.getByText("Waiting to accept · 1")).toBeVisible();
 
   // Not on the team yet: signing in lands them on their invites to accept.
   const ctx = await browser.newContext();
@@ -28,6 +40,10 @@ test("an invite waits until the invitee accepts it", async ({ browser }) => {
   await expect(p.getByText(team.name, { exact: true })).toBeVisible();
   await p.getByRole("button", { name: `Join ${team.name}` }).click();
   await p.waitForURL(new RegExp(`${teamUrl}$`));
+
+  // Accepted: off the waiting list.
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.getByText(/waiting to accept/i)).toHaveCount(0);
 
   await Promise.all([ownerCtx.close(), ctx.close()]);
 });

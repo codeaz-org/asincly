@@ -1,6 +1,7 @@
 "use server";
 
-import { and, eq, gt, ne } from "drizzle-orm";
+import { and, eq, gt, inArray, ne } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
@@ -72,4 +73,40 @@ export async function declineInvitation(formData: FormData): Promise<void> {
   const inv = await mine(formData.get("id"), user.email);
   if (inv) await db.delete(invitations).where(eq(invitations.id, inv.id));
   redirect("/invites");
+}
+
+// ────────── For the team's admins ──────────
+
+async function adminOf(teamId: string, userId: string) {
+  const [row] = await db
+    .select({ orgId: teams.orgId, orgSlug: organizations.slug, teamSlug: teams.slug })
+    .from(members)
+    .innerJoin(teams, eq(teams.id, members.teamId))
+    .innerJoin(organizations, eq(organizations.id, teams.orgId))
+    .where(and(eq(members.teamId, teamId), eq(members.userId, userId), inArray(members.role, ["owner", "admin"])));
+  return row ?? null;
+}
+
+// Invites still waiting on this team, for its owner and admins only.
+export async function listTeamInvitations(teamId: unknown) {
+  const user = await requireUser();
+  const id = z.string().uuid().parse(teamId);
+  if (!(await adminOf(id, user.id))) return [];
+  return db
+    .select({ id: invitations.id, email: invitations.email, role: invitations.role, expiresAt: invitations.expiresAt })
+    .from(invitations)
+    .where(and(eq(invitations.teamId, id), gt(invitations.expiresAt, new Date())))
+    .orderBy(invitations.createdAt);
+}
+
+export async function revokeInvitation(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const id = z.string().uuid().parse(formData.get("id"));
+  const [inv] = await db.select({ teamId: invitations.teamId, email: invitations.email }).from(invitations).where(eq(invitations.id, id));
+  if (!inv) return;
+  const ctx = await adminOf(inv.teamId, user.id);
+  if (!ctx) throw new Error("Admins only");
+  await db.delete(invitations).where(eq(invitations.id, id));
+  await audit({ orgId: ctx.orgId, actorUserId: user.id, action: "member.invite_revoke", resourceType: "team", resourceId: inv.teamId, meta: { email: inv.email } });
+  revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}/people`);
 }

@@ -52,3 +52,6 @@ scrollcraft/
 
 # Supabase CLI link state (project and org ids)
 supabase/.temp/
+
+# Session handoff notes: local working notes, never published.
+docs/handoffs/

@@ -8,6 +8,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, Pill, SectionTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/field";
+import { listTeamInvitations, revokeInvitation } from "@/lib/actions/invitations";
 import { createTeam, removeMember } from "@/lib/actions/team-admin";
 import { countBillableSeats, countTeams } from "@/lib/billing/entitlements";
 import { railPositions } from "@/lib/day-rail";
@@ -34,17 +35,18 @@ export default async function PeoplePage({ params }: { params: Promise<{ orgSlug
     getTeamPageContext(orgSlug, teamSlug),
     getViewerToday(orgSlug, teamSlug),
   ]);
-  const [[roster, entries], plan, seats, teamCount] = await Promise.all([
+  const isAdmin = team.role === "owner" || team.role === "admin";
+  const [[roster, entries], plan, seats, teamCount, pending] = await Promise.all([
     withUser(user.id, (tx) =>
       Promise.all([getTeamRoster(tx, team.teamId), getDayFeed(tx, team.teamId, today.todayISO, user.id)]),
     ),
     getTeamPlan(orgSlug, teamSlug),
     countBillableSeats(team.orgId),
     countTeams(team.orgId),
+    isAdmin ? listTeamInvitations(team.teamId) : [],
   ]);
   const billingHref = plan.plan === "unlimited" ? null : `${teamPath(orgSlug, teamSlug)}/settings/billing`;
   const teamCapReached = plan.maxTeams != null && teamCount >= plan.maxTeams;
-  const isAdmin = team.role === "owner" || team.role === "admin";
   const done = new Set(entries.map((e) => e.userId));
 
   const positions = railPositions(
@@ -165,6 +167,29 @@ export default async function PeoplePage({ params }: { params: Promise<{ orgSlug
               seatNote={plan.maxMembers != null ? `${seats} of ${plan.maxMembers} members on the Free plan` : undefined}
             />
           </Card>
+          {pending.length > 0 && (
+            <Card className="divide-y divide-line">
+              <p className="px-4 sm:px-5 py-3 kicker text-[10px]">Waiting to accept · {pending.length}</p>
+              <ul>
+                {pending.map((i) => (
+                  <li key={i.id} className="flex items-center gap-3 px-4 sm:px-5 py-2.5">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-ink truncate">{i.email}</p>
+                      <p className="text-[11px] text-soft">
+                        {i.role === "guest" ? "guest · " : ""}invite open until {dayLabel(i.expiresAt.toISOString().slice(0, 10))}
+                      </p>
+                    </div>
+                    <form action={revokeInvitation} className="shrink-0">
+                      <input type="hidden" name="id" value={i.id} />
+                      <Button type="submit" variant="ghost" size="sm" aria-label={`Revoke invite for ${i.email}`} className="hover:text-danger">
+                        Revoke
+                      </Button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </section>
       )}
 

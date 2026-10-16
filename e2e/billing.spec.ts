@@ -48,7 +48,7 @@ test("Free: the 4th member, older history and Pro settings ask for an upgrade", 
   await page.goto(`${teamUrl}/people`, { waitUntil: "networkidle" });
   await expect(page.getByText("3 of 3 members on the Free plan")).toBeVisible();
   await page.getByLabel("Email addresses").fill(`fourth-${Date.now()}@e2e.local`);
-  await page.getByRole("button", { name: "Invite" }).click();
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
   await expect(page.getByText(/free plan includes up to 3 members/i)).toBeVisible();
   await expect(page.getByRole("link", { name: /see pro →/i })).toBeVisible();
   await expect(page.getByTestId("plan-gate")).toContainText(/includes 1 team/i);

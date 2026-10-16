@@ -82,7 +82,11 @@ export function OrgSecurity({
       />
       <SettingToggle
         title={requireSso && ssoDomain ? `Require Google sign-in for @${ssoDomain}` : "Require Google sign-in for your domain"}
-        hint="People at your email domain sign in with your Google Workspace; magic links stop working for them."
+        hint={
+          requireSso
+            ? "People at your email domain sign in with your Google Workspace; magic links stop working for them."
+            : "People at your email domain sign in with your Google Workspace; magic links stop working for them. To prove the domain is yours, sign in once with your Workspace Google account before turning this on."
+        }
         checked={requireSso}
         onChange={(required) => setSsoPolicy({ orgId, required })}
       />
