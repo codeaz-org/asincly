@@ -17,7 +17,7 @@ part follows the [Code of Conduct](./CODE_OF_CONDUCT.md).
 
 ## Development setup
 
-Requirements: Node.js 22+, pnpm 12 (`npm i -g corepack@latest && corepack enable`), Docker.
+Requirements: Node.js 22.12+, pnpm 12 (`npm i -g corepack@latest && corepack enable`), Docker.
 
 ```bash
 pnpm install

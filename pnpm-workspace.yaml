@@ -8,3 +8,9 @@ overrides:
   # Pinned below the patched releases by next/postcss; drop once next ships them.
   sharp: ">=0.35.5 <0.36"
   source-map-js: ">=1.2.2 <2"
+  # Dev-only advisories (ReDoS in glob matching, esbuild's dev server): the
+  # patched release in each line the tools already use.
+  brace-expansion@<2: ">=1.1.21 <2"
+  brace-expansion@>=2 <3: ">=2.1.7 <3"
+  brace-expansion@>=4 <6: ">=5.0.12 <6"
+  "@esbuild-kit/core-utils>esbuild": ">=0.25.0 <0.26"
