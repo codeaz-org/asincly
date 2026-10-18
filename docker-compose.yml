@@ -19,8 +19,9 @@ services:
       retries: 10
 
   minio:
-    # Docker Hub's minio/minio repo is no longer available; quay.io still serves it.
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # MinIO stopped publishing images (Docker Hub, then quay.io). pgsty/minio is
+    # the community-maintained build of the same server, with mc included.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     container_name: asincly-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"

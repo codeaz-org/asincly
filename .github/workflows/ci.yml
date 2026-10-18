@@ -16,7 +16,7 @@ permissions:
 env:
   # Same major as the runtime image (Dockerfile), so CI tests what ships.
   NODE_VERSION: 26
-  MINIO_IMAGE: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+  MINIO_IMAGE: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
 
 jobs:
   quality:

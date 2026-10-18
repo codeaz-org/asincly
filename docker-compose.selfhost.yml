@@ -25,7 +25,7 @@ services:
       retries: 20
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -53,7 +53,7 @@ services:
   # user for the app that can only read and write that bucket.
   minio-init:
     # The server image ships mc; one image to pin and update.
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
