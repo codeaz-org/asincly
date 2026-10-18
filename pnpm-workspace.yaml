@@ -17,8 +17,11 @@ overrides:
 
 auditConfig:
   ignoreGhsas:
-    # braces <=3.0.3, stack exhaustion on deeply nested *patterns*. No fixed
-    # release exists. It's reached only through dev tooling (eslint-config-next,
-    # the shadcn CLI) whose glob patterns are ours, never user input, and it
-    # isn't in the production bundle. Remove once braces ships a fix.
+    # braces <=3.0.3 (stack exhaustion on deeply nested patterns) has no fixed
+    # release, so patches/braces@3.0.3.patch caps nesting at 128 levels: the
+    # crash is fixed in our tree. pnpm audit matches on the version number
+    # alone, so it would still flag it. Drop both once braces ships a fix.
     - GHSA-vfj7-8cjw-p6xm
+
+patchedDependencies:
+  braces@3.0.3: patches/braces@3.0.3.patch

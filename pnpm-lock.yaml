@@ -114,6 +114,9 @@ overrides:
   brace-expansion@>=4 <6: '>=5.0.12 <6'
   '@esbuild-kit/core-utils>esbuild': '>=0.25.0 <0.26'
 
+patchedDependencies:
+  braces@3.0.3: 35854a82264b74b58ec38b2ead4d21041b84d4f5b6b6bfba8afe95e49149e9dc
+
 importers:
 
   .:
@@ -6038,7 +6041,7 @@ snapshots:
     dependencies:
       balanced-match: 4.0.4
 
-  braces@3.0.3:
+  braces@3.0.3(patch_hash=35854a82264b74b58ec38b2ead4d21041b84d4f5b6b6bfba8afe95e49149e9dc):
     dependencies:
       fill-range: 7.1.1
 
@@ -7767,7 +7770,7 @@ snapshots:
 
   micromatch@4.0.8:
     dependencies:
-      braces: 3.0.3
+      braces: 3.0.3(patch_hash=35854a82264b74b58ec38b2ead4d21041b84d4f5b6b6bfba8afe95e49149e9dc)
       picomatch: 2.3.2
 
   mime-db@1.54.0: {}

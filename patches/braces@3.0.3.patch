@@ -1,0 +1,13 @@
+diff --git a/lib/parse.js b/lib/parse.js
+index 3a6988e629f52aee6609dc5ec290a5e9ff47cecb..5d3f17445cfcff9b9b916aabdad00d01e0f1f3d8 100644
+--- a/lib/parse.js
++++ b/lib/parse.js
+@@ -196,6 +196,8 @@ const parse = (input, options = {}) => {
+ 
+     if (value === CHAR_LEFT_CURLY_BRACE) {
+       depth++;
++      // asincly patch: GHSA-vfj7-8cjw-p6xm, cap nesting so the recursive walkers can't exhaust the stack.
++      if (depth > 128) throw new SyntaxError('Brace nesting exceeds the maximum depth of 128');
+ 
+       const dollar = prev.value && prev.value.slice(-1) === '$' || block.dollar === true;
+       const brace = {
