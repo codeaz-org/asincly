@@ -3,9 +3,15 @@
 All notable changes to this project. Format: [Keep a Changelog](https://keepachangelog.com/),
 versions: [SemVer](https://semver.org/).
 
-## [Unreleased] — release candidate for 0.1.0
+## [0.1.0] — 2026-10-18
+
+First public release. Self-host it with Docker Compose, or use Asincly Cloud at
+https://asincly.codeaz.org.
 
 ### Added
+- Branded HTML for every email, with the plain-text version kept
+- @-mentions with a teammate picker; a typed @name links the teammate and notifies them
+- Invitations the invitee accepts or declines; admins see pending invites and can revoke them
 - Two-factor authentication (TOTP, backup codes), required per organization for owners and admins
 - Session list with remote sign-out; Google SSO enforcement per email domain
 - Role changes and ownership transfer for teams and organizations

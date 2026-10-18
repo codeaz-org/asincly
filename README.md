@@ -12,7 +12,7 @@ the check-in; your team reads it in theirs. No meeting, nothing missed.
 [![Self-hostable](https://img.shields.io/badge/self--host-Docker%20Compose-2496ED.svg)](./docs/DEPLOYMENT.md#docker-self-host)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
 
-[Features](#features) · [Quick start](#quick-start) · [Deploy for free](#deploy) ·
+**[Try Asincly Cloud](https://asincly.codeaz.org)** · [Features](#features) · [Quick start](#quick-start) · [Deploy for free](#deploy) ·
 [Architecture](./docs/ARCHITECTURE.md) · [Contributing](./CONTRIBUTING.md)
 
 <img src="docs/screenshots/today.png" alt="The Today dashboard: a day rail showing every teammate at their local time, blockers that need attention and check-in cards" width="860" />
@@ -132,7 +132,7 @@ your LAN IP to `DEV_ALLOWED_ORIGINS`.
 
 ## Deploy
 
-**Don't want to run it?** Use [Asincly Cloud](#hosted-version) (free for up to 3 people).
+**Don't want to run it?** Use [Asincly Cloud](https://asincly.codeaz.org) (free for up to 3 people).
 **Want to host it yourself for free? Yes, two ways:**
 
 | Option | Cost | Hosting provider allows business use¹ | Guide |
@@ -205,14 +205,13 @@ The essentials. Everything is documented in [`.env.example`](./.env.example).
 
 See **[ROADMAP.md](./ROADMAP.md)** and **[CHANGELOG.md](./CHANGELOG.md)**. Next up:
 - Slack `/standup` text check-in
-- Branded HTML emails
 - Web push / PWA
 - More AI providers (OpenAI, Anthropic, local Whisper)
 
 ## Hosted version
 
 **Asincly Cloud** is the same open-source code, run by the maintainers so you don't have
-to. Revenue from it funds development.
+to. Revenue from it funds development. Sign up at **[asincly.codeaz.org](https://asincly.codeaz.org)**.
 
 | | Free | Pro |
 |---|---|---|
