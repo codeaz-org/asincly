@@ -341,7 +341,7 @@ strong). The gaps are concentrated in exactly the destructive and revenue paths:
       `exit 0` when secrets are missing.
 - [ ] Smoke the whole loop on production: sign up → onboarding → record → AI draft → submit →
       feed → reaction/comment → digest → Stripe checkout → seat sync → Slack digest.
-- [ ] Wire the marketing page's call-to-action to the real sign-up, tick the roadmap, tag
+- [x] Wire the marketing page's call-to-action to the real sign-up, tick the roadmap, tag
       `v0.1.0`, publish the release.
 
 ---
@@ -409,7 +409,7 @@ specs, run in CI with billing off and on.
 - [ ] Have counsel review `/legal/*` and `docs/legal/*`; set the `LEGAL_*` variables.
 - [ ] Sign DPAs with each subprocessor; paid AI plan with no-training / limited retention;
       confirm DPF/SCCs per provider; VAT/OSS registration, then `STRIPE_TAX_ENABLED=true`.
-- [ ] Turn on GitHub private vulnerability reporting; set the repo description, homepage and
+- [x] Turn on GitHub private vulnerability reporting; set the repo description, homepage and
       topics; decide whether to rewrite history to drop the old design-lab files (52 MB .git).
 - [ ] Provision and deploy (the items above), run [PENTEST.md](PENTEST.md) on staging.
 - [ ] Merge or close the open Dependabot PRs; upgrade vitest to 4 once local Node is ≥22.12

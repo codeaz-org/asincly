@@ -63,7 +63,7 @@ is green. Tick boxes as work lands.
       cron hitting `/api/cron/tick`. Full app-in-container Dockerfile deferred.
 - [ ] Branding settings (logo, accent colour) per org
 - [x] Threat-model doc, pen-test checklist (`docs/THREAT-MODEL.md`, `docs/PENTEST.md`). `SECURITY.md` disclosure process is in place.
-- [ ] Public repo, landing page → real sign-up
+- [x] Public repo, landing page → real sign-up
 
 ### Explicitly deferred, needs its own sprint
 - Slack app, Google Calendar, Web push — each is a proper integration with OAuth setup,
