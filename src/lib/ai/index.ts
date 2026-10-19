@@ -1,4 +1,4 @@
-import { fakeDrafter, fakeTranscriber } from "./fake";
+import { fakeDrafter, fakeSummarizer, fakeTranscriber } from "./fake";
 import { groqDrafter, groqSummarizer, groqTranscriber } from "./groq";
 import { noopDrafter, noopSummarizer, noopTranscriber } from "./noop";
 import type { AI } from "./types";
@@ -14,7 +14,7 @@ function fakeEnabled(): boolean {
 }
 
 export async function getAI(): Promise<AI> {
-  if (fakeEnabled()) return { transcriber: fakeTranscriber, summarizer: noopSummarizer, drafter: fakeDrafter };
+  if (fakeEnabled()) return { transcriber: fakeTranscriber, summarizer: fakeSummarizer, drafter: fakeDrafter };
   if (process.env.GROQ_API_KEY) {
     return { transcriber: groqTranscriber, summarizer: groqSummarizer, drafter: groqDrafter };
   }

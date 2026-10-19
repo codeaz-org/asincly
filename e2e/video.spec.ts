@@ -71,9 +71,23 @@ test("record a video → AI drafts the check-in from the previous plan → send"
 
   await page.screenshot({ path: "test-results/screens/app-video-draft.png" });
 
+  // The transcript got something wrong; the author fixes it before sending.
+  await page.getByRole("navigation", { name: "Steps" }).getByRole("button", { name: "Today" }).click();
+  const today = page.getByRole("textbox", { name: "Today" });
+  await expect(today).toHaveValue(/Write the release notes/);
+  await today.fill((await today.inputValue()).replace("Write the release notes", "Write the launch notes"));
+  await page.getByRole("navigation", { name: "Steps" }).getByRole("button", { name: /review/i }).click();
+
   await page.getByRole("button", { name: /send check-in/i }).click();
   await page.waitForURL(new RegExp(`${team.slug}\\?focus=`), { timeout: 15000 });
   await expect(page.getByRole("button", { name: /play video note/i })).toBeVisible({ timeout: 15000 });
+  // The AI summary is rewritten from what was sent, not the transcript.
+  await expect(async () => {
+    await page.reload();
+    const summary = page.locator("article").first();
+    await expect(summary.getByText("Write the launch notes").first()).toBeVisible({ timeout: 1000 });
+    await expect(summary.getByText(/release notes/)).toHaveCount(0);
+  }).toPass({ timeout: 20000 });
   await page.screenshot({ path: "test-results/screens/app-feed-video.png" });
 
   await ctx.close();

@@ -6,6 +6,7 @@ import { aiSecondsRemaining, getEntitlements, recordAiUsage } from "@/lib/billin
 import { getPreviousContext } from "@/lib/check-in-context";
 import { encrypt } from "@/lib/crypto";
 import { displayName } from "@/lib/display";
+import { toDisplay } from "@/lib/mentions";
 import { presignedGetUrl } from "@/lib/s3";
 
 export type DraftHints = Record<string, "done" | "not_done">;
@@ -110,8 +111,10 @@ export async function processRecording(recordingId: string, hints: DraftHints = 
       typed: { yesterday: ctx.checkIn.yesterday, today: ctx.checkIn.today, blockers: ctx.checkIn.blockers },
       previous: previous.previous,
       openBlockers: previous.openBlockers,
-      roster: roster
-        .filter((r) => r.userId !== rec.userId)
+      // The author too, listed last: "@anton, note to self" tags like any
+      // name (mentions never notify their author).
+      roster: [...roster]
+        .sort((a, b) => Number(a.userId === rec.userId) - Number(b.userId === rec.userId))
         .map((r) => ({ userId: r.userId, name: displayName(r.name, r.email) })),
       authorTz: ctx.authorTz,
       hints,
@@ -147,4 +150,55 @@ export async function processRecording(recordingId: string, hints: DraftHints = 
 
 function audioMime(key: string): string {
   return key.endsWith(".m4a") ? "audio/mp4" : "audio/webm";
+}
+
+// After the author sends, the card's summary is rewritten from the check-in
+// they actually sent, so a name or fact they corrected in review doesn't
+// stay wrong in the summary written from the transcript. Only the sent text
+// goes to the model: it's what the author approved. A failure keeps the old
+// summary.
+export async function resummarizeCheckIn(checkInId: string): Promise<void> {
+  const [ctx] = await db
+    .select({
+      yesterday: checkIns.yesterday,
+      today: checkIns.today,
+      blockers: checkIns.blockers,
+      authorTz: users.tz,
+      aiAllowed: sql<boolean>`${teams.aiEnabled} and not ${users.aiOptOut}`,
+    })
+    .from(checkIns)
+    .innerJoin(users, eq(users.id, checkIns.userId))
+    .innerJoin(occurrences, eq(occurrences.id, checkIns.occurrenceId))
+    .innerJoin(schedules, eq(schedules.id, occurrences.scheduleId))
+    .innerJoin(teams, eq(teams.id, schedules.teamId))
+    .where(eq(checkIns.id, checkInId));
+  if (!ctx?.aiAllowed) return;
+  const recs = await db
+    .select({ id: recordings.id })
+    .from(recordings)
+    .where(sql`${recordings.checkInId} = ${checkInId} and ${recordings.status} = 'ready' and ${recordings.summaryCipher} <> ''`);
+  if (recs.length === 0) return;
+
+  const note = [
+    ["Yesterday", ctx.yesterday],
+    ["Today", ctx.today],
+    ["Blockers", ctx.blockers],
+  ]
+    .filter(([, md]) => md.trim())
+    .map(([label, md]) => `${label}:\n${toDisplay(md)}`)
+    .join("\n\n");
+  if (!note) return;
+
+  try {
+    const summary = await (await getAI()).summarizer.summarize({ transcript: "", note, authorTz: ctx.authorTz });
+    if (summary.bullets.length === 0) return;
+    for (const r of recs) {
+      await db
+        .update(recordings)
+        .set({ summaryCipher: encrypt(JSON.stringify(summary), `recording:${r.id}:summary`) })
+        .where(eq(recordings.id, r.id));
+    }
+  } catch (e) {
+    console.error("[resummarizeCheckIn]", checkInId, e instanceof Error ? e.message : "unknown error");
+  }
 }
