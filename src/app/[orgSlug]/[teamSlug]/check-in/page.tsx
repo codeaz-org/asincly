@@ -103,9 +103,13 @@ export default async function CheckInPage({
   const pending = existing.find((r) => ["uploaded", "processing", "transcribing", "drafting"].includes(r.status));
   const skipReason = VIDEO_SKIP_REASONS.find((r) => r === ctx.checkIn.videoSkipReason);
 
-  const candidates = roster
-    .filter((r) => r.userId !== user.id)
-    .map((r) => ({ userId: r.userId, name: displayName(r.name, r.email), email: r.email }));
+  // Yourself included (listed last), like Linear; mentions never notify their author.
+  const candidates = roster.map((r) => ({
+    userId: r.userId,
+    name: displayName(r.name, r.email),
+    email: r.email,
+    you: r.userId === user.id,
+  }));
   const flowPath = checkInFlowPath(orgSlug, teamSlug);
 
   return (

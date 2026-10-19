@@ -30,3 +30,26 @@ test("@ opens a teammate menu at the caret; a pick shows as a pill and Backspace
   for (let i = 0; i < 12; i++) await p.keyboard.press("Backspace");
   await expect(box).toHaveValue(/then asked $/);
 });
+
+test("@ lists you too, and says so when nobody matches", async ({ browser }) => {
+  const a = await seedUserWithSession("solo");
+  await setUserName(a.user.id, "Anton Solo");
+  const { org, team } = await seedOrgWithTeam(a.user.id);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  await signInAs(ctx, a.sessionToken);
+  const p = await ctx.newPage();
+  await p.goto(`/${org.slug}/${team.slug}/check-in`, { waitUntil: "networkidle" });
+  await p.getByRole("button", { name: /write it instead/i }).click();
+  const box = p.getByRole("textbox", { name: "Yesterday" });
+  await box.click();
+  await p.keyboard.type("Note to @");
+  const menu = p.getByRole("listbox", { name: "Teammates" });
+  await expect(menu.getByRole("option", { name: /Anton Solo/ })).toContainText("You");
+  await p.keyboard.type("zz");
+  await expect(p.getByRole("status").filter({ hasText: "No teammates on this team yet" })).toBeVisible();
+  for (let i = 0; i < 2; i++) await p.keyboard.press("Backspace");
+  await p.keyboard.type("an");
+  await p.keyboard.press("Enter");
+  await expect(box).toHaveValue(/Note to @Anton Solo $/);
+  await ctx.close();
+});

@@ -11,6 +11,8 @@ export type MentionCandidate = {
   userId: string;
   name: string;
   email: string;
+  /** The person typing: listed last, and never notified. */
+  you?: boolean;
 };
 
 type Props = {
@@ -153,7 +155,7 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
     : trigger.kind === "mention"
       ? rankCandidates(candidates, trigger.query)
           .slice(0, 6)
-          .map((c) => ({ kind: "mention", key: c.userId, label: c.name, detail: c.email, candidate: c }))
+          .map((c) => ({ kind: "mention", key: c.userId, label: c.name, detail: c.you ? `You · ${c.email}` : c.email, candidate: c }))
       : searchShortcodes(emojiIndex ?? [], trigger.query, 8).map((r) => ({
           kind: "emoji",
           key: r.code,
@@ -161,6 +163,8 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
           emoji: r.emoji,
         }));
   const open = !!pos && suggestions.length > 0;
+  // "@" with nothing to offer still answers, instead of the menu not opening.
+  const noMatch = !!pos && trigger?.kind === "mention" && suggestions.length === 0;
   const active = suggestions.length === 0 ? 0 : Math.min(highlight, suggestions.length - 1);
 
   function close() {
@@ -326,6 +330,18 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
       />
       {/* On <body>: a transformed ancestor (the step's entrance animation)
           would otherwise turn position:fixed into position:absolute. */}
+      {noMatch && createPortal(
+        <div
+          role="status"
+          style={{ position: "fixed", top: pos.top, left: pos.left }}
+          className="z-50 w-[280px] rounded-xl border border-line bg-popover/95 backdrop-blur-xl shadow-[0_24px_60px_-20px_oklch(0_0_0/0.7)] px-3 py-2.5 text-sm text-soft"
+        >
+          {candidates.some((c) => !c.you)
+            ? `No teammate matches “${trigger.query}”`
+            : "No teammates on this team yet. Invite them from People."}
+        </div>,
+        document.body,
+      )}
       {open && createPortal(
         <div
           style={{ position: "fixed", top: pos.top, left: pos.left }}
@@ -404,11 +420,13 @@ function pieces(text: string, spans: { start: number; end: number; userId: strin
 // then names that merely contain it.
 function rankCandidates(candidates: MentionCandidate[], query: string): MentionCandidate[] {
   const q = query.toLowerCase();
-  if (!q) return [...candidates].sort((a, b) => a.name.localeCompare(b.name));
+  // Teammates first, yourself last.
+  const byName = (a: MentionCandidate, b: MentionCandidate) => Number(!!a.you) - Number(!!b.you) || a.name.localeCompare(b.name);
+  if (!q) return [...candidates].sort(byName);
   const starts = (c: MentionCandidate) =>
     c.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)) || c.email.toLowerCase().startsWith(q);
   const contains = (c: MentionCandidate) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
-  return [...candidates.filter(starts), ...candidates.filter((c) => !starts(c) && contains(c))];
+  return [...candidates.filter(starts).sort(byName), ...candidates.filter((c) => !starts(c) && contains(c)).sort(byName)];
 }
 
 // Viewport position of character `index`, measured on a throwaway copy of
