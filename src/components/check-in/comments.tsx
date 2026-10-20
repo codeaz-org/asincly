@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { Send, Trash2 } from "lucide-react";
 import { MarkLoader } from "@/components/brand/loader";
 import { ReactionBar } from "@/components/emoji/reaction-bar";
-import { MentionTextarea } from "@/components/mention-textarea";
+import { MentionTextarea, type MentionCandidate } from "@/components/mention-textarea";
+import { extractMentions, mentionSpans, toDisplay } from "@/lib/mentions";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { addComment, deleteComment } from "@/lib/actions/social";
@@ -27,10 +28,12 @@ export function Comments({
   checkInId,
   viewerId,
   comments,
+  candidates,
 }: {
   checkInId: string;
   viewerId: string;
   comments: ThreadComment[];
+  candidates: MentionCandidate[];
 }) {
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +70,9 @@ export function Comments({
                   <p className="text-sm text-faint italic">Comment removed</p>
                 ) : (
                   <>
-                    <p className="text-[15px] text-ink whitespace-pre-wrap break-words leading-relaxed">{c.body}</p>
+                    <p className="text-[15px] text-ink whitespace-pre-wrap break-words leading-relaxed">
+                      <ReplyText body={c.body} />
+                    </p>
                     <ReactionBar checkInId={checkInId} commentId={c.id} initial={c.reactions} size="sm" className="mt-1.5" />
                   </>
                 )}
@@ -107,7 +112,7 @@ export function Comments({
           id="reply"
           value={body}
           onChange={setBody}
-          candidates={[]}
+          candidates={candidates}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
               e.preventDefault();
@@ -116,7 +121,7 @@ export function Comments({
           }}
           maxLength={COMMENT_MAX}
           rows={2}
-          placeholder="Write a reply… (:emoji: works)"
+          placeholder="Write a reply… (@ to mention, :emoji: works)"
           className="block w-full resize-none bg-transparent px-4 pt-3 text-[15px] text-ink placeholder:text-faint focus:outline-none"
         />
         <div className="flex items-center justify-between gap-3 px-3 pb-3">
@@ -134,4 +139,23 @@ export function Comments({
       )}
     </div>
   );
+}
+
+// A reply with its mentions shown as "@Name" in amber, not as link markup.
+function ReplyText({ body }: { body: string }) {
+  const text = toDisplay(body);
+  const spans = mentionSpans(text, extractMentions(body));
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  for (const s of spans) {
+    out.push(text.slice(last, s.start));
+    out.push(
+      <span key={s.start} className="text-amber font-medium">
+        {text.slice(s.start, s.end)}
+      </span>,
+    );
+    last = s.end;
+  }
+  out.push(text.slice(last));
+  return <>{out}</>;
 }

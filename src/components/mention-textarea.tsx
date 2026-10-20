@@ -135,7 +135,8 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
   });
   const [emojiIndex, setEmojiIndex] = useState<Array<[string, string]> | null>(null);
   const [highlight, setHighlight] = useState(0);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  // Fixed to the viewport: `top` opens it below the "@", `bottom` above it.
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
 
   useImperativeHandle(handleRef, () => ({
     applyEdit(fn) {
@@ -225,7 +226,11 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
     // Position (viewport coords, the menu is position:fixed): just under the
     // "@", wherever it sits, kept on screen.
     const at = caretPoint(backdropRef.current, el, i);
-    setPos({ top: Math.min(at.bottom + 6, window.innerHeight - 260), left: Math.max(8, Math.min(at.left - 8, window.innerWidth - 288)) });
+    // Below the "@" when the menu fits there, otherwise above it: never over
+    // the line being typed (a reply box sits at the bottom of the screen).
+    const left = Math.max(8, Math.min(at.left - 8, window.innerWidth - 288));
+    const below = window.innerHeight - at.bottom;
+    setPos(below >= MENU_ROOM || below >= at.top ? { top: at.bottom + 6, left } : { bottom: window.innerHeight - at.top + 6, left });
   }
 
   function accept(s: Suggestion) {
@@ -333,7 +338,7 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
       {noMatch && createPortal(
         <div
           role="status"
-          style={{ position: "fixed", top: pos.top, left: pos.left }}
+          style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left }}
           className="z-50 w-[280px] rounded-xl border border-line bg-popover/95 backdrop-blur-xl shadow-[0_24px_60px_-20px_oklch(0_0_0/0.7)] px-3 py-2.5 text-sm text-soft"
         >
           {candidates.some((c) => !c.you)
@@ -344,7 +349,7 @@ export const MentionTextarea = forwardRef<MentionTextareaHandle, Props>(function
       )}
       {open && createPortal(
         <div
-          style={{ position: "fixed", top: pos.top, left: pos.left }}
+          style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left }}
           className="z-50 w-[280px] rounded-xl border border-line bg-popover/95 backdrop-blur-xl shadow-[0_24px_60px_-20px_oklch(0_0_0/0.7)] overflow-hidden p-1"
         >
           <ul className="text-sm" role="listbox" aria-label={trigger?.kind === "emoji" ? "Emoji" : "Teammates"}>
@@ -431,9 +436,12 @@ function rankCandidates(candidates: MentionCandidate[], query: string): MentionC
 
 // Viewport position of character `index`, measured on a throwaway copy of
 // the pill layer (same box, font and wrapping as the textarea).
-function caretPoint(layer: HTMLElement | null, el: HTMLTextAreaElement, index: number): { left: number; bottom: number } {
+// Height the menu needs below the caret: six rows and the key hints.
+const MENU_ROOM = 320;
+
+function caretPoint(layer: HTMLElement | null, el: HTMLTextAreaElement, index: number): { left: number; top: number; bottom: number } {
   const box = el.getBoundingClientRect();
-  if (!layer?.parentElement) return { left: box.left + 12, bottom: box.top + 24 };
+  if (!layer?.parentElement) return { left: box.left + 12, top: box.top, bottom: box.top + 24 };
   const copy = layer.cloneNode(false) as HTMLElement;
   copy.style.visibility = "hidden";
   const text = document.createTextNode(el.value + " ");
@@ -445,5 +453,5 @@ function caretPoint(layer: HTMLElement | null, el: HTMLTextAreaElement, index: n
   range.setEnd(text, index + 1);
   const r = range.getBoundingClientRect();
   copy.remove();
-  return { left: r.left, bottom: r.bottom };
+  return { left: r.left, top: r.top, bottom: r.bottom };
 }
