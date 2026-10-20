@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Questions and ideas
+    url: https://github.com/codeaz-org/asincly/discussions
+    about: Ask how to set it up, share how you use it, float an idea before opening an issue.
   - name: Report a security vulnerability
     url: https://github.com/codeaz-org/asincly/security/advisories/new
     about: Privately, please — see SECURITY.md.
