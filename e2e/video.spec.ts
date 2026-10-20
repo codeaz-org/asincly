@@ -37,7 +37,7 @@ test("record a video → AI drafts the check-in from the previous plan → send"
   await signInAs(ctx, user.sessionToken);
   const page = await ctx.newPage();
 
-  await page.goto(`http://localhost:3000/${org.slug}/${team.slug}/check-in`, { waitUntil: "networkidle" });
+  await page.goto(`${test.info().project.use.baseURL}/${org.slug}/${team.slug}/check-in`, { waitUntil: "networkidle" });
 
   // While you talk: the previous plan is on screen.
   const panel = page.getByRole("complementary", { name: /while you talk/i });

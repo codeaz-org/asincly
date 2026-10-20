@@ -219,6 +219,8 @@ export const notificationType = pgEnum("notification_type", [
   "help_offered",
   "blocker_resolved",
   "nudged",
+  // One per check-in or reply, updated as reactions come in.
+  "reacted",
 ]);
 
 export const notifications = pgTable("notification", {

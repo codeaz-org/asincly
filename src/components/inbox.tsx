@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { AtSign, Bell, CircleAlert, Hand, MessageCircle, Sparkles, Sunrise, Check } from "lucide-react";
-import { markAllRead } from "@/lib/actions/notifications";
+import { AtSign, Bell, CircleAlert, Hand, MessageCircle, SmilePlus, Sparkles, Sunrise, Check } from "lucide-react";
+import { markAllRead, markRead } from "@/lib/actions/notifications";
 import { Button } from "@/components/ui/button";
 import { PopoverContent, PopoverRoot, PopoverTrigger } from "@/components/ui/menu";
 import { LogoMark } from "@/components/brand/mark";
@@ -18,7 +18,8 @@ export type InboxItem = {
     | "commented"
     | "help_offered"
     | "blocker_resolved"
-    | "nudged";
+    | "nudged"
+    | "reacted";
   title: string;
   body: string | null;
   linkPath: string | null;
@@ -94,12 +95,25 @@ function NotificationRow({ item, onNavigate }: { item: InboxItem; onNavigate: ()
   );
   if (item.linkPath) {
     return (
-      <Link href={item.linkPath} onClick={onNavigate} className="block outline-none focus-visible:bg-ink/[0.06]">
+      <Link
+        href={item.linkPath}
+        onClick={() => {
+          if (!item.readAt) void markRead(item.id);
+          onNavigate();
+        }}
+        className="block outline-none focus-visible:bg-ink/[0.06]"
+      >
         {content}
       </Link>
     );
   }
-  return content;
+  return item.readAt ? (
+    content
+  ) : (
+    <button type="button" onClick={() => void markRead(item.id)} className="block w-full text-left outline-none focus-visible:bg-ink/[0.06]">
+      {content}
+    </button>
+  );
 }
 
 function iconFor(t: InboxItem["type"]): React.ReactNode {
@@ -118,6 +132,8 @@ function iconFor(t: InboxItem["type"]): React.ReactNode {
       return <Check />;
     case "nudged":
       return <Hand />;
+    case "reacted":
+      return <SmilePlus />;
     default:
       return <Sparkles />;
   }

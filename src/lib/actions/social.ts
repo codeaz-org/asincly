@@ -22,7 +22,7 @@ import { audit } from "@/lib/audit";
 import { displayName, firstName } from "@/lib/display";
 import { extractMentions, linkAtMentions, toDisplay } from "@/lib/mentions";
 import { blockerItems, plainText } from "@/lib/note-items";
-import { notify } from "@/lib/notifications";
+import { notify, syncReactionNotice } from "@/lib/notifications";
 import { checkInDetailPath, checkInFlowPath, teamPath } from "@/lib/paths";
 import { rateLimit } from "@/lib/rate-limit";
 import { requireUser } from "@/lib/session";
@@ -144,6 +144,13 @@ export async function toggleReaction(input: unknown): Promise<ActionResult> {
     resourceType: commentId ? "check_in_comment" : "check_in",
     resourceId: commentId ?? checkInId,
     meta: { emoji },
+  });
+  await syncReactionNotice({
+    checkInId,
+    commentId: commentId ?? null,
+    teamId: ctx.teamId,
+    linkPath: checkInDetailPath(ctx.orgSlug, ctx.teamSlug, checkInId),
+    added,
   });
   revalidateTeam(ctx.orgSlug, ctx.teamSlug, checkInId);
   return { ok: true };
