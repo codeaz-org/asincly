@@ -20,8 +20,9 @@ import {
 import { withUser } from "@/db/with-user";
 import { audit } from "@/lib/audit";
 import { displayName, firstName } from "@/lib/display";
+import { extractMentions, linkAtMentions, toDisplay } from "@/lib/mentions";
 import { blockerItems, plainText } from "@/lib/note-items";
-import { notify } from "@/lib/notifications";
+import { notify, syncReactionNotice } from "@/lib/notifications";
 import { checkInDetailPath, checkInFlowPath, teamPath } from "@/lib/paths";
 import { rateLimit } from "@/lib/rate-limit";
 import { requireUser } from "@/lib/session";
@@ -144,6 +145,13 @@ export async function toggleReaction(input: unknown): Promise<ActionResult> {
     resourceId: commentId ?? checkInId,
     meta: { emoji },
   });
+  await syncReactionNotice({
+    checkInId,
+    commentId: commentId ?? null,
+    teamId: ctx.teamId,
+    linkPath: checkInDetailPath(ctx.orgSlug, ctx.teamSlug, checkInId),
+    added,
+  });
   revalidateTeam(ctx.orgSlug, ctx.teamSlug, checkInId);
   return { ok: true };
 }
@@ -154,13 +162,21 @@ export async function addComment(input: unknown): Promise<ActionResult> {
   const user = await requireUser();
   const parsed = AddCommentSchema.safeParse(input);
   if (!parsed.success) return fail(firstIssue(parsed.error));
-  const { checkInId, body } = parsed.data;
+  const { checkInId } = parsed.data;
 
   if (!(await rateLimit(`comment:${user.id}`, 20, 60_000)).allowed) {
     return fail("That's a lot of comments — try again in a minute");
   }
   const ctx = await checkInContext(checkInId, user.id);
   if (!ctx) return fail("Check-in not found");
+
+  // A typed "@lena" becomes a mention when it names one teammate, as in check-ins.
+  const roster = await db
+    .select({ userId: users.id, name: users.name, email: users.email })
+    .from(members)
+    .innerJoin(users, eq(users.id, members.userId))
+    .where(eq(members.teamId, ctx.teamId));
+  const body = linkAtMentions(parsed.data.body, roster);
 
   const [row] = await withUser(user.id, (tx) =>
     tx.insert(checkInComments).values({ checkInId, userId: user.id, body }).returning({ id: checkInComments.id }),
@@ -182,11 +198,32 @@ export async function addComment(input: unknown): Promise<ActionResult> {
       teamId: ctx.teamId,
       type: "commented",
       title: `${who} replied to your check-in`,
-      body: plainText(body).slice(0, 140),
+      body: plainText(toDisplay(body)).slice(0, 140),
       linkPath: checkInDetailPath(ctx.orgSlug, ctx.teamSlug, checkInId),
       data: { checkInId, commentId: row.id, actorId: user.id },
       sendEmail: false,
     });
+  }
+
+  // People named in the reply. Not you, and not the author: they were just
+  // told about the reply itself.
+  const onTeam = new Set(roster.map((r) => r.userId));
+  const named = extractMentions(body)
+    .map((m) => m.userId)
+    .filter((id) => id !== user.id && id !== ctx.authorId && onTeam.has(id));
+  if (named.length > 0) {
+    const who = await actorName(user.id);
+    for (const id of named) {
+      await notify({
+        userId: id,
+        teamId: ctx.teamId,
+        type: "mentioned",
+        title: `${who} mentioned you in a reply`,
+        body: plainText(toDisplay(body)).slice(0, 140),
+        linkPath: checkInDetailPath(ctx.orgSlug, ctx.teamSlug, checkInId),
+        data: { checkInId, commentId: row.id, actorId: user.id },
+      });
+    }
   }
   revalidateTeam(ctx.orgSlug, ctx.teamSlug, checkInId);
   return { ok: true };

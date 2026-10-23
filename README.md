@@ -10,12 +10,15 @@ the check-in; your team reads it in theirs. No meeting, nothing missed.
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-f59e0b.svg)](./LICENSE)
 [![CI](https://github.com/codeaz-org/asincly/actions/workflows/ci.yml/badge.svg)](https://github.com/codeaz-org/asincly/actions/workflows/ci.yml)
 [![Self-hostable](https://img.shields.io/badge/self--host-Docker%20Compose-2496ED.svg)](./docs/DEPLOYMENT.md#docker-self-host)
+[![Release](https://img.shields.io/github/v/release/codeaz-org/asincly?color=f59e0b)](https://github.com/codeaz-org/asincly/releases)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
 
 **[Try Asincly Cloud](https://asincly.codeaz.org)** · [Features](#features) · [Quick start](#quick-start) · [Deploy for free](#deploy) ·
 [Architecture](./docs/ARCHITECTURE.md) · [Contributing](./CONTRIBUTING.md)
 
-<img src="docs/screenshots/today.png" alt="The Today dashboard: a day rail showing every teammate at their local time, blockers that need attention and check-in cards" width="860" />
+<img src="docs/screenshots/demo.gif" alt="Recording a check-in: notes beside the camera, a short recording, the AI-drafted check-in with teammates tagged, then sent to the team's feed" width="860" />
+
+<sub>Record → AI drafts yesterday / today / blockers and tags teammates → review → send. (Demo data, fake camera.)</sub>
 
 </div>
 
@@ -31,13 +34,23 @@ Asincly lets each person **record a short video whenever their day starts**. The
 into *yesterday / today / blockers*, ticks off last time's plan, tags the teammates you
 mentioned and flags blockers. The team reads a calm, one-screen digest instead of meeting.
 
+## How it works
+
+1. **Your window opens** in your own time zone. You get a reminder (in-app, email or Slack).
+2. **Talk for two minutes** with your last plan and your notes on screen, or write it instead.
+3. **The AI drafts it, you fix it and send.** Teammates read it when their day starts: a
+   summary, the full note, the video on tap. Blockers, mentions, replies and reactions
+   notify the right people.
+
+<img src="docs/screenshots/today.png" alt="The Today dashboard: a day rail showing every teammate at their local time, blockers that need attention and check-in cards" width="860" />
+
 ## Features
 
 ### Record instead of type
 
 <img src="docs/screenshots/record.png" alt="Recording screen with last time's plan, open blockers and private notes beside the camera" width="860" />
 
-- **Video first:** camera or screen + camera, up to 5 minutes; works on phones.
+- **Video first:** camera or screen + camera, up to 10 minutes; works on phones.
 - **Your previous plan on screen while you talk:** tap items as done or still going, or just
   say it.
 - **Private notes:** jot talking points beforehand so you don't forget anything.
@@ -74,6 +87,22 @@ mentioned and flags blockers. The team reads a calm, one-screen digest instead o
 - **Not in yet:** see who hasn't checked in, **nudge** people whose window is open, and set
   yourself **away**, which pauses reminders.
 
+### Mentions, notifications, live
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/mentions.png" alt="Typing @k in a check-in opens a teammate picker with avatars" /></td>
+<td><img src="docs/screenshots/inbox.png" alt="The inbox: grouped reactions, a mention, a reply and an offer of help" /></td>
+</tr>
+</table>
+
+- **@-mentions like Linear:** type `@` for a teammate picker, in check-ins and replies; a
+  typed `@name` links too. The person named gets notified.
+- **One notification per thing:** reactions to your check-in or reply group into one
+  ("Sam, Kenji and 1 other reacted · 🙌 🎉"); replies, mentions, blockers on you and offers
+  of help each have their own.
+- **Live:** feeds, replies, reactions and the inbox update without a reload.
+
 ### Team rules, people and settings
 
 <table>
@@ -87,8 +116,10 @@ mentioned and flags blockers. The team reads a calm, one-screen digest instead o
   admins see it.
 - **Schedules:** any number per team (daily, weekdays, M·W·F, weekly, custom RRULE). Each
   has a window in every member's local time.
+- **Invitations:** invitees accept before they join; admins see who's pending and can
+  revoke.
 - **Notifications:** in-app and email, for window open, mentions, blockers, replies,
-  offers of help and nudges.
+  reactions, offers of help and nudges.
 - **Data controls:** export everything as JSON, set recording retention, hard-delete a team
   or organization.
 

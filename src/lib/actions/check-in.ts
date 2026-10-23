@@ -2,6 +2,7 @@
 
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { withUser, type Q } from "@/db/with-user";
 import { checkIns, members, occurrences, recordings, schedules, users } from "@/db/schema";
@@ -10,6 +11,7 @@ import { carryOver } from "@/lib/carry-over";
 import { authorCheckIn } from "@/lib/check-in-access";
 import { extractMentions, linkAtMentions } from "@/lib/mentions";
 import { fireMentionEvents } from "@/lib/notifications";
+import { resummarizeCheckIn } from "@/lib/process-recording";
 import { requireUser } from "@/lib/session";
 import { localDate, nextOccurrenceDate, occursOn } from "@/lib/time";
 import { VideoSkipSchema } from "@/lib/validation/social";
@@ -241,6 +243,14 @@ export async function submitCheckIn(input: unknown): Promise<SubmitResult> {
     }
 
     revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}`, "layout");
+
+    // The AI summary follows what was sent, not what the transcript heard.
+    if (recording?.drafted) {
+      after(async () => {
+        await resummarizeCheckIn(checkInId);
+        revalidatePath(`/${ctx.orgSlug}/${ctx.teamSlug}`, "layout");
+      });
+    }
 
     // Notify people named in the check-in: everyone on first send, and only
     // newly added names when an already-sent check-in is updated.

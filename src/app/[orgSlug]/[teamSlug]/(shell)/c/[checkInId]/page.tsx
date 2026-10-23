@@ -7,6 +7,7 @@ import { PlanGate } from "@/components/billing/plan-gate";
 import { CheckInCard } from "@/components/dashboard/check-in-card";
 import { SectionTitle } from "@/components/ui/card";
 import { dayLabel, entryName, namesById } from "@/lib/feed-view";
+import { displayName } from "@/lib/display";
 import { teamPath } from "@/lib/paths";
 import { getCheckInDetail, getTeamRoster } from "@/lib/queries";
 import { historyCutoff } from "@/lib/billing/plans";
@@ -78,6 +79,12 @@ export default async function CheckInDetailPage({
           checkInId={checkInId}
           viewerId={user.id}
           comments={detail.comments.map((c) => ({ ...c, createdAt: c.createdAt.toISOString() }))}
+          candidates={roster.map((r) => ({
+            userId: r.userId,
+            name: displayName(r.name, r.email),
+            email: r.email,
+            you: r.userId === user.id,
+          }))}
         />
       </section>
     </div>

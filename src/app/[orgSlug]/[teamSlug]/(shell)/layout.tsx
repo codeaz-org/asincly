@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { LiveRefresh } from "@/components/live-refresh";
 import { TzDetector } from "@/components/tz-detector";
 import { getTeamPageContext, getViewerToday } from "@/lib/team-context";
 
@@ -28,6 +29,7 @@ export default async function TeamShellLayout({
       myState={today.markState}
     >
       <TzDetector currentTz={user.tz} />
+      <LiveRefresh teamId={team.teamId} />
       {children}
     </AppShell>
   );

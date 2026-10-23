@@ -264,7 +264,7 @@ export async function getRecordingDraft(input: unknown): Promise<DraftStatus> {
   const composed = composeDraft(
     { previous: stored.previous ?? [], typed: parsed.data.typed, hints: stored.hints },
     draft.data,
-    roster.filter((r) => r.userId !== user.id).map((r) => ({ userId: r.userId, name: displayName(r.name, r.email) })),
+    roster.map((r) => ({ userId: r.userId, name: displayName(r.name, r.email) })),
   );
   return { ok: true, status: "ready", aiConfigured: true, draft: composed };
 }

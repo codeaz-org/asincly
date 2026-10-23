@@ -550,6 +550,11 @@ function Writer({
 }) {
   const ref = useRef<MentionTextareaHandle | null>(null);
   const [justTagged, setJustTagged] = useState<string[]>([]);
+  // You can tag yourself, but you don't get a heads-up.
+  const headsUp = justTagged.flatMap((id) => {
+    const c = candidates.find((x) => x.userId === id);
+    return c?.you ? [] : [c?.name ?? "someone"];
+  });
 
   // Leaving the field tags teammates named in plain text ("ask Lena").
   function tagNames() {
@@ -606,14 +611,16 @@ function Writer({
         {candidates.length > 0 && (
           <Chip onClick={mention} icon={<AtSign />}>Mention</Chip>
         )}
-        <span className="ml-auto text-xs text-faint hidden sm:inline">↵ new line · ⇥ indent · :emoji:</span>
+        {/* In the toolbar row, not a new line: tagging runs on blur, and a line
+            appearing under the pointer would move the button being clicked. */}
+        {headsUp.length > 0 ? (
+          <span role="status" className="ml-auto text-xs text-amber animate-rise-in">
+            Tagged {headsUp.join(", ")} — they&rsquo;ll get a heads-up when you send.
+          </span>
+        ) : (
+          <span className="ml-auto text-xs text-faint hidden sm:inline">↵ new line · ⇥ indent · :emoji:</span>
+        )}
       </div>
-      {justTagged.length > 0 && (
-        <p role="status" className="text-xs text-amber animate-rise-in">
-          Tagged {justTagged.map((id) => candidates.find((c) => c.userId === id)?.name ?? "someone").join(", ")} — they&rsquo;ll get a
-          heads-up when you send.
-        </p>
-      )}
     </div>
   );
 }

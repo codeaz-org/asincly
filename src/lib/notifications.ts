@@ -1,7 +1,9 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { withUser } from "@/db/with-user";
 import {
+  checkInComments,
+  checkInReactions,
   checkIns,
   members,
   notifications,
@@ -14,7 +16,9 @@ import {
 import { sendEmail } from "@/lib/email";
 import { EMAIL_KIND_LABEL, emailKindFor, unsubscribeUrl } from "@/lib/email-prefs";
 import { extractMentions } from "@/lib/mentions";
+import { displayName } from "@/lib/display";
 import { checkInDetailPath } from "@/lib/paths";
+import { reactionNotice } from "@/lib/reaction-notice";
 
 type Enqueue = {
   userId: string;
@@ -36,6 +40,7 @@ const ACTION_LABEL: Record<Enqueue["type"], string> = {
   help_offered: "See the offer",
   blocker_resolved: "Open the check-in",
   nudged: "Check in",
+  reacted: "Open the check-in",
 };
 
 // Create a notification + optionally send an email. False when it already
@@ -201,4 +206,84 @@ export async function markAllReadForUser(userId: string) {
       .set({ readAt: new Date() })
       .where(and(eq(notifications.userId, userId), isNull(notifications.readAt))),
   );
+}
+
+export async function markReadForUser(userId: string, id: string) {
+  await withUser(userId, (tx) =>
+    tx
+      .update(notifications)
+      .set({ readAt: new Date() })
+      .where(and(eq(notifications.id, id), eq(notifications.userId, userId), isNull(notifications.readAt))),
+  );
+}
+
+// Reactions on one check-in (commentId null) or one reply share a single
+// notification for its author, rewritten from the current reactions on every
+// change. A new reaction brings it back to the top, unread; when the last
+// one is taken back, it goes. In-app only: no email per emoji.
+export async function syncReactionNotice(input: {
+  checkInId: string;
+  commentId: string | null;
+  teamId: string;
+  linkPath: string;
+  added: boolean;
+}): Promise<void> {
+  const { checkInId, commentId } = input;
+  const [owner] = commentId
+    ? await db.select({ id: checkInComments.userId }).from(checkInComments).where(eq(checkInComments.id, commentId))
+    : await db.select({ id: checkIns.userId }).from(checkIns).where(eq(checkIns.id, checkInId));
+  if (!owner) return;
+
+  const rows = await db
+    .select({ userId: checkInReactions.userId, name: users.name, email: users.email, emoji: checkInReactions.emoji })
+    .from(checkInReactions)
+    .innerJoin(users, eq(users.id, checkInReactions.userId))
+    .where(
+      and(
+        eq(checkInReactions.checkInId, checkInId),
+        commentId ? eq(checkInReactions.commentId, commentId) : isNull(checkInReactions.commentId),
+        ne(checkInReactions.userId, owner.id),
+      ),
+    )
+    .orderBy(desc(checkInReactions.createdAt));
+
+  const target = commentId ?? checkInId;
+  const existing = and(
+    eq(notifications.userId, owner.id),
+    eq(notifications.type, "reacted"),
+    sql`${notifications.data}->>'target' = ${target}`,
+  );
+  if (rows.length === 0) {
+    await db.delete(notifications).where(existing);
+    return;
+  }
+
+  const people = new Map<string, { name: string; emoji: string[] }>();
+  for (const r of rows) {
+    const p = people.get(r.userId) ?? { name: displayName(r.name, r.email), emoji: [] };
+    p.emoji.push(r.emoji);
+    people.set(r.userId, p);
+  }
+  const { title, body } = reactionNotice([...people.values()], !!commentId);
+
+  // ponytail: read-then-write, so two reactions landing in the same instant
+  // can make two rows; the next change rewrites one. A unique index on
+  // (user_id, data->>'target') closes it if that ever shows up.
+  const [row] = await db.select({ id: notifications.id }).from(notifications).where(existing).limit(1);
+  if (row) {
+    await db
+      .update(notifications)
+      .set({ title, body, ...(input.added ? { readAt: null, createdAt: new Date() } : {}) })
+      .where(eq(notifications.id, row.id));
+  } else if (input.added) {
+    await db.insert(notifications).values({
+      userId: owner.id,
+      teamId: input.teamId,
+      type: "reacted",
+      title,
+      body,
+      linkPath: input.linkPath,
+      data: { checkInId, commentId, target },
+    });
+  }
 }

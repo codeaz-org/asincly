@@ -51,7 +51,12 @@ UI changes: refresh the README images with `node scripts/screenshots.mjs <token>
   `docs:`, `refactor:`, `test:`, `chore:`). Keep them PR-sized.
 - **Branches:** `feat/<short-desc>`, `fix/<short-desc>`.
 - **Pull requests:** small and focused. Explain the *why*, link the issue, and add
-  screenshots for UI changes.
+  screenshots for UI changes. To merge into `main`, CI must pass (lint, types, unit, e2e,
+  Docker build, CodeQL) and a maintainer must approve; PRs are squashed or rebased, so
+  history stays linear.
+- **Screenshots:** `pnpm db:seed --session`, then with `AI_FAKE=1 pnpm dev` running,
+  `node scripts/screenshots.mjs <token>` (and `--gif-only` after a fresh seed for the
+  README GIF).
 - **Schema before UI:** for a new entity, write the Drizzle migration, its RLS policies and
   the Zod schema first.
 - **Security rules:**

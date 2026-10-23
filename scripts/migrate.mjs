@@ -22,7 +22,12 @@ try {
   // The migrations create `asincly_app` without a password; set it here.
   const password = process.env.APP_DB_PASSWORD;
   const local = /@(localhost|127\.0\.0\.1|postgres)(:\d+)?\//.test(url);
-  if (password) {
+  if (password && (await appLoginWorks())) {
+    // Re-setting an unchanged password still changes the stored verifier, and
+    // a pooler that cached the old one (Supabase's Supavisor) then rejects the
+    // app's logins with 28P01 until it refreshes: an outage on every deploy.
+    console.log("asincly_app password already current");
+  } else if (password) {
     await sql.unsafe(`ALTER ROLE asincly_app WITH LOGIN PASSWORD ${quote(password)}`);
     console.log("asincly_app password set from APP_DB_PASSWORD");
   } else if (local && process.env.NODE_ENV !== "production") {
@@ -44,4 +49,20 @@ try {
 
 function quote(value) {
   return `'${value.replace(/'/g, "''")}'`;
+}
+
+// Whether the app can already sign in with DATABASE_URL_APP (whose password
+// is APP_DB_PASSWORD). False when it isn't set or the login fails.
+async function appLoginWorks() {
+  const appUrl = process.env.DATABASE_URL_APP;
+  if (!appUrl) return false;
+  const app = postgres(appUrl, { max: 1, connect_timeout: 10, onnotice: () => {} });
+  try {
+    await app`select 1`;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await app.end({ timeout: 5 });
+  }
 }

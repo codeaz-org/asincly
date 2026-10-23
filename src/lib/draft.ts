@@ -126,11 +126,17 @@ export function autoTag(
     const name = member.name.trim();
     const parts = name.split(/\s+/);
     const patterns: RegExp[] = [];
-    if (parts.length > 1) patterns.push(new RegExp(`(?<![\\p{L}\\p{N}@])${escapeRe(name)}(?![\\p{L}\\p{N}])`, "iu"));
+    // A leading "@" is part of the match, so "@anton" becomes the mention
+    // rather than "@" + mention.
+    const word = (w: string, flags: string) => new RegExp(`(?<![\\p{L}\\p{N}@])@?${escapeRe(w)}(?![\\p{L}\\p{N}])`, flags);
+    if (parts.length > 1) patterns.push(word(name, "iu"));
     const first = parts[0];
     const firstUnique = (firstNameCount.get(first.toLowerCase()) ?? 0) === 1;
-    if (first.length >= 2 && (firstUnique || hintIds.includes(member.userId))) {
-      patterns.push(new RegExp(`(?<![\\p{L}\\p{N}@])${escapeRe(first)}(?![\\p{L}\\p{N}])`, "u"));
+    const hinted = hintIds.includes(member.userId);
+    if (first.length >= 2 && (firstUnique || hinted)) {
+      // "@anton" in any case; a bare lowercase "anton" only when the AI heard them.
+      patterns.push(new RegExp(`(?<![\\p{L}\\p{N}@])@${escapeRe(first)}(?![\\p{L}\\p{N}])`, "iu"));
+      patterns.push(word(first, hinted ? "iu" : "u"));
     }
 
     for (const re of patterns) {

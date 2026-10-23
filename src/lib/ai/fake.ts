@@ -1,4 +1,4 @@
-import type { Drafter, Transcriber } from "./types";
+import type { Drafter, Summarizer, Transcriber } from "./types";
 
 // Deterministic stand-ins for e2e tests (AI_FAKE=1, never in production).
 // The draft is derived from the inputs so tests can assert carry-forward and
@@ -24,5 +24,18 @@ export const fakeDrafter: Drafter = {
       mentions: teammate ? [{ userId: teammate.userId, heardAs: teammate.name }] : [],
       bullets: ["Recorded a video check-in", "Writing the release notes today"],
     };
+  },
+};
+
+// Bullets are the check-in's own lines, so a test can see an edit reach them.
+export const fakeSummarizer: Summarizer = {
+  name: "fake",
+  async summarize({ note }) {
+    const bullets = note
+      .split("\n")
+      .map((l) => l.replace(/^\s*-\s*(\[[ x]\]\s*)?/, "").trim())
+      .filter((l) => l && !/^(Yesterday|Today|Blockers):$/.test(l))
+      .slice(0, 6);
+    return { bullets, actionItems: [], blockers: [], mentions: [] };
   },
 };

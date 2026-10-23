@@ -4,7 +4,7 @@ Async standups for remote teams. Members check in on their own local schedule wi
 camera + screen recording and a markdown note; AI turns recordings into bullet summaries,
 extracts action items and mentions; the team reads a per-occurrence digest instead of meeting.
 
-Landing page: https://asincly.vercel.app — this repo is the product behind it.
+Hosted: https://asincly.codeaz.org — the cloud version runs this repo.
 Goal: production-grade, security-first, open-source (AGPL-3.0), self-hostable via Docker Compose,
 with a hosted cloud version.
 

@@ -78,7 +78,7 @@ try {
     };
 
     // Yesterday: the viewer's plan, so today's recording screen has context.
-    await checkIn("Alex Rivera", 1, 30, {
+    const mine = await checkIn("Alex Rivera", 1, 30, {
       yesterday: "- [x] Wrote the onboarding copy",
       today: "- [ ] Ship the pricing page\n- [ ] Review Kenji's billing PR\n- [ ] Plan the beta invite email",
     });
@@ -116,6 +116,23 @@ try {
       VALUES (${kenji}, ${ids["Sam Carter"]}, ${"I can grab the Stripe keys when I'm up — ping me if it's urgent 🙏"})
       RETURNING id`;
     await react(kenji, "Kenji Sato", "🙏", comment.id);
+
+    // The viewer's inbox: one notification per kind, reactions grouped.
+    for (const [who] of [["Mia Tane"], ["Kenji Sato"], ["Sam Carter"]]) await react(mine, who, who === "Sam Carter" ? "🙌" : "🎉");
+    const link = (ci) => `/northwind/product/c/${ci}`;
+    const inbox = [
+      ["mentioned", "Kenji Sato mentioned you", "In Product's check-in for today.", kenji, 250, null],
+      ["reacted", "Sam Carter, Kenji Sato and 1 other reacted to your check-in", "🙌 🎉", mine, 120, null],
+      ["commented", "Mia Tane replied to your check-in", "Pricing page looks great — shipping the announcement tomorrow?", mine, 600, null],
+      ["help_offered", "Nora Okafor offered to help", "Thanks for offering to help: Plan the beta invite email", mine, 900, new Date()],
+    ];
+    for (const [type, title, body, ci, minsAgo, readAt] of inbox) {
+      await tx`INSERT INTO notification (user_id, team_id, type, title, body, link_path, data, read_at, created_at)
+               VALUES (${ids["Alex Rivera"]}, ${team.id}, ${type}, ${title}, ${body}, ${link(ci)},
+                       ${tx.json({ checkInId: ci, target: ci })}, ${readAt}, now() - make_interval(mins => ${minsAgo}))`;
+    }
+    await tx`INSERT INTO invitation (team_id, email, role, invited_by_user_id, expires_at)
+             VALUES (${team.id}, 'priya@northwind.example', 'member', ${ids["Alex Rivera"]}, now() + interval '14 days')`;
 
     await tx`INSERT INTO member_away (team_id, user_id, starts_on, ends_on, note)
              VALUES (${team.id}, ${ids["Riley Park"]}, ${iso(1, "America/Los_Angeles")}, ${iso(-2, "America/Los_Angeles")}, 'Conference')`;

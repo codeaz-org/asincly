@@ -97,6 +97,18 @@ describe("autoTag", () => {
     expect(autoTag(md, roster)).toEqual({ md, tagged: [] });
   });
 
+  it("turns a typed or spoken @name into the mention, in any case", () => {
+    expect(autoTag("Need @lena to provide config keys", roster).md).toBe(
+      "Need [@Lena Krüger](mention:u_lena) to provide config keys",
+    );
+    expect(autoTag("ping @Sam Miller", roster).md).toBe("ping [@Sam Miller](mention:u_sam)");
+  });
+
+  it("tags a lowercase first name only when the AI heard that person", () => {
+    expect(autoTag("ask lena", roster).tagged).toEqual([]);
+    expect(autoTag("ask lena", roster, ["u_lena"]).md).toBe("ask [@Lena Krüger](mention:u_lena)");
+  });
+
   it("prefers the longer name when names overlap", () => {
     expect(autoTag("Samira will pair", roster).md).toBe("[@Samira Khan](mention:u_samira) will pair");
   });
