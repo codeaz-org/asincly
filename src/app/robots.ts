@@ -8,5 +8,6 @@ export default function robots(): MetadataRoute.Robots {
       // Everything behind auth or API is noise for crawlers.
       disallow: ["/api/", "/account", "/onboarding"],
     },
+    sitemap: `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/sitemap.xml`,
   };
 }

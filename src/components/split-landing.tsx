@@ -68,7 +68,7 @@ const BEATS = [0.0, 0.1, 0.26, 0.42, 0.56, 0.6, 0.86];
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export function SplitLanding({ showPricing = false }: { showPricing?: boolean }) {
+export function SplitLanding({ showPricing = false, signInHref = "/sign-in" }: { showPricing?: boolean; signInHref?: string }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [p, setP] = useState(0);
@@ -317,7 +317,7 @@ export function SplitLanding({ showPricing = false }: { showPricing?: boolean })
                 Set up a team in one minute. Invite by email. First digest
                 tomorrow morning.
               </p>
-              <Link href="/sign-in" className="cta">Start your team&rsquo;s morning →</Link>
+              <Link href={signInHref} className="cta">Start your team&rsquo;s morning →</Link>
               <p className="trust">
                 <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">open source (AGPL-3.0)</a> · self-hostable · encrypted at rest
               </p>
@@ -368,8 +368,8 @@ export function SplitLanding({ showPricing = false }: { showPricing?: boolean })
           </span>
           <span className="chrome__links">
             {showPricing && <Link href="/pricing" className="chrome__signin">Pricing</Link>}
-            <Link href="/sign-in" className="chrome__signin">Sign in</Link>
-            <Link href="/sign-in" className="chrome__start">Start free</Link>
+            <Link href={signInHref} className="chrome__signin">Sign in</Link>
+            <Link href={signInHref} className="chrome__start">Start free</Link>
           </span>
         </div>
       </div>

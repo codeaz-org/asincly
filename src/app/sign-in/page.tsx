@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { attributionQuery, parseAttribution } from "@/lib/attribution";
 import { MailCheck } from "lucide-react";
 import { auth, signIn } from "@/auth";
 import { LogoMark } from "@/components/brand/mark";
@@ -21,11 +22,15 @@ const ERRORS: Record<string, string> = {
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sent?: string; error?: string }>;
+  searchParams: Promise<{ sent?: string; error?: string; [key: string]: string | string[] | undefined }>;
 }) {
   const session = await auth();
   if (session?.user) redirect("/");
-  const { sent, error } = await searchParams;
+  const params = await searchParams;
+  const { sent, error } = params;
+  // Carries the campaign labels through the magic link (or Google) to onboarding.
+  const attribution = parseAttribution(params);
+  const redirectTo = attribution ? `/onboarding${attributionQuery(attribution)}` : "/";
   const hasGoogle = !!process.env.AUTH_GOOGLE_ID && !!process.env.AUTH_GOOGLE_SECRET;
 
   return (
@@ -103,7 +108,7 @@ export default async function SignInPage({
                   action={async (formData) => {
                     "use server";
                     // Limits per inbox and per client address are in auth.ts.
-                    await signIn("resend", { email: formData.get("email"), redirectTo: "/" });
+                    await signIn("resend", { email: formData.get("email"), redirectTo });
                   }}
                   className="space-y-3"
                 >
@@ -126,7 +131,7 @@ export default async function SignInPage({
                     <form
                       action={async () => {
                         "use server";
-                        await signIn("google", { redirectTo: "/" });
+                        await signIn("google", { redirectTo });
                       }}
                     >
                       <Button type="submit" variant="secondary" size="lg" className="w-full">
