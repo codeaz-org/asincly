@@ -10,6 +10,7 @@ import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { completeOnboarding } from "@/lib/actions/onboarding";
+import { attributionQuery, type Attribution } from "@/lib/attribution";
 import { MIN_WINDOW_MINUTES } from "@/lib/time";
 
 const STEPS = [
@@ -29,7 +30,7 @@ const PRESETS = [
 
 // One question per screen. Every field stays mounted (only hidden) so the
 // single server action receives the full form, same field names as before.
-export function OnboardingWizard({ email, tz }: { email: string; tz: string }) {
+export function OnboardingWizard({ email, tz, attribution }: { email: string; tz: string; attribution: Attribution | null }) {
   const [step, setStep] = useState(0);
   const [preset, setPreset] = useState<string>("weekdays");
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -61,6 +62,9 @@ export function OnboardingWizard({ email, tz }: { email: string; tz: string }) {
       }}
       className="min-h-dvh flex flex-col"
     >
+      {[...new URLSearchParams(attributionQuery(attribution).slice(1))].map(([k, v]) => (
+        <input key={k} type="hidden" name={k} value={v} />
+      ))}
       <header className="h-16 px-5 sm:px-8 flex items-center gap-4 border-b border-line">
         <Logo size={24} className="text-ink" href={null} />
         <span className="flex-1" />

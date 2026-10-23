@@ -202,3 +202,16 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Long-form guides (/guides/[slug]): react-markdown output, no classes of its own. */
+.guide h2 { font-size: 1.5rem; line-height: 1.25; color: var(--color-ink); margin-top: 2.5rem; font-weight: 600; }
+.guide h3 { font-size: 1.15rem; color: var(--color-ink); margin-top: 1.75rem; font-weight: 600; }
+.guide p, .guide li { color: color-mix(in oklab, var(--color-ink) 85%, transparent); line-height: 1.75; }
+.guide ul { list-style: disc; padding-left: 1.25rem; }
+.guide ol { list-style: decimal; padding-left: 1.25rem; }
+.guide li + li { margin-top: 0.35rem; }
+.guide a { color: var(--color-amber); text-decoration: underline; text-underline-offset: 3px; }
+.guide table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.guide th, .guide td { border-bottom: 1px solid var(--color-line); padding: 0.5rem 0.75rem 0.5rem 0; text-align: left; }
+.guide blockquote { border-left: 2px solid var(--color-amber); padding-left: 1rem; color: var(--color-soft); }
+.guide code { font-family: var(--font-geist-mono, ui-monospace, monospace); font-size: 0.9em; }

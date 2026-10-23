@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
 import { invitations, members, organizations, schedules, teams, users } from "@/db/schema";
+import { parseAttribution } from "@/lib/attribution";
 import { audit } from "@/lib/audit";
 import { assertCanAddMembers, assertFeature, ensureOrgBilling, limitResult } from "@/lib/billing/entitlements";
 import { isBillingEnabled } from "@/lib/billing/plans";
@@ -88,6 +89,7 @@ export async function completeOnboarding(formData: FormData) {
         termsVersion: LEGAL_VERSION,
         termsAcceptedAt: new Date(),
         termsAcceptedBy: user.id,
+        acquisition: parseAttribution(formData),
       })
       .returning();
     const [team] = await tx
