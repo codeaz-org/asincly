@@ -1,0 +1,40 @@
+name: Deploy
+
+# Hosted cloud only: after CI passes on main, deploy production to Vercel, so a merged PR
+# (code or a new guide in content/guides) goes live without a manual `vercel --prod`.
+# Production builds run the database migrations (package.json "vercel-build").
+# Off unless the repo variable VERCEL_DEPLOY is "true" and the VERCEL_* secrets are set,
+# so forks and self-hosters are unaffected.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: >-
+      vars.VERCEL_DEPLOY == 'true' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Deploy to Vercel (production)
+        run: npx --yes vercel@65.2.0 deploy --prod --yes --token "${{ secrets.VERCEL_TOKEN }}"

@@ -13,7 +13,7 @@ the check-in; your team reads it in theirs. No meeting, nothing missed.
 [![Release](https://img.shields.io/github/v/release/codeaz-org/asincly?color=f59e0b)](https://github.com/codeaz-org/asincly/releases)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
 
-**[Try Asincly Cloud](https://asincly.codeaz.org)** · [Features](#features) · [Quick start](#quick-start) · [Deploy for free](#deploy) ·
+**[Try Asincly Cloud](https://asincly.codeaz.org/?utm_source=github&utm_medium=readme&utm_campaign=asincly)** · [Features](#features) · [Quick start](#quick-start) · [Deploy for free](#deploy) ·
 [Architecture](./docs/ARCHITECTURE.md) · [Contributing](./CONTRIBUTING.md)
 
 <img src="docs/screenshots/demo.gif" alt="Recording a check-in: notes beside the camera, a short recording, the AI-drafted check-in with teammates tagged, then sent to the team's feed" width="860" />
@@ -163,7 +163,7 @@ your LAN IP to `DEV_ALLOWED_ORIGINS`.
 
 ## Deploy
 
-**Don't want to run it?** Use [Asincly Cloud](https://asincly.codeaz.org) (free for up to 3 people).
+**Don't want to run it?** Use [Asincly Cloud](https://asincly.codeaz.org/?utm_source=github&utm_medium=readme&utm_campaign=asincly) (free for up to 3 people).
 **Want to host it yourself for free? Yes, two ways:**
 
 | Option | Cost | Hosting provider allows business use¹ | Guide |
@@ -242,7 +242,7 @@ See **[ROADMAP.md](./ROADMAP.md)** and **[CHANGELOG.md](./CHANGELOG.md)**. Next 
 ## Hosted version
 
 **Asincly Cloud** is the same open-source code, run by the maintainers so you don't have
-to. Revenue from it funds development. Sign up at **[asincly.codeaz.org](https://asincly.codeaz.org)**.
+to. Revenue from it funds development. Sign up at **[asincly.codeaz.org](https://asincly.codeaz.org/?utm_source=github&utm_medium=readme&utm_campaign=asincly)**.
 
 | | Free | Pro |
 |---|---|---|

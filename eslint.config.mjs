@@ -28,6 +28,8 @@ const eslintConfig = defineConfig([
       // Maintainer growth counts across all orgs (aggregates only), behind
       // STATS_TOKEN like the cron routes.
       "src/app/api/stats/**",
+      // Anonymous per-campaign visit counters, written from after() on public pages.
+      "src/lib/visits.ts",
       // Server-only bookkeeping tables the app role can't touch.
       "src/lib/audit.ts",
       "src/lib/rate-limit.ts",

@@ -475,6 +475,23 @@ export const auditLogs = pgTable("audit_log", {
 // Fixed-window counters behind lib/rate-limit. Shared by every instance
 // (an in-memory map gave each serverless function its own budget). Old
 // windows are dropped by the daily cron.
+// Aggregate visit counts per day, campaign labels (utm_*) and page, for the
+// maintainers' growth stats. No IP, user agent, cookie or user id: counts only.
+// Server-only like rate_limit (RLS on, no policies).
+export const campaignVisits = pgTable(
+  "campaign_visit",
+  {
+    day: date("day").notNull(),
+    source: text("source").notNull().default(""),
+    medium: text("medium").notNull().default(""),
+    campaign: text("campaign").notNull().default(""),
+    content: text("content").notNull().default(""),
+    path: text("path").notNull(),
+    visits: integer("visits").notNull().default(1),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.source, t.medium, t.campaign, t.content, t.path] })],
+);
+
 export const rateLimits = pgTable(
   "rate_limit",
   {
