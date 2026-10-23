@@ -48,8 +48,26 @@ export async function GET(req: Request) {
     order by orgs desc
   `);
 
+  // Anonymous page-view counters (lib/visits.ts): campaign-tagged visits and guide views.
+  const visits = await db.execute<{ source: string; medium: string; campaign: string; visits_7d: number; visits_28d: number }>(sql`
+    select source, medium, campaign,
+      coalesce(sum(visits) filter (where day > current_date - 7), 0)::int as visits_7d,
+      sum(visits)::int as visits_28d
+    from campaign_visit
+    where day > current_date - 28
+    group by 1, 2, 3
+    order by visits_28d desc
+  `);
+  const guideViews = await db.execute<{ path: string; source: string; visits_28d: number }>(sql`
+    select path, source, sum(visits)::int as visits_28d
+    from campaign_visit
+    where day > current_date - 28 and path like '/guides%'
+    group by 1, 2
+    order by visits_28d desc
+  `);
+
   return NextResponse.json(
-    { generatedAt: new Date().toISOString(), totals, bySource: [...bySource] },
+    { generatedAt: new Date().toISOString(), totals, bySource: [...bySource], visits: [...visits], guideViews: [...guideViews] },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

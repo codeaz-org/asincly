@@ -246,6 +246,13 @@
       "when": 1792738065144,
       "tag": "0034_org_acquisition",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792757308025,
+      "tag": "0035_campaign_visit",
+      "breakpoints": true
     }
   ]
 }

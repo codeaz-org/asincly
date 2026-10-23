@@ -1,13 +1,20 @@
+import { headers } from "next/headers";
 import Link from "next/link";
+import { after } from "next/server";
+import { parseAttribution } from "@/lib/attribution";
 import { listGuides } from "@/lib/guides";
+import { recordVisit } from "@/lib/visits";
 
 export const metadata = {
   title: "Guides",
   description: "Practical guides on async standups, remote teams and working across time zones.",
 };
 
-export default async function GuidesPage() {
+export default async function GuidesPage({ searchParams }: PageProps<"/guides">) {
   const guides = await listGuides();
+  const attribution = parseAttribution(await searchParams);
+  const userAgent = (await headers()).get("user-agent");
+  after(() => recordVisit("/guides", attribution, userAgent));
   return (
     <div className="space-y-10">
       <header className="space-y-3">
