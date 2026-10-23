@@ -125,6 +125,9 @@ export const organizations = pgTable("organization", {
   termsVersion: text("terms_version"),
   termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true }),
   termsAcceptedBy: text("terms_accepted_by").references(() => users.id, { onDelete: "set null" }),
+  // First-touch campaign labels (utm_*) from the link the creator arrived on;
+  // see lib/attribution.ts. Null for direct visits and self-hosted installs.
+  acquisition: jsonb("acquisition").$type<{ source: string; medium?: string; campaign?: string; content?: string }>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

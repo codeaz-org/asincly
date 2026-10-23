@@ -25,6 +25,9 @@ const eslintConfig = defineConfig([
       "src/app/api/cron/**",
       "src/lib/process-recording.ts",
       "src/lib/recording-objects.ts",
+      // Maintainer growth counts across all orgs (aggregates only), behind
+      // STATS_TOKEN like the cron routes.
+      "src/app/api/stats/**",
       // Server-only bookkeeping tables the app role can't touch.
       "src/lib/audit.ts",
       "src/lib/rate-limit.ts",

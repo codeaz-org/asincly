@@ -52,6 +52,11 @@ export default function PrivacyPage() {
             "Processed for your organization, which determines the basis (often contract or legitimate interest towards its staff)",
           ],
           [
+            "Campaign labels of the link you arrived on (utm_source, utm_medium, utm_campaign, utm_content), saved on an organization when it is created; no cookie or tracking script is used",
+            "To count, in aggregate, which channels bring new teams",
+            "Legitimate interest (f) in knowing which outreach works",
+          ],
+          [
             "Notifications and email preferences",
             "Reminders when your window opens, mentions, replies",
             "Contract (b); you can turn emails off",

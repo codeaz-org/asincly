@@ -24,6 +24,8 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   allowedDevOrigins,
+  // Guides are read from disk at request time; ship them with the server.
+  outputFileTracingIncludes: { "/guides/**": ["./content/guides/**"], "/sitemap.xml": ["./content/guides/**"] },
   // Browsers ask for /favicon.ico regardless of <link rel="icon">.
   async redirects() {
     return [{ source: "/favicon.ico", destination: "/icon.svg", permanent: true }];
