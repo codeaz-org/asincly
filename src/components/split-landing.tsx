@@ -319,9 +319,11 @@ export function SplitLanding({ showPricing = false, signInHref = "/sign-in" }: {
               </p>
               <Link href={signInHref} className="cta">Start your team&rsquo;s morning →</Link>
               <p className="trust">
+                {showPricing && <>free for up to 3 people · </>}
                 <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">open source (AGPL-3.0)</a> · self-hostable · encrypted at rest
               </p>
               <p className="legal">
+                {showPricing && <Link href="/guides">Guides</Link>}
                 <Link href="/legal/terms">Terms</Link>
                 <Link href="/legal/privacy">Privacy</Link>
                 <Link href="/legal/security">Security</Link>
