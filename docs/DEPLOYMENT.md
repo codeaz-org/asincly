@@ -382,6 +382,12 @@ Self-hosters skip this section: leave `BILLING_ENABLED` unset and every feature 
 Asincly Cloud, or anyone offering Asincly as a paid service, turns on plans with
 `BILLING_ENABLED=true`. Prices and limits live in `src/lib/billing/plans.ts`.
 
+**Before card payments** you can still enforce the plans: set `BILLING_ENABLED=true` with no
+Stripe keys. Every organization is held to the Free limits and gets no trial; the pricing and
+billing pages ask teams to email the operator (`LEGAL_EMAIL`) for Pro. Switch one on by hand
+with `DATABASE_URL=… node scripts/grant-pro.mjs <org-slug>` (`--revoke` to undo). Organizations
+that existed before the switch keep their older videos for the usual 30-day grace period.
+
 1. **Try it in a Stripe sandbox first.** `stripe sandbox create` gives test keys without a
    business registration.
 2. **Create the catalog.** `STRIPE_SECRET_KEY=... node scripts/stripe-setup.mjs` creates the

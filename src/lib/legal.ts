@@ -109,4 +109,11 @@ export const SUBPROCESSORS: Subprocessor[] = [
 
 // Where the database and recordings are hosted, as configured (e.g. "the
 // European Union (Frankfurt)").
+// "Request Pro" while card payments aren't set up: a mail to the operator.
+export function proRequestHref(orgName: string, orgSlug: string): string {
+  const subject = `Pro for ${orgName}`;
+  const body = `Hi, we'd like Pro for our organization "${orgName}" (${orgSlug}).`;
+  return `mailto:${operator().email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 export const dataRegion = () => env("LEGAL_DATA_REGION") ?? "[hosting region — set LEGAL_DATA_REGION]";

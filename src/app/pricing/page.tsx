@@ -5,6 +5,8 @@ import { Footer } from "@/components/footer";
 import { Logo } from "@/components/logo";
 import { buttonVariants } from "@/components/ui/button";
 import { FREE_PURGE_GRACE_DAYS, TRIAL_DAYS, isBillingEnabled } from "@/lib/billing/plans";
+import { stripeConfigured } from "@/lib/billing/stripe";
+import { operator } from "@/lib/legal";
 import { SOURCE_URL } from "@/lib/source";
 
 export const metadata = {
@@ -18,6 +20,9 @@ export const dynamic = "force-dynamic";
 // Hosted cloud only. Self-hosted installs have no plans, so no pricing page.
 export default function PricingPage() {
   if (!isBillingEnabled()) notFound();
+  // Until card payments are set up there's no trial; Pro is switched on by hand.
+  const canPay = stripeConfigured();
+  const contact = operator().email;
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-30 border-b border-line bg-ground/80 backdrop-blur-xl">
@@ -36,8 +41,18 @@ export default function PricingPage() {
             <p className="kicker">Pricing</p>
             <h1 className="display text-4xl sm:text-5xl text-ink">Pay for people, not meetings.</h1>
             <p className="text-soft max-w-xl">
-              Small teams use Asincly free. Pro unlocks bigger teams, longer videos and your full history. Every new
-              team starts with {TRIAL_DAYS} days of Pro, no card needed.
+              Small teams use Asincly free. Pro unlocks bigger teams, longer videos and your full history.{" "}
+              {canPay ? (
+                <>Every new team starts with {TRIAL_DAYS} days of Pro, no card needed.</>
+              ) : (
+                <>
+                  Card payments open soon; until then,{" "}
+                  <a href={`mailto:${contact}?subject=${encodeURIComponent("Asincly Pro")}`} className="text-amber hover:underline underline-offset-4">
+                    email us
+                  </a>{" "}
+                  and we&rsquo;ll switch your team to Pro.
+                </>
+              )}
             </p>
             <div className="pt-2">
               <Link href="/sign-in" className={buttonVariants({ variant: "primary", size: "lg" })}>
@@ -56,14 +71,16 @@ export default function PricingPage() {
                 reply are free.
               </p>
             </div>
-            <div className="space-y-1.5">
-              <h2 className="text-[15px] font-medium text-ink">What happens after the trial?</h2>
-              <p className="text-soft">
-                You move to Free. Check-ins older than 14 days are locked until you upgrade. Their videos are kept
-                for {FREE_PURGE_GRACE_DAYS} days, then deleted; written check-ins and summaries are never deleted by
-                the plan change.
-              </p>
-            </div>
+            {canPay && (
+              <div className="space-y-1.5">
+                <h2 className="text-[15px] font-medium text-ink">What happens after the trial?</h2>
+                <p className="text-soft">
+                  You move to Free. Check-ins older than 14 days are locked until you upgrade. Their videos are kept
+                  for {FREE_PURGE_GRACE_DAYS} days, then deleted; written check-ins and summaries are never deleted by
+                  the plan change.
+                </p>
+              </div>
+            )}
             <div className="space-y-1.5">
               <h2 className="text-[15px] font-medium text-ink">Can I self-host instead?</h2>
               <p className="text-soft">

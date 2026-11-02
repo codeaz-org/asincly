@@ -2,14 +2,15 @@ import { and, countDistinct, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { aiUsage, members, orgBilling, teams } from "@/db/schema";
 import {
-  TRIAL_DAYS,
   UNLIMITED,
   billingPeriod,
   entitlementsFor,
+  initialBilling,
   isBillingEnabled,
   type BillingState,
   type Entitlements,
 } from "@/lib/billing/plans";
+import { stripeConfigured } from "@/lib/billing/stripe";
 
 // Server-side view of what an organization's plan allows. With billing
 // disabled (self-host) every function short-circuits to "unlimited" without
@@ -28,18 +29,14 @@ export type LimitResult = { ok: true } | { ok: false; error: string; upgrade: tr
 export const limitResult = (e: unknown): LimitResult | null =>
   e instanceof PlanLimitError ? { ok: false, error: e.message, upgrade: true } : null;
 
-// Starts a 14-day Pro trial the first time an org is seen on the cloud.
+// Starts a 14-day Pro trial the first time an org is seen on the cloud, or
+// Free with no trial while payments aren't configured (see initialBilling).
 export async function ensureOrgBilling(orgId: string, now = new Date()) {
   const [existing] = await db.select().from(orgBilling).where(eq(orgBilling.orgId, orgId));
   if (existing) return existing;
   const [created] = await db
     .insert(orgBilling)
-    .values({
-      orgId,
-      plan: "free",
-      status: "trialing",
-      trialEndsAt: new Date(now.getTime() + TRIAL_DAYS * 86_400_000),
-    })
+    .values({ orgId, ...initialBilling(now, stripeConfigured()) })
     .onConflictDoNothing()
     .returning();
   return created ?? (await db.select().from(orgBilling).where(eq(orgBilling.orgId, orgId)))[0];

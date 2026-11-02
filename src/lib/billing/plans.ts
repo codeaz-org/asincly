@@ -85,6 +85,17 @@ export function isBillingEnabled(env: Record<string, string | undefined> = proce
   return env.BILLING_ENABLED === "true";
 }
 
+// The billing row an organization gets the first time it's seen on the cloud.
+// While card payments aren't set up there's no trial (a trial nobody can
+// convert just takes features away) and the org starts on Free. The trial
+// date is still stamped "now", so freeSince() starts the Free video-purge
+// grace period from here and older videos aren't deleted on the next run.
+export function initialBilling(now: Date, canPay: boolean): Pick<BillingState, "plan" | "status" | "trialEndsAt"> {
+  return canPay
+    ? { plan: "free", status: "trialing", trialEndsAt: new Date(now.getTime() + TRIAL_DAYS * 86_400_000) }
+    : { plan: "free", status: "active", trialEndsAt: now };
+}
+
 export type BillingState = {
   plan: PlanId;
   status: BillingStatus;

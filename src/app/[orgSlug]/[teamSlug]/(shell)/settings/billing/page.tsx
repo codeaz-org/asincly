@@ -8,6 +8,7 @@ import { Card, Pill, SectionTitle } from "@/components/ui/card";
 import { getBillingOverview } from "@/lib/billing/entitlements";
 import { PRICE_PER_MEMBER, formatPrice, isBillingEnabled, trialDaysLeft } from "@/lib/billing/plans";
 import { stripeConfigured } from "@/lib/billing/stripe";
+import { proRequestHref } from "@/lib/legal";
 import { teamPath } from "@/lib/paths";
 import { getTeamPageContext } from "@/lib/team-context";
 
@@ -46,7 +47,9 @@ export default async function BillingPage({
           ? `Canceled. Pro stays on until ${dateFmt.format(billing.currentPeriodEnd)}, then Free.`
           : subscribed && billing?.currentPeriodEnd
             ? `${billing.seats} member${billing.seats === 1 ? "" : "s"} × ${formatPrice(PRICE_PER_MEMBER[interval])} / ${interval}. Renews ${dateFmt.format(billing.currentPeriodEnd)}.`
-            : "Up to 3 members and one team, free forever.";
+            : e.plan === "pro"
+              ? "Pro, set up for you by Asincly. Nothing to pay."
+              : "Up to 3 members and one team, free forever.";
 
   const aiLimit = e.aiSecondsPerMonth;
   const root = teamPath(orgSlug, teamSlug);
@@ -99,8 +102,14 @@ export default async function BillingPage({
           </div>
         )}
         {!isOwner && <p className="border-t border-line pt-4 text-xs text-soft">Only the organization owner can change the plan.</p>}
-        {isOwner && !canPay && (
-          <p className="border-t border-line pt-4 text-xs text-soft">Payments aren&rsquo;t configured on this server yet.</p>
+        {isOwner && !canPay && e.plan !== "pro" && (
+          <p className="border-t border-line pt-4 text-sm text-soft">
+            Card payments open soon. Want Pro for your team now?{" "}
+            <a href={proRequestHref(team.orgName, orgSlug)} className="text-amber hover:underline underline-offset-4">
+              Email us
+            </a>{" "}
+            and we&rsquo;ll switch your organization over.
+          </p>
         )}
       </Card>
 

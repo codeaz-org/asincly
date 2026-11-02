@@ -6,6 +6,7 @@ import {
   entitlementsFor,
   freeSince,
   historyCutoff,
+  initialBilling,
   isBillingEnabled,
   trialDaysLeft,
   type BillingState,
@@ -100,5 +101,25 @@ describe("helpers", () => {
     expect(effectiveRetentionDays(7, free, longAgo, now)).toBe(7);
     expect(effectiveRetentionDays(90, free, recently, now)).toBe(90);
     expect(effectiveRetentionDays(0, UNLIMITED, null, now)).toBe(0);
+  });
+});
+
+describe("initialBilling", () => {
+  it("starts a trial only when card payments work", () => {
+    const withPay = initialBilling(now, true);
+    expect(entitlementsFor({ ...withPay, pastDueSince: null }, 1, now, true).plan).toBe("pro");
+    const noPay = initialBilling(now, false);
+    expect(entitlementsFor({ ...noPay, pastDueSince: null }, 1, now, true).plan).toBe("free");
+  });
+
+  it("without payments, starts the video grace period now rather than deleting old videos", () => {
+    const state = { ...initialBilling(now, false), pastDueSince: null };
+    const since = freeSince(state, now);
+    expect(since).toEqual(now);
+    const e = entitlementsFor(state, 1, now, true);
+    // A team keeping videos for 90 days stays at 90 during the grace period…
+    expect(effectiveRetentionDays(90, e, since, now)).toBe(90);
+    // …and drops to the Free window once it's over.
+    expect(effectiveRetentionDays(90, e, since, new Date(now.getTime() + 31 * 86_400_000))).toBe(FREE.historyDays);
   });
 });
