@@ -2,11 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Footer } from "@/components/footer";
 import { Logo } from "@/components/logo";
-import { isBillingEnabled } from "@/lib/billing/plans";
+import { guidesEnabled } from "@/lib/guides";
 
-// Hosted cloud only, like /pricing: a self-hosted install has no marketing pages.
+// Hosted cloud only: a self-hosted install has no marketing pages.
 export default function GuidesLayout({ children }: LayoutProps<"/guides">) {
-  if (!isBillingEnabled()) notFound();
+  if (!guidesEnabled()) notFound();
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-30 border-b border-line bg-ground/80 backdrop-blur-xl">

@@ -68,7 +68,15 @@ const BEATS = [0.0, 0.1, 0.26, 0.42, 0.56, 0.6, 0.86];
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export function SplitLanding({ showPricing = false, signInHref = "/sign-in" }: { showPricing?: boolean; signInHref?: string }) {
+export function SplitLanding({
+  showPricing = false,
+  showGuides = false,
+  signInHref = "/sign-in",
+}: {
+  showPricing?: boolean;
+  showGuides?: boolean;
+  signInHref?: string;
+}) {
   const trackRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [p, setP] = useState(0);
@@ -323,7 +331,7 @@ export function SplitLanding({ showPricing = false, signInHref = "/sign-in" }: {
                 <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">open source (AGPL-3.0)</a> · self-hostable · encrypted at rest
               </p>
               <p className="legal">
-                {showPricing && <Link href="/guides">Guides</Link>}
+                {showGuides && <Link href="/guides">Guides</Link>}
                 <Link href="/legal/terms">Terms</Link>
                 <Link href="/legal/privacy">Privacy</Link>
                 <Link href="/legal/security">Security</Link>

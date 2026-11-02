@@ -1,5 +1,12 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { isBillingEnabled } from "@/lib/billing/plans";
+
+// Marketing pages, so off on a self-hosted install. The hosted cloud turns them on with
+// GUIDES_ENABLED=true, or implicitly once billing is on.
+export function guidesEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env.GUIDES_ENABLED === "true" || isBillingEnabled(env);
+}
 
 // Guides are Markdown files in content/guides/<slug>.md with a small header:
 //

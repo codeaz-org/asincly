@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { SplitLanding } from "@/components/split-landing";
 import { attributionQuery, parseAttribution } from "@/lib/attribution";
 import { isBillingEnabled } from "@/lib/billing/plans";
+import { guidesEnabled } from "@/lib/guides";
 import { getMemberships } from "@/lib/session";
 import { recordVisit } from "@/lib/visits";
 
@@ -20,5 +21,5 @@ export default async function LandingPage({ searchParams }: PageProps<"/">) {
   const userAgent = (await headers()).get("user-agent");
   after(() => recordVisit("/", attribution, userAgent));
   const signInHref = `/sign-in${attributionQuery(attribution)}`;
-  return <SplitLanding showPricing={isBillingEnabled()} signInHref={signInHref} />;
+  return <SplitLanding showPricing={isBillingEnabled()} showGuides={guidesEnabled()} signInHref={signInHref} />;
 }

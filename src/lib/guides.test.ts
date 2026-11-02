@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getGuide, parseGuide } from "./guides";
+import { getGuide, guidesEnabled, parseGuide } from "./guides";
 
 describe("parseGuide", () => {
   it("reads the header and body", () => {
@@ -18,5 +18,14 @@ describe("getGuide", () => {
   it("refuses slugs that could leave the folder", async () => {
     expect(await getGuide("../package")).toBeNull();
     expect(await getGuide("README")).toBeNull();
+  });
+});
+
+describe("guidesEnabled", () => {
+  it("is off on a self-hosted install, on with GUIDES_ENABLED or billing", () => {
+    expect(guidesEnabled({})).toBe(false);
+    expect(guidesEnabled({ GUIDES_ENABLED: "true" })).toBe(true);
+    expect(guidesEnabled({ BILLING_ENABLED: "true" })).toBe(true);
+    expect(guidesEnabled({ GUIDES_ENABLED: "1" })).toBe(false);
   });
 });
