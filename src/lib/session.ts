@@ -1,11 +1,12 @@
 import { clientIp } from "@/lib/rate-limit";
 import { and, eq, sql } from "drizzle-orm";
 import { cookies, headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { withUser } from "@/db/with-user";
+import { isSuperAdminEmail } from "@/lib/admin";
 import { members, organizations, sessions, teams, users, userTotp } from "@/db/schema";
 
 export type SessionUser = {
@@ -24,6 +25,17 @@ export async function requireUser(): Promise<SessionUser> {
   if (!s) redirect("/sign-in");
   if (s.totpConfirmed && !s.mfaAt) redirect("/account/2fa");
   if (!s.totpConfirmed && s.mustEnrol) redirect("/account/security?required=1");
+  return s.user;
+}
+
+// The operator, for /admin, which reads across every tenant. Anyone else gets
+// a plain 404, so the page doesn't advertise itself; the operator must have
+// 2FA enrolled and passed in this session.
+export async function requireSuperAdmin(): Promise<SessionUser> {
+  const s = await currentSession();
+  if (!s || !isSuperAdminEmail(s.user.email)) notFound();
+  if (!s.totpConfirmed) redirect("/account/security?required=admin");
+  if (!s.mfaAt) redirect("/account/2fa");
   return s.user;
 }
 

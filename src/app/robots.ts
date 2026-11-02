@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: "*",
       allow: "/",
       // Everything behind auth or API is noise for crawlers.
-      disallow: ["/api/", "/account", "/onboarding"],
+      disallow: ["/api/", "/account", "/onboarding", "/admin"],
     },
     sitemap: `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/sitemap.xml`,
   };

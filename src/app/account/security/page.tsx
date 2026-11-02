@@ -39,7 +39,9 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
 
           {required && !enabled && (
             <p role="alert" className="rounded-xl border border-amber/40 bg-amber/[0.08] px-4 py-3 text-sm text-ink">
-              Your organization requires two-factor for owners and admins. Set it up to continue.
+              {required === "admin"
+                ? "The admin area needs two-factor. Set it up to continue."
+                : "Your organization requires two-factor for owners and admins. Set it up to continue."}
             </p>
           )}
 

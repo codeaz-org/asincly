@@ -13,6 +13,7 @@ import {
   sessions,
   teams,
   users,
+  userTotp,
 } from "../src/db/schema";
 
 const url = process.env.DATABASE_URL;
@@ -146,4 +147,26 @@ export async function newSessionFor(userId: string) {
 
 export async function setOrgSecurity(orgId: string, values: { require2faForAdmins?: boolean; requireSso?: boolean; ssoDomain?: string | null }) {
   await testDb.update(organizations).set(values).where(eq(organizations.id, orgId));
+}
+
+// A listed super admin (SUPER_ADMIN_EMAILS in CI) with a fresh session. With
+// `twoFactor`, 2FA counts as enrolled and passed in that session; the secret is
+// never read on /admin, so it's a placeholder.
+export async function seedSuperAdmin(email: string, twoFactor: boolean) {
+  await testDb.insert(users).values({ email, emailVerified: new Date(), tz: "UTC" }).onConflictDoNothing();
+  const [user] = await testDb.select().from(users).where(eq(users.email, email));
+  if (twoFactor) {
+    await testDb
+      .insert(userTotp)
+      .values({ userId: user.id, secretCipher: "unused", confirmedAt: new Date() })
+      .onConflictDoNothing();
+  }
+  const sessionToken = crypto.randomUUID();
+  await testDb.insert(sessions).values({
+    sessionToken,
+    userId: user.id,
+    expires: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+    mfaAt: twoFactor ? new Date() : null,
+  });
+  return { user, sessionToken };
 }

@@ -28,6 +28,10 @@ const eslintConfig = defineConfig([
       // Maintainer growth counts across all orgs (aggregates only), behind
       // STATS_TOKEN like the cron routes.
       "src/app/api/stats/**",
+      // The operator's /admin view across all orgs (counts and dates, no
+      // content), behind SUPER_ADMIN_EMAILS plus 2FA (requireSuperAdmin).
+      "src/lib/admin-queries.ts",
+      "src/lib/actions/admin.ts",
       // Anonymous per-campaign visit counters, written from after() on public pages.
       "src/lib/visits.ts",
       // Server-only bookkeeping tables the app role can't touch.

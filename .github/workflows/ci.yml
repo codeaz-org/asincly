@@ -122,6 +122,7 @@ jobs:
       # Counts as "payments configured" so new orgs get the trial; never sent to
       # Stripe (the Checkout e2e only runs with a real sk_test_/rk_test_ key).
       STRIPE_SECRET_KEY: ci-placeholder-not-a-stripe-key
+      SUPER_ADMIN_EMAILS: superadmin@e2e.local,superadmin-no2fa@e2e.local
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
