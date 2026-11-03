@@ -348,6 +348,9 @@ export function SplitLanding({
                 <a href="https://saascity.io" target="_blank" rel="noopener noreferrer">
                   <Image src="/badges/saascity.svg" width={150} height={54} alt="Featured on SaaSCity" unoptimized />
                 </a>
+                <a href="https://earlyhunt.com/project/asincly" target="_blank" rel="noopener noreferrer">
+                  <Image src="/badges/earlyhunt.svg" width={190} height={58} alt="Featured on EarlyHunt" unoptimized />
+                </a>
               </div>
             </div>
           </div>
