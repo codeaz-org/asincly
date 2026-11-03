@@ -345,6 +345,9 @@ export function SplitLanding({
                 <a href="https://twelve.tools" target="_blank" rel="noopener noreferrer">
                   <Image src="/badges/twelve-tools.svg" width={148} height={40} alt="Featured on Twelve Tools" unoptimized />
                 </a>
+                <a href="https://saascity.io" target="_blank" rel="noopener noreferrer">
+                  <Image src="/badges/saascity.svg" width={150} height={54} alt="Featured on SaaSCity" unoptimized />
+                </a>
               </div>
             </div>
           </div>
