@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/logo";
@@ -336,6 +337,12 @@ export function SplitLanding({
                 <Link href="/legal/privacy">Privacy</Link>
                 <Link href="/legal/security">Security</Link>
               </p>
+              {/* Launch badges: SVGs self-hosted in public/badges, CSP img-src only allows 'self' */}
+              <div className="badges">
+                <a href="https://fazier.com" target="_blank" rel="noopener noreferrer">
+                  <Image src="/badges/fazier-launched.svg" width={120} height={51} alt="Launched on Fazier" unoptimized />
+                </a>
+              </div>
             </div>
           </div>
         </section>
@@ -628,6 +635,8 @@ const css = `
 .legal a { color: var(--warm-soft); text-decoration: none; }
 .legal a:hover { color: var(--warm-ink); }
 .legal a:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; border-radius: 3px; }
+.badges { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 18px; }
+.badges a { display: block; }
 
 /* ── Divider rail ── */
 .rail {
