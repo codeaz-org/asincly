@@ -342,6 +342,9 @@ export function SplitLanding({
                 <a href="https://fazier.com" target="_blank" rel="noopener noreferrer">
                   <Image src="/badges/fazier-launched.svg" width={120} height={51} alt="Launched on Fazier" unoptimized />
                 </a>
+                <a href="https://twelve.tools" target="_blank" rel="noopener noreferrer">
+                  <Image src="/badges/twelve-tools.svg" width={148} height={40} alt="Featured on Twelve Tools" unoptimized />
+                </a>
               </div>
             </div>
           </div>
