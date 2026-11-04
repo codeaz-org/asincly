@@ -260,6 +260,13 @@
       "when": 1793775385337,
       "tag": "0036_supabase_api_lockdown",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1793776026551,
+      "tag": "0037_function_execute_lockdown",
+      "breakpoints": true
     }
   ]
 }

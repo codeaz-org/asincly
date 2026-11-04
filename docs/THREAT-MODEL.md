@@ -46,6 +46,7 @@ browser ──(1)── Next.js app ──(2)── Postgres
 | A missing membership check reads another tenant | Request-path code uses `withUser()` (role `asincly_app`, RLS forced); the owner client is allowlisted per file in `eslint.config.mjs` |
 | Forged rows via the app role | Policies check membership and authorship; `audit_log` inserts need the caller as actor; `occurrence` changes need admin |
 | SQL injection | Drizzle parameterized queries; raw SQL only with bound parameters |
+| Hosted Postgres exposes its own API (Supabase Data API: `anon`/`authenticated` reach `public` tables and `/rpc` functions by default) | RLS on every table, including Auth.js's; those roles hold no table, sequence or function privileges (0036, 0037); `rls.test.ts` fails on any table without RLS or any `SECURITY DEFINER` function executable by `PUBLIC` |
 | Ciphertext swapped between rows | GCM associated data binds each value to its row |
 
 ### 3–4. Object storage

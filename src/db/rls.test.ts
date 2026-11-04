@@ -404,3 +404,15 @@ it("every table in public has row-level security enabled", async () => {
   `);
   expect(rows.map((r) => r.relname)).toEqual([]);
 });
+
+// Same API exposes functions as /rpc. Postgres lets PUBLIC execute new
+// functions, and SECURITY DEFINER ones run as the owner, so only the app role
+// may call them.
+it("no SECURITY DEFINER function in public is executable by PUBLIC", async () => {
+  const rows = await db.execute<{ proname: string }>(sql`
+    SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.prosecdef
+      AND (p.proacl IS NULL OR EXISTS (SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee = 0))
+  `);
+  expect(rows.map((r) => r.proname)).toEqual([]);
+});
