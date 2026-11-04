@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "./index";
 import {
@@ -393,4 +393,14 @@ describe("row-level security: cross-org denial on the remaining tables", () => {
   it("the app role can't read Auth.js sessions at all", async () => {
     await expect(withUser(userAId, (tx) => tx.select().from(sessions))).rejects.toThrow();
   });
+});
+
+// Supabase serves every table in public over its Data API, so a table without
+// RLS is readable with the project's API key even though the app never uses it.
+it("every table in public has row-level security enabled", async () => {
+  const rows = await db.execute<{ relname: string }>(sql`
+    SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity
+  `);
+  expect(rows.map((r) => r.relname)).toEqual([]);
 });

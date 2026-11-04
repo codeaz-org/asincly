@@ -253,6 +253,13 @@
       "when": 1792757308025,
       "tag": "0035_campaign_visit",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793775385337,
+      "tag": "0036_supabase_api_lockdown",
+      "breakpoints": true
     }
   ]
 }
