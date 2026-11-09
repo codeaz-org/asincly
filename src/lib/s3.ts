@@ -63,7 +63,8 @@ export async function ensureBucket(): Promise<void> {
     await c.send(new CreateBucketCommand({ Bucket }));
   } catch (e) {
     // If somebody else created it in the race, HeadBucket next call will succeed.
-    const msg = e instanceof Error ? e.message : String(e);
+    // The code is in the error's name; MinIO's message is prose without it.
+    const msg = e instanceof Error ? `${e.name} ${e.message}` : String(e);
     if (!/BucketAlreadyOwnedByYou|BucketAlreadyExists/i.test(msg)) throw e;
   }
   bucketChecked = true;
