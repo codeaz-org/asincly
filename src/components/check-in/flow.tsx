@@ -66,8 +66,8 @@ type Props = {
 type AiInfo = { ai: Fields; keptTyped: SectionKey[] };
 
 const STAGE_LABEL: Record<string, string> = {
-  uploaded: "Getting your video ready",
-  processing: "Getting your video ready",
+  uploaded: "Getting your recording ready",
+  processing: "Getting your recording ready",
   transcribing: "Listening to what you said",
   drafting: "Writing your check-in",
 };
@@ -164,7 +164,7 @@ export function CheckInFlow(props: Props) {
       if (stopped) return;
       if (!res.ok) {
         setProcessing(null);
-        setNotice("Couldn't draft from the video — it's attached. Write your check-in instead.");
+        setNotice("Couldn't draft from the recording — it's attached. Write your check-in instead.");
         return;
       }
       if (res.status === "ready") {
@@ -177,8 +177,8 @@ export function CheckInFlow(props: Props) {
         } else {
           setNotice(
             res.aiConfigured
-              ? "We couldn't hear enough to draft from. Your video is attached — add a few lines below."
-              : "AI drafting isn't set up on this server. Your video is attached — write a few lines below.",
+              ? "We couldn't hear enough to draft from. Your recording is attached — add a few lines below."
+              : "AI drafting isn't set up on this server. Your recording is attached — write a few lines below.",
           );
           go("yesterday");
         }
@@ -189,8 +189,8 @@ export function CheckInFlow(props: Props) {
         setQuotaHit(res.reason === "quota_exceeded");
         setNotice(
           res.reason === "quota_exceeded"
-            ? "Your team has used this month's AI minutes. Your video is attached — write a few lines below, or upgrade for more."
-            : "Couldn't draft from the video — it's attached. Write your check-in instead.",
+            ? "Your team has used this month's AI minutes. Your recording is attached — write a few lines below, or upgrade for more."
+            : "Couldn't draft from the recording — it's attached. Write your check-in instead.",
         );
         go("yesterday");
         return;
@@ -837,7 +837,7 @@ function ReviewStep({
         <div className="flex items-start gap-3 rounded-xl border border-amber/30 bg-amber/[0.06] px-4 py-3">
           <Sparkles className="size-4 mt-0.5 text-amber shrink-0" />
           <div className="text-sm text-ink space-y-2 flex-1">
-            <p>Drafted from your video. Check it, fix anything, then send.</p>
+            <p>Drafted from your recording. Check it, fix anything, then send.</p>
             {aiInfo.keptTyped.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {aiInfo.keptTyped.map((key) => (

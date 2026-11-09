@@ -95,6 +95,7 @@ is green. Tick boxes as work lands.
 - [x] Record first; AI drafts yesterday / today / blockers (`lib/ai` Drafter: Groq, noop, AI_FAKE for e2e)
 - [x] Previous plan + open blockers shown while recording; taps sent as hints; not-done items carry forward (`lib/draft.ts`, `lib/check-in-context.ts`)
 - [x] Audio-only track uploaded for transcription; processing runs after the response (`after()`), client polls
+- [x] Voice-only check-ins: record just the mic; the audio is the recording, plays as a voice note in the feed
 - [x] Auto-tag teammates heard in the video or typed by name, removable before sending; new mentions on update notify
 - [x] Team rule "Require a video" (owners + admins) with "Can't record today" reasons visible to admins, enforced server-side
 - [x] Slack-style emoji: any-emoji reactions on check-ins and replies (frimousse, self-hosted emojibase data), `:shortcode:` autocomplete, Noto Color Emoji fallback

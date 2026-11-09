@@ -56,7 +56,7 @@ test("record a video → AI drafts the check-in from the previous plan → send"
 
   // Processing → review with the draft.
   await expect(page.getByRole("heading", { name: /this is what your team sees/i })).toBeVisible({ timeout: 30000 });
-  await expect(page.getByText(/drafted from your video/i)).toBeVisible();
+  await expect(page.getByText(/drafted from your recording/i)).toBeVisible();
   const card = page.locator("article");
   await expect(card.getByText("Ship the old plan")).toBeVisible();
   await expect(card.getByText("Write the release notes")).toBeVisible();
@@ -89,6 +89,48 @@ test("record a video → AI drafts the check-in from the previous plan → send"
     await expect(summary.getByText(/release notes/)).toHaveCount(0);
   }).toPass({ timeout: 20000 });
   await page.screenshot({ path: "test-results/screens/app-feed-video.png" });
+
+  await ctx.close();
+  await browser.close();
+});
+
+test("record voice only → AI drafts the check-in → the feed shows a voice note", async () => {
+  test.skip(process.env.AI_FAKE !== "1", "needs the dev server started with AI_FAKE=1");
+  test.setTimeout(120_000);
+  const user = await seedUserWithSession("voice");
+  await setUserName(user.user.id, "Val Voice");
+  const { org, team } = await seedOrgWithTeam(user.user.id);
+
+  const browser = await chromium.launch({
+    channel: process.env.PW_CHANNEL,
+    args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
+  });
+  // Microphone only: a voice take never asks for the camera.
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: ["microphone"] });
+  await signInAs(ctx, user.sessionToken);
+  const page = await ctx.newPage();
+  await page.goto(`${test.info().project.use.baseURL}/${org.slug}/${team.slug}/check-in`, { waitUntil: "networkidle" });
+
+  await page.getByRole("radio", { name: /voice/i }).click();
+  await expect(page.getByRole("radio", { name: /voice/i })).toHaveAttribute("aria-checked", "true");
+  await page.screenshot({ path: "test-results/screens/app-record-voice.png", animations: "disabled" });
+  await page.getByRole("button", { name: /turn on microphone/i }).click();
+  await page.getByRole("button", { name: /start recording/i }).click({ timeout: 15000 });
+  await page.waitForTimeout(2500);
+  await page.getByRole("button", { name: /stop recording/i }).click();
+  await expect(page.locator("audio")).toBeVisible();
+  await page.getByRole("button", { name: /use this recording/i }).click({ timeout: 10000 });
+
+  await expect(page.getByRole("heading", { name: /this is what your team sees/i })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText(/drafted from your recording/i)).toBeVisible();
+  await page.getByRole("button", { name: /send check-in/i }).click();
+  await page.waitForURL(new RegExp(`${team.slug}\\?focus=`), { timeout: 15000 });
+
+  const note = page.getByRole("button", { name: /play voice note/i });
+  await expect(note).toBeVisible({ timeout: 15000 });
+  await note.click();
+  await expect(page.locator("article audio")).toBeVisible();
+  await page.screenshot({ path: "test-results/screens/app-feed-voice.png" });
 
   await ctx.close();
   await browser.close();

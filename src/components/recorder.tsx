@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowRight, Camera, Check, ChevronDown, MonitorUp, NotebookPen, RotateCcw } from "lucide-react";
+import { ArrowRight, Camera, Check, ChevronDown, Mic, MonitorUp, NotebookPen, RotateCcw } from "lucide-react";
 import { cn } from "cn";
 import { MarkLoader } from "@/components/brand/loader";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ type Props = {
 };
 
 type Phase = "idle" | "requesting" | "ready" | "recording" | "preview" | "uploading";
-type Mode = "camera" | "screen";
+type Mode = "camera" | "screen" | "voice";
 export type Hint = "done" | "not_done";
 
 // Safari records mp4; Chrome/Firefox webm. The server allowlists both.
@@ -92,7 +92,11 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
   const camElRef = useRef<HTMLVideoElement | null>(null);
   const screenElRef = useRef<HTMLVideoElement | null>(null);
   const startedAtRef = useRef<number>(0);
-  const previewRef = useRef<HTMLVideoElement | null>(null);
+  // <video> for a take with picture, <audio> for a voice one.
+  const previewRef = useRef<HTMLMediaElement | null>(null);
+  const setPreview = (el: HTMLMediaElement | null) => {
+    previewRef.current = el;
+  };
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoUrlRef = useRef<string | null>(null);
@@ -121,12 +125,14 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
     setPhase("requesting");
     try {
       const cam = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
+        video: mode === "voice" ? false : { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
         audio: { echoCancellation: true, noiseSuppression: true },
       });
       camStreamRef.current = cam;
 
-      if (mode === "screen") {
+      if (mode === "voice") {
+        recordStreamRef.current = cam;
+      } else if (mode === "screen") {
         const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
         screenStreamRef.current = screen;
         screen.getVideoTracks()[0].addEventListener("ended", () => {
@@ -145,7 +151,8 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
       setPhase("ready");
     } catch (e) {
       const denied = e instanceof DOMException && (e.name === "NotAllowedError" || e.name === "SecurityError");
-      setError(denied ? "Camera access was blocked. Allow it in your browser to record." : "Couldn't start the camera.");
+      const device = mode === "voice" ? "microphone" : "camera";
+      setError(denied ? `${device[0].toUpperCase()}${device.slice(1)} access was blocked. Allow it in your browser to record.` : `Couldn't start the ${device}.`);
       setPhase("idle");
       teardown();
     }
@@ -222,15 +229,17 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
     audioChunks.current = [];
     audioBlobRef.current = null;
 
-    const videoMime = pick(VIDEO_MIMES, "video/webm");
-    const videoRec = new MediaRecorder(stream, { mimeType: videoMime });
+    // A voice take is already the small audio file the transcriber wants.
+    const voice = mode === "voice";
+    const videoMime = voice ? pick(AUDIO_MIMES, "audio/webm") : pick(VIDEO_MIMES, "video/webm");
+    const videoRec = new MediaRecorder(stream, voice ? { mimeType: videoMime, audioBitsPerSecond: 32_000 } : { mimeType: videoMime });
     videoRec.ondataavailable = (e) => e.data.size > 0 && videoChunks.current.push(e.data);
 
     // A separate audio-only recording is what gets transcribed: a few hundred
     // KB for five minutes instead of the full video.
     const audioTracks = cam.getAudioTracks();
     let audioDone: Promise<void> = Promise.resolve();
-    if (audioTracks.length > 0 && typeof MediaRecorder !== "undefined") {
+    if (!voice && audioTracks.length > 0 && typeof MediaRecorder !== "undefined") {
       const audioMime = pick(AUDIO_MIMES, "");
       if (audioMime) {
         const audioRec = new MediaRecorder(new MediaStream(audioTracks), { mimeType: audioMime, audioBitsPerSecond: 32_000 });
@@ -291,7 +300,7 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
   // Best-effort poster frame so the feed shows a real thumbnail.
   async function capturePoster(): Promise<Blob | null> {
     const el = previewRef.current;
-    if (!el || !el.videoWidth) return null;
+    if (!(el instanceof HTMLVideoElement) || !el.videoWidth) return null;
     try {
       if (el.currentTime < 0.3 && Number.isFinite(el.duration)) {
         el.currentTime = Math.min(0.5, el.duration / 2);
@@ -330,7 +339,7 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
       const dur = previewRef.current?.duration;
       // Chrome's webm often reports Infinity; the recording clock is next best.
       const durationMs = dur && Number.isFinite(dur) ? Math.round(dur * 1000) : elapsed > 0 ? elapsed * 1000 : null;
-      const poster = await capturePoster();
+      const poster = mode === "voice" ? null : await capturePoster();
       const mimeType = video.type || "video/webm";
       const audio = audioBlobRef.current;
 
@@ -380,12 +389,13 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
         <div className="space-y-4 min-w-0">
           {phase === "idle" && (
             <div className="flex h-full flex-col gap-4">
-              {canShareScreen && (
-                <div role="radiogroup" aria-label="What to record" className="grid grid-cols-2 gap-2">
-                  <ModeOption active={mode === "camera"} onClick={() => setMode("camera")} icon={<Camera />} label="Camera" hint="Just you" />
-                  <ModeOption active={mode === "screen"} onClick={() => setMode("screen")} icon={<MonitorUp />} label="Screen" hint="With your camera" />
-                </div>
-              )}
+              <div role="radiogroup" aria-label="What to record" className={cn("grid gap-2", canShareScreen ? "grid-cols-3" : "grid-cols-2")}>
+                <ModeOption active={mode === "camera"} onClick={() => setMode("camera")} icon={<Camera />} label="Camera" hint="Just you" />
+                {canShareScreen && (
+                  <ModeOption active={mode === "screen"} onClick={() => setMode("screen")} icon={<MonitorUp />} label="Screen" hint="Plus camera" />
+                )}
+                <ModeOption active={mode === "voice"} onClick={() => setMode("voice")} icon={<Mic />} label="Voice" hint="Audio only" />
+              </div>
               <button
                 type="button"
                 onClick={requestStreams}
@@ -394,9 +404,9 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
                 <span className="grid place-items-center size-20 rounded-full border-2 border-ink/25 group-hover:border-amber group-hover:scale-105 transition">
                   <span className="size-8 rounded-full bg-danger" />
                 </span>
-                <span className="text-lg font-medium text-ink">Turn on camera</span>
+                <span className="text-lg font-medium text-ink">{mode === "voice" ? "Turn on microphone" : "Turn on camera"}</span>
                 <span className="text-sm text-soft">
-                  Up to {Math.round(maxSeconds / 60)} min{existingCount > 0 ? " · replaces your current video" : ""}
+                  Up to {Math.round(maxSeconds / 60)} min{existingCount > 0 ? " · replaces your current recording" : ""}
                 </span>
               </button>
               {/* Phones: prepare below the camera button before starting. */}
@@ -414,9 +424,16 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
                 muted
                 className={cn("w-full aspect-[4/5] sm:aspect-video object-cover -scale-x-100", mode === "camera" ? "block" : "hidden")}
               />
+              {mode === "voice" && (
+                <div className="w-full aspect-[4/5] sm:aspect-video grid place-items-center bg-[radial-gradient(ellipse_at_50%_40%,oklch(0.4_0.08_60/.5),transparent_70%)]">
+                  <span className={cn("grid place-items-center size-24 rounded-full border-2 border-amber/50 text-amber", phase === "recording" && "animate-mark-breathe")}>
+                    <Mic className="size-10" />
+                  </span>
+                </div>
+              )}
               {phase === "requesting" && (
                 <div className="absolute inset-0 grid place-items-center bg-ground/80">
-                  <MarkLoader size="md" label="Asking for your camera" />
+                  <MarkLoader size="md" label={mode === "voice" ? "Asking for your microphone" : "Asking for your camera"} />
                 </div>
               )}
               {phase === "recording" && (
@@ -483,13 +500,22 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
           {(phase === "preview" || phase === "uploading") && videoUrl && (
             <div className="space-y-4">
               <div className="relative">
-                <video
-                  ref={previewRef}
-                  src={videoUrl}
-                  controls={phase === "preview"}
-                  playsInline
-                  className={cn("w-full aspect-video rounded-2xl bg-black border border-line", phase === "uploading" && "opacity-50")}
-                />
+                {mode === "voice" ? (
+                  <audio
+                    ref={setPreview}
+                    src={videoUrl}
+                    controls={phase === "preview"}
+                    className={cn("w-full", phase === "uploading" && "opacity-50")}
+                  />
+                ) : (
+                  <video
+                    ref={setPreview}
+                    src={videoUrl}
+                    controls={phase === "preview"}
+                    playsInline
+                    className={cn("w-full aspect-video rounded-2xl bg-black border border-line", phase === "uploading" && "opacity-50")}
+                  />
+                )}
                 {phase === "uploading" && (
                   <div className="absolute inset-0 grid place-items-center">
                     <MarkLoader size="md" label="Uploading" />
@@ -499,7 +525,7 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
               {phase === "preview" && (
                 <div className="flex flex-wrap justify-center gap-2">
                   <Button type="button" variant="primary" size="lg" onClick={upload}>
-                    Use this video <ArrowRight />
+                    {mode === "voice" ? "Use this recording" : "Use this video"} <ArrowRight />
                   </Button>
                   <Button type="button" variant="ghost" size="lg" onClick={retake}>
                     <RotateCcw /> Retake
@@ -687,7 +713,7 @@ function ModeOption({
       aria-checked={active}
       onClick={onClick}
       className={cn(
-        "flex min-w-0 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition [&_svg]:size-5 [&_svg]:shrink-0",
+        "flex min-w-0 flex-col items-start gap-2 rounded-xl border px-3.5 py-3 text-left transition [&_svg]:size-5 [&_svg]:shrink-0",
         active ? "border-amber/50 bg-amber/[0.08] text-ink" : "border-line text-soft hover:text-ink hover:border-line-strong",
       )}
     >

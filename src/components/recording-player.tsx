@@ -11,8 +11,10 @@ import type { FeedRecording } from "@/lib/queries";
 export function RecordingPlayer({ rec, className = "" }: { rec: FeedRecording; className?: string }) {
   const [src, setSrc] = useState<string | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
-  const video = useRef<HTMLVideoElement>(null);
+  const video = useRef<HTMLMediaElement | null>(null);
   const resumeAt = useRef(0);
+  const voice = rec.mimeType.startsWith("audio/");
+  const kind = voice ? "voice note" : "video note";
 
   async function load() {
     setState("loading");
@@ -23,25 +25,27 @@ export function RecordingPlayer({ rec, className = "" }: { rec: FeedRecording; c
   }
 
   if (src) {
-    return (
-      <video
-        ref={video}
-        controls
-        autoPlay
-        playsInline
-        src={src}
-        poster={rec.posterUrl ?? undefined}
-        onLoadedMetadata={() => {
-          if (video.current && resumeAt.current) video.current.currentTime = resumeAt.current;
-        }}
-        // The URL expired mid-watch (a seek after the window): get a new one
-        // and carry on from the same spot.
-        onError={() => {
-          resumeAt.current = video.current?.currentTime ?? 0;
-          void load();
-        }}
-        className={`w-full aspect-video rounded-xl bg-black border border-line ${className}`}
-      />
+    const media = {
+      ref: (el: HTMLMediaElement | null) => {
+        video.current = el;
+      },
+      controls: true,
+      autoPlay: true,
+      src,
+      onLoadedMetadata: () => {
+        if (video.current && resumeAt.current) video.current.currentTime = resumeAt.current;
+      },
+      // The URL expired mid-watch (a seek after the window): get a new one
+      // and carry on from the same spot.
+      onError: () => {
+        resumeAt.current = video.current?.currentTime ?? 0;
+        void load();
+      },
+    };
+    return voice ? (
+      <audio {...media} className={`w-full sm:min-w-64 ${className}`} />
+    ) : (
+      <video {...media} playsInline poster={rec.posterUrl ?? undefined} className={`w-full aspect-video rounded-xl bg-black border border-line ${className}`} />
     );
   }
 
@@ -54,7 +58,7 @@ export function RecordingPlayer({ rec, className = "" }: { rec: FeedRecording; c
       type="button"
       onClick={() => void load()}
       disabled={state === "loading"}
-      aria-label={`Play video note${duration ? `, ${duration}` : ""}`}
+      aria-label={`Play ${kind}${duration ? `, ${duration}` : ""}`}
       className={`group relative flex items-center gap-3 w-full sm:w-auto sm:min-w-64 rounded-xl border border-line bg-ink/[0.03] p-1.5 pr-4 text-left hover:border-line-strong hover:bg-ink/[0.05] transition ${className}`}
     >
       <span className="relative block h-12 aspect-video overflow-hidden rounded-lg bg-ground">
@@ -71,10 +75,10 @@ export function RecordingPlayer({ rec, className = "" }: { rec: FeedRecording; c
         </span>
       </span>
       <span className="min-w-0">
-        <span className="block text-sm text-ink">Video note</span>
+        <span className="block text-sm text-ink">{voice ? "Voice note" : "Video note"}</span>
         <span className="block text-xs text-soft">
           {state === "error" ? (
-            "couldn't load the video"
+            `couldn't load the ${voice ? "recording" : "video"}`
           ) : state === "loading" ? (
             <MarkLoader size="xs" label="loading" />
           ) : rec.status !== "ready" && rec.status !== "failed" ? (

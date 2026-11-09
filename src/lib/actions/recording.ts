@@ -113,7 +113,8 @@ const RegisterSchema = z
   // caller can't attach another team's object and get a playback URL for it.
   .refine(
     (v) =>
-      KEY(v.checkInId, "webm|mp4").test(v.objectKey) &&
+      // A voice take is audio only: its main object is the audio file.
+      KEY(v.checkInId, "webm|mp4|weba|m4a").test(v.objectKey) &&
       (v.posterKey == null || KEY(v.checkInId, "jpg").test(v.posterKey)) &&
       (v.audioKey == null || KEY(v.checkInId, "weba|m4a").test(v.audioKey)),
     "Unknown upload",
