@@ -54,7 +54,7 @@ function readNotes(key: string): string {
 
 export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCount = 0, context, aiNotice }: Props) {
   const [phase, setPhase] = useState<Phase>("idle");
-  const [mode, setMode] = useState<Mode>("camera");
+  const [mode, setMode] = useState<Mode>("voice");
   const canShareScreen = useSyncExternalStore(noopSubscribe, () => !!navigator.mediaDevices?.getDisplayMedia, () => false);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -390,11 +390,11 @@ export function Recorder({ checkInId, onUploaded, maxSeconds = 300, existingCoun
           {phase === "idle" && (
             <div className="flex h-full flex-col gap-4">
               <div role="radiogroup" aria-label="What to record" className={cn("grid gap-2", canShareScreen ? "grid-cols-3" : "grid-cols-2")}>
-                <ModeOption active={mode === "camera"} onClick={() => setMode("camera")} icon={<Camera />} label="Camera" hint="Just you" />
+                <ModeOption active={mode === "voice"} onClick={() => setMode("voice")} icon={<Mic />} label="Voice" hint="Audio only" />
+                <ModeOption active={mode === "camera"} onClick={() => setMode("camera")} icon={<Camera />} label="Camera" hint="With video" />
                 {canShareScreen && (
                   <ModeOption active={mode === "screen"} onClick={() => setMode("screen")} icon={<MonitorUp />} label="Screen" hint="Plus camera" />
                 )}
-                <ModeOption active={mode === "voice"} onClick={() => setMode("voice")} icon={<Mic />} label="Voice" hint="Audio only" />
               </div>
               <button
                 type="button"

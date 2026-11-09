@@ -47,6 +47,8 @@ test("record a video → AI drafts the check-in from the previous plan → send"
   // Private talking points jotted before recording stay on screen while talking.
   await panel.getByLabel("Your notes").fill("- mention the pricing page\n- ask Bobby about review");
 
+  // Voice is the default; this take is on camera.
+  await page.getByRole("radio", { name: /^camera/i }).click();
   await page.getByRole("button", { name: /turn on camera/i }).click();
   await page.getByRole("button", { name: /start recording/i }).click({ timeout: 15000 });
   await page.waitForTimeout(2500);
@@ -111,8 +113,8 @@ test("record voice only → AI drafts the check-in → the feed shows a voice no
   const page = await ctx.newPage();
   await page.goto(`${test.info().project.use.baseURL}/${org.slug}/${team.slug}/check-in`, { waitUntil: "networkidle" });
 
-  await page.getByRole("radio", { name: /voice/i }).click();
-  await expect(page.getByRole("radio", { name: /voice/i })).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("radio", { name: /^voice/i }).click();
+  await expect(page.getByRole("radio", { name: /^voice/i })).toHaveAttribute("aria-checked", "true");
   await page.screenshot({ path: "test-results/screens/app-record-voice.png", animations: "disabled" });
   await page.getByRole("button", { name: /turn on microphone/i }).click();
   await page.getByRole("button", { name: /start recording/i }).click({ timeout: 15000 });
