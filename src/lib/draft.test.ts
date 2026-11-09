@@ -35,6 +35,23 @@ describe("composeDraft", () => {
     expect(r.keptTyped).toEqual([]);
   });
 
+  it("shows what was said about an item under Yesterday but carries the bare item", () => {
+    const r = composeDraft(
+      { previous, typed: noTyped },
+      draft({
+        previous: [
+          { key: itemKey("Ship the day rail"), status: "done", note: "live for all teams" },
+          { key: itemKey("Guided check-in"), status: "not_done", note: "2 of 3 steps built" },
+        ],
+      }),
+      roster,
+    );
+    expect(r.fields.yesterday).toContain("- [x] Ship the day rail — live for all teams");
+    expect(r.fields.yesterday).toContain("- [ ] Guided check-in — 2 of 3 steps built");
+    // Today keeps the item's own text, so tomorrow's plan matches by key.
+    expect(r.fields.today).toContain("- [ ] Guided check-in\n");
+  });
+
   it("lets taps during recording override the model", () => {
     const r = composeDraft(
       { previous, typed: noTyped, hints: { [itemKey("Guided check-in")]: "done" } },

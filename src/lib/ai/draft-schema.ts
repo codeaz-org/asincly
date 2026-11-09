@@ -8,7 +8,15 @@ const Line = z.string().trim().min(1).max(240);
 
 export const CheckInDraftSchema = z.object({
   previous: z
-    .array(z.object({ key: z.string().max(16), status: z.enum(["done", "not_done", "dropped"]) }))
+    .array(
+      z.object({
+        key: z.string().max(16),
+        status: z.enum(["done", "not_done", "dropped"]),
+        // What was said about it ("2 of 3 written", "live for all teams"),
+        // shown after the item under Yesterday.
+        note: z.string().trim().max(140).nullish(),
+      }),
+    )
     .max(50)
     .default([]),
   yesterday: z.array(z.object({ text: Line })).max(20).default([]),

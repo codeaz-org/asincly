@@ -27,15 +27,25 @@ export function composeDraft(
   const rosterIds = new Set(roster.map((r) => r.userId));
   const hintIds = draft.mentions.map((m) => m.userId).filter((id) => rosterIds.has(id));
   const statusByKey = new Map(draft.previous.map((p) => [p.key, p.status] as const));
+  const noteByKey = new Map(draft.previous.filter((p) => p.note).map((p) => [p.key, p.note!] as const));
 
   // Previous plan: the author's taps win, then the model, then what was
   // already ticked; anything not known to be done carries forward.
+  // Yesterday shows each item with what was said about it; Today carries the
+  // bare text, so tomorrow's previous plan keeps the same keys.
   const done: string[] = [];
   const carried: string[] = [];
+  const carriedNoted: string[] = [];
   for (const item of ctx.previous) {
     const status = ctx.hints?.[item.key] ?? statusByKey.get(item.key) ?? (item.checked ? "done" : "not_done");
     if (status === "dropped") continue;
-    (status === "done" ? done : carried).push(item.text);
+    const note = noteByKey.get(item.key);
+    const noted = note ? `${item.text} — ${note}` : item.text;
+    if (status === "done") done.push(noted);
+    else {
+      carried.push(item.text);
+      carriedNoted.push(noted);
+    }
   }
 
   const seen = new Set<string>();
@@ -48,7 +58,7 @@ export function composeDraft(
 
   const yesterdayLines = [
     ...done.filter(unique).map((t) => `- [x] ${t}`),
-    ...carried.map((t) => `- [ ] ${t}`),
+    ...carriedNoted.map((t) => `- [ ] ${t}`),
     ...draft.yesterday.map((y) => y.text).filter(unique).map((t) => `- ${t}`),
   ];
 
