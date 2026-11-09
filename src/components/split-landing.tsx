@@ -50,12 +50,6 @@ function localSlot(off: number): { time: string; nextDay: boolean; awful: boolea
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const easeIO = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
-// Visibility window with soft ramps at both edges.
-function win(p: number, a: number, b: number, r = 0.025): number {
-  if (p <= a || p >= b) return 0;
-  return Math.min(clamp01((p - a) / r), clamp01((b - p) / r), 1);
-}
-
 // Divider position (percent from the left / top) as a function of progress.
 function dxFor(p: number): number {
   if (p < 0.42) return 50;
@@ -66,6 +60,36 @@ function dxFor(p: number): number {
 }
 
 const BEATS = [0.0, 0.1, 0.26, 0.42, 0.56, 0.6, 0.86];
+
+// Each panel is on screen inside its window a..b, ramping over r at both ends.
+// The CSS turns --p into its opacity and drift; the loop only tracks which
+// panels are visible at all. ub is where the drift ends (default b).
+type Win = { a: number; b: number; r?: number; ub?: number };
+const W = {
+  hero: { a: -0.05, b: 0.105 },
+  cal: { a: 0.105, b: 0.26 },
+  meet: { a: 0.26, b: 0.42 },
+  after: { a: 0.42, b: 0.56 },
+  peak: { a: 0.66, b: 0.85, r: 0.04 },
+  close: { a: 0.865, b: 9, r: 0.035, ub: 1.135 },
+} satisfies Record<string, Win>;
+type PanelKey = keyof typeof W;
+const PANEL_KEYS = Object.keys(W) as PanelKey[];
+
+// Smoothing time constant for the scroll playhead. Time-based, so it feels the
+// same at 60 and 120 Hz and doesn't slow down when a frame drops (a per-frame
+// lerp does both, and the second reads as stutter).
+const TAU_MS = 95;
+
+// Launch badges, shown in a scrolling strip at the end of the page. To add
+// one: save its SVG to public/badges/ (CSP img-src only allows 'self', so no
+// hotlinking) and add a line here with the SVG's own width/height.
+const BADGES = [
+  { href: "https://fazier.com", src: "/badges/fazier-launched.svg", alt: "Launched on Fazier", width: 120, height: 51 },
+  { href: "https://twelve.tools", src: "/badges/twelve-tools.svg", alt: "Featured on Twelve Tools", width: 148, height: 40 },
+  { href: "https://saascity.io", src: "/badges/saascity.svg", alt: "Featured on SaaSCity", width: 150, height: 54 },
+  { href: "https://earlyhunt.com/project/asincly", src: "/badges/earlyhunt.svg", alt: "Featured on EarlyHunt", width: 190, height: 58 },
+];
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -80,8 +104,11 @@ export function SplitLanding({
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
-  const [p, setP] = useState(0);
+  const timerRef = useRef<HTMLParagraphElement>(null);
   const [reduced, setReduced] = useState(false);
+  // Discrete scene state: changes a few dozen times per full scroll, so React
+  // re-renders only then. Everything continuous is CSS variables on .stage.
+  const [ui, setUi] = useState({ shown: 1 << PANEL_KEYS.indexOf("hero"), talking: 0, mm: 0, beats: 1, collapsed: false });
 
   // Drag state for the tug-of-war divider (refs: read inside rAF).
   const drag = useRef({ held: false, offset: 0, lastPos: 0, lastPosY: 0 });
@@ -92,55 +119,73 @@ export function SplitLanding({
     onMq();
     mq.addEventListener("change", onMq);
 
-    let target = 0;
-    let shown = -1;
-    let raf = 0;
-
+    // Track geometry, measured on resize only: per frame we read scrollY,
+    // which never forces layout.
+    let top = 0;
+    let total = 1;
     const measure = () => {
       const el = trackRef.current;
       if (!el) return;
-      const r = el.getBoundingClientRect();
-      const total = r.height - window.innerHeight;
-      target = total > 0 ? clamp01(-r.top / total) : 0;
+      top = el.getBoundingClientRect().top + window.scrollY;
+      total = Math.max(1, el.offsetHeight - window.innerHeight);
     };
 
-    const frame = () => {
+    let shown = -1;
+    let last = 0;
+    let raf = 0;
+    let prevUi = "";
+    let prevTimer = "";
+
+    const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
-      const instant = mq.matches;
-      const next = instant ? target : shown < 0 ? target : shown + (target - shown) * 0.16;
-      // Spring the drag offset home when released.
-      if (!drag.current.held && Math.abs(drag.current.offset) > 0.01) {
-        drag.current.offset *= 0.86;
-      } else if (!drag.current.held) {
-        drag.current.offset = 0;
+      const dt = last ? Math.min(100, now - last) : 16.7;
+      last = now;
+      const target = clamp01((window.scrollY - top) / total);
+      const d = drag.current;
+      if (!d.held) d.offset = Math.abs(d.offset) > 0.01 ? d.offset * Math.exp(-dt / 110) : 0;
+      // Settled: 0.0001 of the page is under half a pixel of divider travel.
+      if (shown >= 0 && Math.abs(target - shown) < 0.0001 && d.offset === 0) return;
+      shown = shown < 0 || mq.matches ? target : shown + (target - shown) * (1 - Math.exp(-dt / TAU_MS));
+      if (Math.abs(target - shown) < 0.0001) shown = target;
+      const next = shown;
+
+      const stage = stageRef.current;
+      if (stage) {
+        const c = next < 0.6 ? 0 : easeIO(clamp01((next - 0.6) / 0.18));
+        // On phones the sync half exits completely (no tombstone sliver up top,
+        // where it would collide with the corner chrome).
+        const vertical = window.innerWidth < 860;
+        const floor = vertical ? 3 - 3 * c : 3;
+        const dx = Math.min(94, Math.max(floor, dxFor(next) - (vertical ? 3 * c : 0) + d.offset));
+        stage.style.setProperty("--dx", dx.toFixed(3));
+        stage.style.setProperty("--c", c.toFixed(4));
+        stage.style.setProperty("--p", next.toFixed(5));
       }
-      if (Math.abs(next - (shown < 0 ? -1 : shown)) > 0.0004 || drag.current.offset !== 0 || shown < 0) {
-        shown = next;
-        setP(next);
-        const stage = stageRef.current;
-        if (stage) {
-          const c = next < 0.6 ? 0 : easeIO(clamp01((next - 0.6) / 0.18));
-          // On phones the sync half exits completely (no tombstone sliver up top,
-          // where it would collide with the corner chrome).
-          const vertical = window.innerWidth < 860;
-          const floor = vertical ? 3 - 3 * c : 3;
-          const dx = Math.min(94, Math.max(floor, dxFor(next) - (vertical ? 3 * c : 0) + drag.current.offset));
-          stage.style.setProperty("--dx", String(dx));
-          stage.style.setProperty("--c", String(c));
-          stage.style.setProperty("--p", String(next));
-        }
-      }
+
+      const meetMin = 25 * clamp01((next - 0.26) / 0.16);
+      const mm = Math.floor(meetMin);
+      const timer = `${String(mm).padStart(2, "0")}:${String(Math.floor((meetMin - mm) * 60)).padStart(2, "0")}`;
+      if (timer !== prevTimer && timerRef.current) timerRef.current.textContent = prevTimer = timer;
+
+      let mask = 0;
+      PANEL_KEYS.forEach((k, i) => { if (visible(W[k], next)) mask |= 1 << i; });
+      const nextUi = {
+        shown: mask,
+        talking: Math.min(9, Math.floor(meetMin / 2.5)),
+        mm,
+        beats: BEATS.filter((b) => next >= b + 0.02).length,
+        collapsed: next >= 0.74,
+      };
+      const key = JSON.stringify(nextUi);
+      if (key !== prevUi) { prevUi = key; setUi(nextUi); }
     };
 
     measure();
-    const onScroll = () => measure();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
+    window.addEventListener("resize", measure);
     raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("resize", measure);
       mq.removeEventListener("change", onMq);
     };
   }, []);
@@ -170,12 +215,9 @@ export function SplitLanding({
   };
 
   // ── Derived demo state ──
-  const meetMin = 25 * clamp01((p - 0.26) / 0.16);
-  const mm = Math.floor(meetMin);
-  const ss = String(Math.floor((meetMin - mm) * 60)).padStart(2, "0");
-  const heldMin = Math.max(mm, 1) * TEAM.length;
-  const beatsPassed = BEATS.filter((b) => p >= b + 0.02).length;
-  const collapsed = p >= 0.74;
+  const heldMin = Math.max(ui.mm, 1) * TEAM.length;
+  const { beats: beatsPassed, collapsed } = ui;
+  const panel = (k: PanelKey) => panelStyle(W[k], (ui.shown & (1 << PANEL_KEYS.indexOf(k))) !== 0);
 
   return (
     <div className="split" ref={trackRef}>
@@ -184,173 +226,181 @@ export function SplitLanding({
       <div className="stage" ref={stageRef}>
         {/* ── Sync pane: the meeting world (cold, light) ── */}
         <section className="pane pane--sync" aria-label="The synchronous standup">
-          <div className="pane__center pane__center--sync">
-            {/* Hero */}
-            <div className="panel" style={vis(win(p, -0.05, 0.105), seg(p, -0.05, 0.105))}>
-              <p className="kicker kicker--sync">every day · everyone · live</p>
-              <h2 className="display display--sync">The standup at&nbsp;09:30.</h2>
-              <p className="sub sub--sync">
-                Ten people, one calendar slot, five mornings a week. Somebody is
-                always awake for it at the wrong time.
-              </p>
-            </div>
-
-            {/* Beat 2: the calendar math */}
-            <div className="panel" style={vis(win(p, 0.105, 0.26), seg(p, 0.105, 0.26))}>
-              <p className="label label--sync">one slot · ten local times</p>
-              <ul className="cal">
-                {[TEAM[8], TEAM[6], TEAM[4], TEAM[3], TEAM[2], TEAM[1], TEAM[0]].map((t) => {
-                  const s = localSlot(t.off);
-                  return (
-                    <li key={t.mono} className={`cal__row${s.awful ? " cal__row--awful" : ""}`}>
-                      <span className="cal__city">{t.city}</span>
-                      <span className="cal__dots" aria-hidden />
-                      <span className="cal__time">
-                        {s.time}
-                        {s.nextDay && <em>&nbsp;+1 day</em>}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-              <p className="fine fine--sync">demo team of ten · one 09:30 New York slot</p>
-            </div>
-
-            {/* Beat 3: the meeting runs */}
-            <div className="panel" style={vis(win(p, 0.26, 0.42), seg(p, 0.26, 0.42))}>
-              <p className="label label--sync">standup · in progress</p>
-              <p className="timer" aria-hidden>{String(mm).padStart(2, "0")}:{ss}</p>
-              <div className="room" aria-hidden>
-                {TEAM.map((t, i) => (
-                  <span key={t.mono} className={`room__dot${i === Math.min(9, Math.floor(meetMin / 2.5)) ? " room__dot--talking" : ""}`}>
-                    {t.mono}
-                  </span>
-                ))}
+          <div className="pane__world">
+            <div className="pane__center pane__center--sync">
+              {/* Hero */}
+              <div className="panel" style={panel("hero")}>
+                <p className="kicker kicker--sync">every day · everyone · live</p>
+                <h2 className="display display--sync">The standup at&nbsp;09:30.</h2>
+                <p className="sub sub--sync">
+                  Ten people, one calendar slot, five mornings a week. Somebody is
+                  always awake for it at the wrong time.
+                </p>
               </div>
-              <p className="sum sum--sync">1 talking. 9 waiting for their turn.</p>
-              <p className="math">
-                {Math.max(mm, 1)} min × {TEAM.length} people = <strong>{heldMin} person-minutes held</strong>
-              </p>
+
+              {/* Beat 2: the calendar math */}
+              <div className="panel" style={panel("cal")}>
+                <p className="label label--sync">one slot · ten local times</p>
+                <ul className="cal">
+                  {[TEAM[8], TEAM[6], TEAM[4], TEAM[3], TEAM[2], TEAM[1], TEAM[0]].map((t) => {
+                    const s = localSlot(t.off);
+                    return (
+                      <li key={t.mono} className={`cal__row${s.awful ? " cal__row--awful" : ""}`}>
+                        <span className="cal__city">{t.city}</span>
+                        <span className="cal__dots" aria-hidden />
+                        <span className="cal__time">
+                          {s.time}
+                          {s.nextDay && <em>&nbsp;+1 day</em>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="fine fine--sync">demo team of ten · one 09:30 New York slot</p>
+              </div>
+
+              {/* Beat 3: the meeting runs */}
+              <div className="panel" style={panel("meet")}>
+                <p className="label label--sync">standup · in progress</p>
+                <p className="timer" aria-hidden ref={timerRef}>00:00</p>
+                <div className="room" aria-hidden>
+                  {TEAM.map((t, i) => (
+                    <span key={t.mono} className={`room__dot${i === ui.talking ? " room__dot--talking" : ""}`}>
+                      {t.mono}
+                    </span>
+                  ))}
+                </div>
+                <p className="sum sum--sync">1 talking. 9 waiting for their turn.</p>
+                <p className="math">
+                  {Math.max(ui.mm, 1)} min × {TEAM.length} people = <strong>{heldMin} person-minutes held</strong>
+                </p>
+              </div>
+
+              {/* Beat 4: what remains */}
+              <div className="panel" style={panel("after")}>
+                <p className="label label--sync">two hours later</p>
+                <div className="chat">
+                  <p className="chat__line"><span>rafael</span> anyone have the notes from standup?</p>
+                  <p className="chat__line"><span>amelia</span> wait, what did Sam say about the pilots?</p>
+                  <p className="chat__line chat__line--dim"><span>sam</span> i&rsquo;ll re-explain on a call</p>
+                </div>
+                <p className="sum sum--sync">The meeting happened. The information didn&rsquo;t.</p>
+              </div>
             </div>
 
-            {/* Beat 4: what remains */}
-            <div className="panel" style={vis(win(p, 0.42, 0.56), seg(p, 0.42, 0.56))}>
-              <p className="label label--sync">two hours later</p>
-              <div className="chat">
-                <p className="chat__line"><span>rafael</span> anyone have the notes from standup?</p>
-                <p className="chat__line"><span>amelia</span> wait, what did Sam say about the pilots?</p>
-                <p className="chat__line chat__line--dim"><span>sam</span> i&rsquo;ll re-explain on a call</p>
-              </div>
-              <p className="sum sum--sync">The meeting happened. The information didn&rsquo;t.</p>
-            </div>
+            {/* The tombstone: what's left of sync after the collapse */}
+            <p className="sliver" style={{ opacity: collapsed ? 1 : 0 }} aria-hidden>
+              the meeting
+            </p>
           </div>
-
-          {/* The tombstone: what's left of sync after the collapse */}
-          <p className="sliver" style={{ opacity: collapsed ? 1 : 0 }} aria-hidden>
-            the meeting
-          </p>
         </section>
 
         {/* ── Async pane: the morning world (warm, dark) ── */}
         <section className="pane pane--async" aria-label="The asynchronous standup">
-          <div className="pane__center pane__center--async">
-            {/* Hero */}
-            <div className="panel" style={vis(win(p, -0.05, 0.105), seg(p, -0.05, 0.105))}>
-              <p className="kicker kicker--async">asincly · async standups</p>
-              <h1 className="display display--async">The standup whenever you&nbsp;wake.</h1>
-              <p className="sub sub--async">
-                Two minutes in your own morning. AI writes the digest. Nobody
-                waits for anybody.
-              </p>
-            </div>
-
-            {/* Beat 2: one check-in */}
-            <div className="panel" style={vis(win(p, 0.105, 0.26), seg(p, 0.105, 0.26))}>
-              <p className="label label--async">auckland · 07:40 her time</p>
-              <div className="card">
-                <div className="card__head">
-                  <span className="card__mono">MK</span>
-                  <span className="card__name">Maia Kaui <em>Design</em></span>
-                  <span className="card__rec" aria-hidden><i />1:42</span>
-                </div>
-                <div className="card__wave" aria-hidden />
-                <p className="card__note">
-                  &ldquo;…tokens rebase is in, today I&rsquo;m on the empty
-                  states, nothing blocking me.&rdquo;
+          <div className="pane__world">
+            <div className="pane__center pane__center--async">
+              {/* Hero */}
+              <div className="panel" style={panel("hero")}>
+                <p className="kicker kicker--async">asincly · async standups</p>
+                <h1 className="display display--async">The standup whenever you&nbsp;wake.</h1>
+                <p className="sub sub--async">
+                  Two minutes in your own morning. AI writes the digest. Nobody
+                  waits for anybody.
                 </p>
               </div>
-              <p className="fine fine--async">recorded before the rest of the team woke up</p>
-            </div>
 
-            {/* Beat 3: the transform */}
-            <div className="panel" style={vis(win(p, 0.26, 0.42), seg(p, 0.26, 0.42))}>
-              <p className="label label--async">summary · written by ai</p>
-              <ul className="bullets">
-                <li>→ Shipped the tokens rebase</li>
-                <li>→ Today: empty states pass</li>
-                <li className="bullets__ok">No blockers</li>
-              </ul>
-              <p className="sum sum--async">Her two minutes became ten seconds of reading.</p>
-            </div>
+              {/* Beat 2: one check-in */}
+              <div className="panel" style={panel("cal")}>
+                <p className="label label--async">auckland · 07:40 her time</p>
+                <div className="card">
+                  <div className="card__head">
+                    <span className="card__mono">MK</span>
+                    <span className="card__name">Maia Kaui <em>Design</em></span>
+                    <span className="card__rec" aria-hidden><i />1:42</span>
+                  </div>
+                  <div className="card__wave" aria-hidden />
+                  <p className="card__note">
+                    &ldquo;…tokens rebase is in, today I&rsquo;m on the empty
+                    states, nothing blocking me.&rdquo;
+                  </p>
+                </div>
+                <p className="fine fine--async">recorded before the rest of the team woke up</p>
+              </div>
 
-            {/* Beat 4: the digest */}
-            <div className="panel" style={vis(win(p, 0.42, 0.56), seg(p, 0.42, 0.56))}>
-              <p className="label label--async">today · the digest</p>
-              <ol className="digest">
-                {[TEAM[0], TEAM[4], TEAM[6], TEAM[8], TEAM[9]].map((t) => (
-                  <li key={t.mono} className="digest__row">
-                    <span className="digest__mono">{t.mono}</span>
-                    <span className="digest__body">
-                      <span className="digest__name">{t.name}</span>
-                      {t.blocker ? (
-                        <span className="digest__blocker">! {t.blocker}</span>
-                      ) : (
-                        <span className="digest__line">{t.line}</span>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-              <p className="sum sum--async">Every update, one screen. Blockers routed to whoever can unblock them.</p>
-            </div>
+              {/* Beat 3: the transform */}
+              <div className="panel" style={panel("meet")}>
+                <p className="label label--async">summary · written by ai</p>
+                <ul className="bullets">
+                  <li>→ Shipped the tokens rebase</li>
+                  <li>→ Today: empty states pass</li>
+                  <li className="bullets__ok">No blockers</li>
+                </ul>
+                <p className="sum sum--async">Her two minutes became ten seconds of reading.</p>
+              </div>
 
-            {/* PEAK line, arrives as the async world takes the width */}
-            <div className="panel panel--peak" style={vis(win(p, 0.66, 0.85, 0.04), seg(p, 0.66, 0.85))}>
-              <p className="peakline">No meeting.<br />Nothing missed.</p>
-            </div>
+              {/* Beat 4: the digest */}
+              <div className="panel" style={panel("after")}>
+                <p className="label label--async">today · the digest</p>
+                <ol className="digest">
+                  {[TEAM[0], TEAM[4], TEAM[6], TEAM[8], TEAM[9]].map((t) => (
+                    <li key={t.mono} className="digest__row">
+                      <span className="digest__mono">{t.mono}</span>
+                      <span className="digest__body">
+                        <span className="digest__name">{t.name}</span>
+                        {t.blocker ? (
+                          <span className="digest__blocker">! {t.blocker}</span>
+                        ) : (
+                          <span className="digest__line">{t.line}</span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+                <p className="sum sum--async">Every update, one screen. Blockers routed to whoever can unblock them.</p>
+              </div>
 
-            {/* Close */}
-            <div className="panel panel--close" style={vis(Math.min(1, clamp01((p - 0.865) / 0.035)), 0.5 + Math.min(0.5, seg(p, 0.865, 1) * 0.5) - 0.5)}>
-              <h2 className="display display--close">Kill the meeting.<br />Keep the standup.</h2>
-              <p className="sub sub--async">
-                Set up a team in one minute. Invite by email. First digest
-                tomorrow morning.
-              </p>
-              <Link href={signInHref} className="cta">Start your team&rsquo;s morning →</Link>
-              <p className="trust">
-                {showPricing && <>free for up to 3 people · </>}
-                <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">open source (AGPL-3.0)</a> · self-hostable · encrypted at rest
-              </p>
-              <p className="legal">
-                {showGuides && <Link href="/guides">Guides</Link>}
-                <Link href="/legal/terms">Terms</Link>
-                <Link href="/legal/privacy">Privacy</Link>
-                <Link href="/legal/security">Security</Link>
-              </p>
-              {/* Launch badges: SVGs self-hosted in public/badges, CSP img-src only allows 'self' */}
-              <div className="badges">
-                <a href="https://fazier.com" target="_blank" rel="noopener noreferrer">
-                  <Image src="/badges/fazier-launched.svg" width={120} height={51} alt="Launched on Fazier" unoptimized />
-                </a>
-                <a href="https://twelve.tools" target="_blank" rel="noopener noreferrer">
-                  <Image src="/badges/twelve-tools.svg" width={148} height={40} alt="Featured on Twelve Tools" unoptimized />
-                </a>
-                <a href="https://saascity.io" target="_blank" rel="noopener noreferrer">
-                  <Image src="/badges/saascity.svg" width={150} height={54} alt="Featured on SaaSCity" unoptimized />
-                </a>
-                <a href="https://earlyhunt.com/project/asincly" target="_blank" rel="noopener noreferrer">
-                  <Image src="/badges/earlyhunt.svg" width={190} height={58} alt="Featured on EarlyHunt" unoptimized />
-                </a>
+              {/* PEAK line, arrives as the async world takes the width */}
+              <div className="panel panel--peak" style={panel("peak")}>
+                <p className="peakline">No meeting.<br />Nothing missed.</p>
+              </div>
+
+              {/* Close */}
+              <div className="panel panel--close" style={panel("close")}>
+                <h2 className="display display--close">Kill the meeting.<br />Keep the standup.</h2>
+                <p className="sub sub--async">
+                  Set up a team in one minute. Invite by email. First digest
+                  tomorrow morning.
+                </p>
+                <Link href={signInHref} className="cta">Start your team&rsquo;s morning →</Link>
+                <p className="trust">
+                  {showPricing && <>free for up to 3 people · </>}
+                  <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">open source (AGPL-3.0)</a> · self-hostable · encrypted at rest
+                </p>
+                <p className="legal">
+                  {showGuides && <Link href="/guides">Guides</Link>}
+                  <Link href="/legal/terms">Terms</Link>
+                  <Link href="/legal/privacy">Privacy</Link>
+                  <Link href="/legal/security">Security</Link>
+                </p>
+                <div className="marquee">
+                  <div className="marquee__track">
+                    {/* Repeated so the loop is seamless; only the first copy is real. */}
+                    {[0, 1, 2, 3, 4, 5].map((copy) =>
+                      BADGES.map((b) => (
+                        <a
+                          key={`${copy}-${b.src}`}
+                          href={b.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-hidden={copy > 0 || undefined}
+                          tabIndex={copy > 0 ? -1 : undefined}
+                        >
+                          <Image src={b.src} width={b.width} height={b.height} alt={b.alt} unoptimized />
+                        </a>
+                      )),
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -403,19 +453,18 @@ export function SplitLanding({
   );
 }
 
-// v: visibility 0..1 (ramped window). u: raw progress through the window,
-// used for a constant slow drift so the page visibly answers every scroll
-// tick even in the middle of a copy plateau.
-function vis(v: number, u = 0.5): React.CSSProperties {
-  return {
-    opacity: v,
-    transform: `translateY(${(1 - v) * 14 + (0.5 - clamp01(u)) * 26}px)`,
-    visibility: v <= 0 ? "hidden" : "visible",
-    pointerEvents: v > 0.5 ? "auto" : "none",
-  };
+function visible(w: Win, p: number): boolean {
+  return p > w.a && p < w.b;
 }
 
-const seg = (p: number, a: number, b: number) => (p - a) / (b - a);
+// Static per-panel window for the CSS (.panel computes opacity and drift from
+// --p); visibility keeps hidden panels out of the a11y tree and off the pointer.
+function panelStyle(w: Win, shown: boolean): React.CSSProperties {
+  return {
+    "--a": w.a, "--b": w.b, "--r": w.r ?? 0.025, "--ub": w.ub ?? w.b,
+    visibility: shown ? "visible" : "hidden",
+  } as React.CSSProperties;
+}
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 
@@ -430,24 +479,31 @@ const css = `
 }
 .split ::selection { background: oklch(0.78 0.15 60 / 0.35); }
 
-.stage { position: sticky; top: 0; height: 100dvh; overflow: hidden; --dx: 50; --c: 0; }
+.stage { position: sticky; top: 0; height: 100dvh; overflow: hidden; --dx: 50; --c: 0; --p: 0; }
 
 /* ── Panes ── */
-.pane { position: absolute; inset: 0; }
-.pane--sync {
+/* The divider is two sliding windows: each pane slides by --dx and its
+   contents slide back by the same amount, so the world stays put and only the
+   edge moves. Transforms only, on their own layers: the compositor moves
+   them without repainting the full-screen gradients (clip-path did, every frame). */
+.pane { position: absolute; inset: 0; overflow: hidden; will-change: transform; }
+.pane__world { position: absolute; inset: 0; will-change: transform; }
+.pane--sync { transform: translateX(calc((var(--dx) - 100) * 1%)); }
+.pane--sync > .pane__world {
+  transform: translateX(calc((100 - var(--dx)) * 1%));
   background:
     radial-gradient(ellipse 120% 90% at 20% 0%, oklch(0.97 0.004 240), transparent 55%),
     var(--cold-g);
   color: var(--cold-ink);
-  clip-path: inset(0 calc((100 - var(--dx)) * 1%) 0 0);
 }
-.pane--async {
+.pane--async { transform: translateX(calc(var(--dx) * 1%)); }
+.pane--async > .pane__world {
+  transform: translateX(calc(var(--dx) * -1%));
   background:
     radial-gradient(ellipse 130% 100% at 78% 108%, oklch(0.30 0.06 50 / 0.55), transparent 60%),
     radial-gradient(ellipse 90% 60% at 85% -8%, oklch(0.24 0.03 70 / 0.6), transparent 55%),
     var(--warm-g);
   color: var(--warm-ink);
-  clip-path: inset(0 0 0 calc(var(--dx) * 1%));
 }
 
 .pane__center {
@@ -463,11 +519,19 @@ const css = `
   scale: calc(1 - var(--c) * 0.15);
 }
 
+/* Opacity ramps in over --r after --a and out over --r before --b; the panel
+   rises into place and keeps a slow drift through its window, so every scroll
+   tick is answered even mid-plateau. All from --p, no per-frame JS. */
 .panel {
   grid-area: 1 / 1;
   width: min(560px, 78vw);
   max-width: 42rem;
-  transition: opacity 80ms linear;
+  --v: clamp(0, min((var(--p) - var(--a)) / var(--r), (var(--b) - var(--p)) / var(--r)), 1);
+  --u: clamp(0, (var(--p) - var(--a)) / (var(--ub) - var(--a)), 1);
+  opacity: var(--v);
+  translate: 0 calc((1 - var(--v)) * 14px + (0.5 - var(--u)) * 26px);
+  /* Own layer: fading or drifting a panel must not repaint the pane behind it. */
+  will-change: opacity, translate;
 }
 
 /* ── Type ── */
@@ -644,13 +708,25 @@ const css = `
 .legal a { color: var(--warm-soft); text-decoration: none; }
 .legal a:hover { color: var(--warm-ink); }
 .legal a:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; border-radius: 3px; }
-.badges { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 18px; }
-.badges a { display: block; }
+/* Full width of the dark pane: the panel is centred on the viewport, so a
+   100vw strip centred on the panel spans edge to edge (the stage clips it).
+   ponytail: 6 copies, the loop shifts by half (3 copies, ~2100px with 4 badges);
+   wider screens or fewer badges show a gap, add copies then. */
+.marquee {
+  width: 100vw; margin: 18px 0 0 calc(50% - 50vw); overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+}
+.marquee__track { display: flex; align-items: center; width: max-content; animation: marquee 96s linear infinite; }
+.marquee__track a { display: block; padding-right: 24px; }
+.marquee__track a:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; border-radius: 6px; }
+.marquee:hover .marquee__track, .marquee:focus-within .marquee__track { animation-play-state: paused; }
+@keyframes marquee { from { transform: translateX(-50%); } to { transform: none; } }
 
 /* ── Divider rail ── */
 .rail {
   position: absolute; inset: 0; pointer-events: none;
   transform: translateX(calc(var(--dx) * 1%));
+  will-change: transform;
 }
 .rail__line {
   position: absolute; top: 0; bottom: 0; left: -1px; width: 2px;
@@ -668,8 +744,9 @@ const css = `
   background: var(--amber);
   box-shadow: 0 0 10px oklch(0.78 0.15 60 / 0.5);
   transform: scaleY(var(--p, 0)); transform-origin: top center;
+  will-change: transform;
 }
-.rail__runner { position: absolute; inset: 0; transform: translateY(calc(var(--p, 0) * 100%)); }
+.rail__runner { position: absolute; inset: 0; transform: translateY(calc(var(--p, 0) * 100%)); will-change: transform; }
 .rail__pos {
   position: absolute; top: 0; left: 0;
   width: 9px; height: 9px; border-radius: 999px;
@@ -723,8 +800,10 @@ const css = `
 
 /* ── Mobile: the split turns horizontal (sync above, async below) ── */
 @media (max-width: 859px) {
-  .pane--sync  { clip-path: inset(0 0 calc((100 - var(--dx)) * 1%) 0); }
-  .pane--async { clip-path: inset(calc(var(--dx) * 1%) 0 0 0); }
+  .pane--sync  { transform: translateY(calc((var(--dx) - 100) * 1%)); }
+  .pane--sync > .pane__world  { transform: translateY(calc((100 - var(--dx)) * 1%)); }
+  .pane--async { transform: translateY(calc(var(--dx) * 1%)); }
+  .pane--async > .pane__world { transform: translateY(calc(var(--dx) * -1%)); }
   .pane__center--sync  { transform: translateY(-25%); }
   .pane__center--async { transform: translateY(calc(25% * (1 - var(--c)))); }
   .rail { transform: translateY(calc(var(--dx) * 1%)); }
@@ -779,5 +858,8 @@ const css = `
 
 @media (prefers-reduced-motion: reduce) {
   .split * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .marquee { width: min(100%, 34rem); margin-left: 0; mask-image: none; }
+  .marquee__track { animation: none; flex-wrap: wrap; width: auto; row-gap: 12px; }
+  .marquee__track a[aria-hidden] { display: none; }
 }
 `;
