@@ -13,6 +13,10 @@ export function Footer() {
           <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer" className="hover:text-ink transition">
             AGPL-3.0
           </a>
+          <span className="text-faint">·</span>
+          <a href="https://www.codeaz.org/" target="_blank" rel="noopener" className="hover:text-ink transition">
+            Built by CodeAZ
+          </a>
         </p>
         <nav aria-label="Footer" className="flex flex-wrap gap-4 text-xs text-soft">
           <Link href="/legal/terms" className="hover:text-ink transition">
